@@ -1,30 +1,80 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Feelime 隐私政策 | Feelime Privacy Policy</title>
+<title>Feelime Privacy Policy | Feelime 隐私政策</title>
 <style>
   body { font-family: -apple-system, "Noto Sans CJK SC", "Noto Sans SC", sans-serif;
          max-width: 46rem; margin: 2rem auto; padding: 0 1.2rem;
          line-height: 1.75; color: #1c1e26; background: #fff; }
   h1 { font-size: 1.6rem; } h2 { font-size: 1.15rem; margin-top: 2rem; }
+  h2.zh { color: #0966b8; }
   .meta { color: #6e6e7a; font-size: .9rem; }
   ul { padding-left: 1.4rem; }
   code { background: #f2f3f7; padding: .1rem .35rem; border-radius: 4px; }
+  .lang-switch { margin-bottom: 1.5rem; }
+  .lang-switch a { color: #0966b8; text-decoration: none; margin-right: 1rem; }
+  hr { margin: 2.5rem 0; border: 0; border-top: 1px solid #d9dae2; }
   @media (prefers-color-scheme: dark) {
     body { background: #17181d; color: #e7e7ee; }
     .meta { color: #9a9aa8; } code { background: #26272f; }
+    hr { border-top-color: #33343d; } h2.zh { color: #4db2ff; }
   }
 </style>
 </head>
 <body>
-<h1>Feelime 隐私政策</h1>
+<div class="lang-switch"><a href="#en">English</a><a href="#zh">中文</a></div>
+
+<h1 id="en">Feelime Privacy Policy</h1>
+<p class="meta">Effective: 2026-09-08 · Version 1.0</p>
+
+<p>Feelime (the "app") is an <strong>offline-first</strong> keyboard app for Android. Its design principle: your input data never leaves your device.</p>
+
+<h2>What we collect</h2>
+<p><strong>We do not collect, store, or transmit any personal data to any server.</strong> Specifically:</p>
+<ul>
+  <li>Text you type, candidate words, and voice audio are processed <strong>locally on your device</strong> and never pass through any server;</li>
+  <li>Speech recognition and sentence correction run on on-device models — no cloud service involved;</li>
+  <li>The app contains no ads, analytics, or crash-reporting SDKs.</li>
+</ul>
+
+<h2>When the app uses the network</h2>
+<p>The following features require a network connection and happen <strong>only when you explicitly trigger them</strong>:</p>
+<ul>
+  <li><strong>Voice model download</strong>: on first use of offline voice input, model files are downloaded from GitHub Releases or HuggingFace mirrors;</li>
+  <li><strong>Keyboard updates</strong>: checking for and downloading keyboard update packages (GitHub).</li>
+</ul>
+<p>These requests contain none of your input. As with any network request, the servers you contact (GitHub, HuggingFace, and their mirrors) can see your IP address — an inherent property of internet communication.</p>
+
+<h2>Data storage and deletion</h2>
+<p>Your settings, saved phrases, clipboard history, and user lexicon live entirely in the app's private directory on your device, unreadable by other apps. Uninstalling the app permanently erases all of it.</p>
+
+<h2>Permissions</h2>
+<ul>
+  <li><code>RECORD_AUDIO</code> (microphone): recording happens only while the voice key is held; it stops on release and is never saved or uploaded;</li>
+  <li><code>INTERNET</code> / <code>ACCESS_NETWORK_STATE</code>: used solely for the download and update checks described above, and for warning about metered networks before model downloads;</li>
+  <li>Input method service binding: required by Android to commit text into input fields;</li>
+  <li>Home-screen shortcuts and the quick-settings tile are created through the system <code>ShortcutManager</code> / tile APIs — launching them only switches your active keyboard and opens no web content.</li>
+</ul>
+
+<h2>Open source</h2>
+<p>The app is fully open source; every claim above is verifiable in code: <a href="https://github.com/feelime/feelime">github.com/feelime/feelime</a>.</p>
+
+<h2>Changes to this policy</h2>
+<p>Substantive changes will update the version number and effective date on this page, announced in-app or in release notes.</p>
+
+<h2>Contact</h2>
+<p>Questions about this policy or data handling: open a <a href="https://github.com/feelime/feelime/issues">GitHub Issue</a>.</p>
+
+<hr>
+
+<h1 id="zh">Feelime 隐私政策</h1>
 <p class="meta">生效日期：2026-09-08 · 版本 1.0</p>
 
-<p>Feelime（下称"本应用"）是一款<strong>离线优先</strong>的 Android 输入法。我们的设计原则是：你的输入数据不出设备。</p>
+<p>Feelime（下称"本应用"）是一款<strong>离线优先</strong>的 Android 输入法。本项目的设计原则是：你的输入数据不出设备。</p>
 
-<h2>我们收集什么</h2>
+<h2 class="zh">我们收集什么</h2>
 <p><strong>我们不收集、不存储、不向任何服务器传输你的个人数据。</strong>具体而言：</p>
 <ul>
   <li>你输入的文字、候选词、语音录音均在<strong>设备本地</strong>处理，全程不经过任何服务器；</li>
@@ -32,7 +82,7 @@
   <li>本应用不含广告、统计分析或崩溃上报 SDK。</li>
 </ul>
 
-<h2>本应用何时访问网络</h2>
+<h2 class="zh">本应用何时访问网络</h2>
 <p>以下功能需要联网，且<strong>仅在你主动触发时</strong>发生：</p>
 <ul>
   <li><strong>语音模型下载</strong>：首次使用离线语音时，从 GitHub Releases 或 HuggingFace 镜像下载模型文件；</li>
@@ -40,22 +90,24 @@
 </ul>
 <p>这些请求不包含你的任何输入内容。与所有网络请求一样，所访问的服务器（GitHub、HuggingFace 及其镜像）能看到你的 IP 地址，这是互联网通信的技术必然。</p>
 
-<h2>数据存储与删除</h2>
+<h2 class="zh">数据存储与删除</h2>
 <p>你的设置、常用语、剪贴板历史、用户词库等全部保存在设备本地的应用私有目录中，其他应用无法读取。卸载本应用即彻底删除全部数据。</p>
 
-<h2>权限说明</h2>
+<h2 class="zh">权限说明</h2>
 <ul>
   <li><code>RECORD_AUDIO</code>（麦克风）：仅在按住语音键时录音，松开即停止，录音不保存、不上传；</li>
-  <li>输入法服务权限：Android 系统要求，用于在输入框中上屏文字。</li>
+  <li><code>INTERNET</code> / <code>ACCESS_NETWORK_STATE</code>（网络）：仅用于上述模型下载与更新检查，以及在模型下载前对计费网络进行提醒；</li>
+  <li>输入法服务权限：Android 系统要求，用于在输入框中上屏文字；</li>
+  <li>桌面快捷方式与快捷设置磁贴通过系统 <code>ShortcutManager</code> / 磁贴 API 创建——点按它们只会切换当前输入法，不会打开任何网页内容。</li>
 </ul>
 
-<h2>开源</h2>
+<h2 class="zh">开源</h2>
 <p>本应用完全开源，上述声明可由代码验证：<a href="https://github.com/feelime/feelime">github.com/feelime/feelime</a>。</p>
 
-<h2>政策变更</h2>
+<h2 class="zh">政策变更</h2>
 <p>若本政策发生实质性变更，我们会在本页面更新版本号与生效日期，并通过应用内公告或发布说明告知。</p>
 
-<h2>联系方式</h2>
+<h2 class="zh">联系方式</h2>
 <p>对本政策或数据处理有任何疑问，请提交 <a href="https://github.com/feelime/feelime/issues">GitHub Issue</a>。</p>
 
 </body>
