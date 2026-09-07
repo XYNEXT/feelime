@@ -1,0 +1,5 @@
+Feelime
+
+Feelime uses sherpa-onnx and pretrained models published by the k2-fsa
+project. Their source repositories and model documentation contain the
+applicable notices and licenses.

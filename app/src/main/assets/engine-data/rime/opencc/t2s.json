@@ -1,0 +1,15 @@
+{
+  "name": "Traditional Chinese (OpenCC Standard) to Simplified Chinese",
+  "conversion_chain": [
+    {
+      "dict": {
+        "type": "group",
+        "match_policy": "short_circuit",
+        "dicts": [
+          { "type": "text", "file": "TSPhrases.txt" },
+          { "type": "text", "file": "TSCharacters.txt" }
+        ]
+      }
+    }
+  ]
+}

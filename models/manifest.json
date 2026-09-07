@@ -1,0 +1,94 @@
+{
+  "version": 1,
+  "models": [
+    {
+      "id": "streaming-zipformer-bilingual-zh-en",
+      "role": "asr-streaming",
+      "version": "2023-02-20",
+      "files": [
+        {
+          "path": "asr-model/encoder.int8.onnx",
+          "downloadPath": "encoder-epoch-99-avg-1.int8.onnx",
+          "sha256": "SEE-DEV-MODELS",
+          "bytes": 0,
+          "archive": {
+            "url": "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-streaming-zipformer-bilingual-zh-en-2023-02-20-mobile.tar.bz2",
+            "bytes": 346965352,
+            "sha256": "45b8d04fe8faf5146397ff2e71d90ca8effdfcbe9adc30fdce769e92cabd6b03",
+            "entry": "sherpa-onnx-streaming-zipformer-bilingual-zh-en-2023-02-20-mobile/encoder-epoch-99-avg-1.int8.onnx",
+            "entryBytes": 105276499,
+            "entrySha256": "f559f422d970323e0c266aaa3c56cf6d1a3a4bc0c0822124727686c1e43e9447",
+            "sourceUrls": {
+              "hf_mirror": "https://gh-proxy.com/https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-streaming-zipformer-bilingual-zh-en-2023-02-20-mobile.tar.bz2"
+            }
+          }
+        },
+        {
+          "path": "asr-model/decoder.onnx",
+          "downloadPath": "decoder-epoch-99-avg-1.onnx",
+          "sha256": "SEE-DEV-MODELS",
+          "bytes": 0
+        },
+        {
+          "path": "asr-model/joiner.int8.onnx",
+          "downloadPath": "joiner-epoch-99-avg-1.int8.onnx",
+          "sha256": "SEE-DEV-MODELS",
+          "bytes": 0
+        },
+        {
+          "path": "asr-model/tokens.txt",
+          "downloadPath": "tokens.txt",
+          "sha256": "SEE-DEV-MODELS",
+          "bytes": 0
+        }
+      ],
+      "urls": [
+        "https://hf-mirror.com/csukuangfj/sherpa-onnx-streaming-zipformer-bilingual-zh-en-2023-02-20/resolve/main/",
+        "https://huggingface.co/csukuangfj/sherpa-onnx-streaming-zipformer-bilingual-zh-en-2023-02-20/resolve/main/"
+      ],
+      "title": "流式语音识别（中英）"
+    },
+    {
+      "id": "paraformer-zh-small",
+      "role": "asr-final",
+      "version": "2024-03-09",
+      "files": [
+        {
+          "path": "final-model/model.int8.onnx",
+          "downloadPath": "model.int8.onnx",
+          "sha256": "SEE-DEV-MODELS",
+          "bytes": 0
+        },
+        {
+          "path": "final-model/tokens.txt",
+          "downloadPath": "tokens.txt",
+          "sha256": "SEE-DEV-MODELS",
+          "bytes": 0
+        }
+      ],
+      "urls": [
+        "https://hf-mirror.com/csukuangfj/sherpa-onnx-paraformer-zh-small-2024-03-09/resolve/main/",
+        "https://huggingface.co/csukuangfj/sherpa-onnx-paraformer-zh-small-2024-03-09/resolve/main/"
+      ],
+      "title": "整句纠错识别"
+    },
+    {
+      "id": "offline-punct-zh-en",
+      "role": "punctuation",
+      "version": "2024-04-12-int8",
+      "files": [
+        {
+          "path": "punctuation/model.int8.onnx",
+          "downloadPath": "model.int8.onnx",
+          "sha256": "65a3fb9f5ad7bfb96bf69e0dc4481df97f6ee60513c1d94ce981ba6effd524b1",
+          "bytes": 75519198
+        }
+      ],
+      "urls": [
+        "https://hf-mirror.com/lorneluo/sherpa-onnx-punct-ct-transformer-zh-en-vocab272727-2024-04-12-int8/resolve/main/",
+        "https://huggingface.co/lorneluo/sherpa-onnx-punct-ct-transformer-zh-en-vocab272727-2024-04-12-int8/resolve/main/"
+      ],
+      "title": "中英标点恢复"
+    }
+  ]
+}

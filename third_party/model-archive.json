@@ -1,0 +1,100 @@
+{
+  "purpose": "Thin-build ASR and punctuation model archive download and extraction",
+  "components": [
+    {
+      "name": "sherpa-onnx OfflinePunctuation CT-Transformer zh-en int8 model",
+      "upstream": "https://github.com/k2-fsa/sherpa-onnx",
+      "release": "punctuation-models",
+      "archive": "sherpa-onnx-punct-ct-transformer-zh-en-vocab272727-2024-04-12-int8.tar.bz2",
+      "url": "https://github.com/k2-fsa/sherpa-onnx/releases/download/punctuation-models/sherpa-onnx-punct-ct-transformer-zh-en-vocab272727-2024-04-12-int8.tar.bz2",
+      "archiveBytes": 64717756,
+      "archiveSha256": "c0d5aa5f8eeb686032345e180bedf39319dc2e0556781c6264bcadba8328a6e1",
+      "entry": "sherpa-onnx-punct-ct-transformer-zh-en-vocab272727-2024-04-12-int8/model.int8.onnx",
+      "entryBytes": 75519198,
+      "entrySha256": "65a3fb9f5ad7bfb96bf69e0dc4481df97f6ee60513c1d94ce981ba6effd524b1",
+      "license": "Apache-2.0",
+      "licenseEvidence": "https://github.com/k2-fsa/sherpa-onnx/blob/master/LICENSE",
+      "packagedFile": "app/src/modelAssets/full/punctuation/model.int8.onnx",
+      "extractor": "scripts/setup-assets.sh; app/src/main/java/com/feelime/ime/ModelArchiveImporter.kt",
+      "modifications": "The official archive is used as the reproducible source; only model.int8.onnx is packaged and verified against the manifest."
+    },
+    {
+      "name": "sherpa-onnx streaming bilingual Zipformer mobile model",
+      "upstream": "https://github.com/k2-fsa/sherpa-onnx",
+      "release": "asr-models",
+      "archive": "sherpa-onnx-streaming-zipformer-bilingual-zh-en-2023-02-20-mobile.tar.bz2",
+      "url": "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-streaming-zipformer-bilingual-zh-en-2023-02-20-mobile.tar.bz2",
+      "archiveBytes": 346965352,
+      "archiveSha256": "45b8d04fe8faf5146397ff2e71d90ca8effdfcbe9adc30fdce769e92cabd6b03",
+      "entry": "sherpa-onnx-streaming-zipformer-bilingual-zh-en-2023-02-20-mobile/encoder-epoch-99-avg-1.int8.onnx",
+      "entryBytes": 105276499,
+      "entrySha256": "f559f422d970323e0c266aaa3c56cf6d1a3a4bc0c0822124727686c1e43e9447",
+      "license": "Apache-2.0",
+      "licenseEvidence": "https://github.com/k2-fsa/sherpa-onnx/blob/master/LICENSE",
+      "packagedFile": "app/src/modelAssets/full/asr-model/encoder.int8.onnx",
+      "extractor": "app/src/main/java/com/feelime/ime/ModelArchiveFetcher.kt",
+      "modifications": "The archive is downloaded at runtime for thin builds; only the exact encoder entry is extracted and verified."
+    },
+    {
+      "coordinate": "org.apache.commons:commons-compress:1.28.0",
+      "source": "https://commons.apache.org/proper/commons-compress/",
+      "license": "Apache-2.0",
+      "licenseFiles": [
+        "third_party/licenses/commons-compress-1.28.0-LICENSE.txt",
+        "third_party/licenses/commons-compress-1.28.0-NOTICE.txt"
+      ],
+      "artifact": "commons-compress-1.28.0.jar",
+      "artifactBytes": 1117221,
+      "artifactSha256": "e1522945218456f3649a39bc4afd70ce4bd466221519dba7d378f2141a4642ca",
+      "usedBy": "ModelArchiveFetcher.kt for streaming bzip2 and tar parsing",
+      "modified": false,
+      "runtimeDependencies": [
+        "commons-codec:commons-codec:1.19.0",
+        "commons-io:commons-io:2.20.0",
+        "org.apache.commons:commons-lang3:3.18.0"
+      ]
+    },
+    {
+      "coordinate": "commons-codec:commons-codec:1.19.0",
+      "source": "https://commons.apache.org/proper/commons-codec/",
+      "license": "Apache-2.0",
+      "artifact": "commons-codec-1.19.0.jar",
+      "artifactBytes": 374716,
+      "artifactSha256": "5c3881e4f556855e9c532927ee0c9dfde94cc66760d5805c031a59887070af5f",
+      "licenseFiles": [
+        "third_party/licenses/commons-codec-1.19.0-LICENSE.txt",
+        "third_party/licenses/commons-codec-1.19.0-NOTICE.txt"
+      ],
+      "resolvedRuntimeBy": "org.apache.commons:commons-compress:1.28.0",
+      "modified": false
+    },
+    {
+      "coordinate": "commons-io:commons-io:2.20.0",
+      "source": "https://commons.apache.org/proper/commons-io/",
+      "license": "Apache-2.0",
+      "artifact": "commons-io-2.20.0.jar",
+      "artifactBytes": 563971,
+      "artifactSha256": "df90bba0fe3cb586b7f164e78fe8f8f4da3f2dd5c27fa645f888100ccc25dd72",
+      "licenseFiles": [
+        "third_party/licenses/commons-io-2.20.0-LICENSE.txt",
+        "third_party/licenses/commons-io-2.20.0-NOTICE.txt"
+      ],
+      "resolvedRuntimeBy": "org.apache.commons:commons-compress:1.28.0",
+      "modified": false
+    },
+    {
+      "coordinate": "org.apache.commons:commons-lang3:3.18.0",
+      "source": "https://commons.apache.org/proper/commons-lang/",
+      "license": "Apache-2.0",
+      "artifact": "commons-lang3-3.18.0.jar",
+      "artifactBytes": 702952,
+      "artifactSha256": "4eeeae8d20c078abb64b015ec158add383ac581571cddc45c68f0c9ae0230720",
+      "licenseFiles": [
+        "third_party/licenses/commons-lang3-3.18.0-LICENSE.txt",
+        "third_party/licenses/commons-lang3-3.18.0-NOTICE.txt"
+      ],
+      "resolvedRuntimeBy": "org.apache.commons:commons-compress:1.28.0",
+      "modified": false
+    }
+  ]
+}

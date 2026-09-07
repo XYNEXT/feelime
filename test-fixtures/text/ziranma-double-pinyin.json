@@ -1,0 +1,254 @@
+{
+  "schemaVersion": 1,
+  "scheme": "ziranma-double-pinyin",
+  "provenance": "Manually recorded functional key mapping for the natural-code (Ziranma) scheme; contains no third-party IME code, dictionary, model, or extracted asset. Adds single-key jianpin abbreviations and bare zero-initial spellings.",
+  "initials": {
+    "b": "b",
+    "p": "p",
+    "m": "m",
+    "f": "f",
+    "d": "d",
+    "t": "t",
+    "n": "n",
+    "l": "l",
+    "g": "g",
+    "k": "k",
+    "h": "h",
+    "j": "j",
+    "q": "q",
+    "x": "x",
+    "zh": "v",
+    "ch": "i",
+    "sh": "u",
+    "r": "r",
+    "z": "z",
+    "c": "c",
+    "s": "s",
+    "y": "y",
+    "w": "w"
+  },
+  "finals": {
+    "a": "a",
+    "ai": "l",
+    "an": "j",
+    "ang": "h",
+    "ao": "k",
+    "e": "e",
+    "ei": "z",
+    "en": "f",
+    "eng": "g",
+    "er": "r",
+    "i": "i",
+    "ia": "w",
+    "ian": "m",
+    "iang": "d",
+    "iao": "c",
+    "ie": "x",
+    "in": "n",
+    "ing": "y",
+    "iong": "s",
+    "iu": "q",
+    "o": "o",
+    "ong": "s",
+    "ou": "b",
+    "u": "u",
+    "ua": "w",
+    "uai": "y",
+    "uan": "r",
+    "uang": "d",
+    "ue": "t",
+    "ui": "v",
+    "un": "p",
+    "uo": "o",
+    "v": "v",
+    "ve": "t"
+  },
+  "zeroInitialExamples": {
+    "a": "oa",
+    "ai": "ol",
+    "an": "oj",
+    "ang": "oh",
+    "ao": "ok",
+    "e": "oe",
+    "ei": "oz",
+    "en": "of",
+    "eng": "og",
+    "er": "or",
+    "o": "oo",
+    "ou": "ob"
+  },
+  "zeroInitialAllowedSpellings": {
+    "a": [
+      "a",
+      "aa",
+      "o",
+      "oa"
+    ],
+    "ai": [
+      "a",
+      "ai",
+      "al",
+      "o",
+      "ol"
+    ],
+    "an": [
+      "a",
+      "aj",
+      "an",
+      "o",
+      "oj"
+    ],
+    "ang": [
+      "a",
+      "ah",
+      "ang",
+      "o",
+      "oh"
+    ],
+    "ao": [
+      "a",
+      "ak",
+      "ao",
+      "o",
+      "ok"
+    ],
+    "e": [
+      "e",
+      "ee",
+      "o",
+      "oe"
+    ],
+    "ei": [
+      "e",
+      "ei",
+      "ez",
+      "o",
+      "oz"
+    ],
+    "en": [
+      "e",
+      "ef",
+      "en",
+      "o",
+      "of"
+    ],
+    "eng": [
+      "e",
+      "eg",
+      "eng",
+      "o",
+      "og"
+    ],
+    "er": [
+      "e",
+      "eer",
+      "er",
+      "o",
+      "or"
+    ],
+    "o": [
+      "o",
+      "oo"
+    ],
+    "ou": [
+      "b",
+      "o",
+      "ob",
+      "ou"
+    ]
+  },
+  "goldenSyllables": {
+    "ba": [
+      "b",
+      "ba"
+    ],
+    "pai": [
+      "p",
+      "pl"
+    ],
+    "mian": [
+      "m",
+      "mm"
+    ],
+    "fang": [
+      "f",
+      "fh"
+    ],
+    "diu": [
+      "d",
+      "dq"
+    ],
+    "tie": [
+      "t",
+      "tx"
+    ],
+    "nian": [
+      "n",
+      "nm"
+    ],
+    "liu": [
+      "l",
+      "lq"
+    ],
+    "guang": [
+      "g",
+      "gd"
+    ],
+    "kuai": [
+      "k",
+      "ky"
+    ],
+    "hen": [
+      "h",
+      "hf"
+    ],
+    "jing": [
+      "j",
+      "jy"
+    ],
+    "qiong": [
+      "q",
+      "qs"
+    ],
+    "xue": [
+      "x",
+      "xt"
+    ],
+    "zhuang": [
+      "v",
+      "vd"
+    ],
+    "chuan": [
+      "i",
+      "ir"
+    ],
+    "shui": [
+      "u",
+      "uv"
+    ],
+    "ruan": [
+      "r",
+      "rr"
+    ],
+    "zeng": [
+      "z",
+      "zg"
+    ],
+    "cao": [
+      "c",
+      "ck"
+    ],
+    "sun": [
+      "s",
+      "sp"
+    ],
+    "yong": [
+      "y",
+      "ys"
+    ],
+    "wai": [
+      "w",
+      "wl"
+    ]
+  }
+}

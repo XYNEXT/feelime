@@ -1,0 +1,7 @@
+<resources>
+    <color name="feelime_bg">#0F0F18</color>
+    <color name="feelime_surface">#1E1E30</color>
+    <color name="feelime_text">#F4F4FA</color>
+    <color name="feelime_muted">#A0A0B8</color>
+    <color name="feelime_accent">#00D45A</color>
+</resources>

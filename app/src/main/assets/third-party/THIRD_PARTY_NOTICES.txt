@@ -1,0 +1,40 @@
+Feelime 第三方组件说明（随 APK 分发）
+
+本输入法在离线状态下使用以下第三方组件。完整的许可证文本、上游
+NOTICE、精确版本与产物哈希绑定记录在源码仓库 third_party/ 目录
+（licenses/、manifest.json、source-closure.json）。
+
+- 语音识别：sherpa-onnx（Apache-2.0）及 k2-fsa 发布的离线模型，
+  模型许可以其发布页为准。
+- 中文引擎：librime（BSD-3-Clause）及其内嵌依赖
+  （Boost/glog/yaml-cpp/LevelDB/marisa-trie/OpenCC/RapidJSON 等，
+  许可证文本见仓库 third_party/licenses/rime/）。
+- Rime prelude/essay/luna-pinyin 数据：LGPL-3.0-only。发布时随包
+  提供对应源码归档（见仓库 source-closure.json 中的绑定）。
+- 日文引擎：Mozc（BSD-3-Clause）；其静态链接的 Abseil
+  （Apache-2.0）、Protobuf（BSD-3-Clause）、zlib（Zlib）以及词典
+  文件的 NAIST/IPAdic/ICOT/Okinawa 逐文件声明均予保留。
+- 拼写检查：Hunspell（MPL-1.1 选项）；法语词典 MPL-2.0；俄语词典
+  保留其上游 BSD 类声明。
+- 双拼方案为本仓独立实现的自然码键位（公开方案）：不包含任何
+  第三方输入法的代码、原生库、模型、词典或提取资产。
+
+对应源码获取方式：源码仓库 third_party/manifest.json 中
+formalBuildEvidence 与 sourceInputArchive 记录了构建输入归档的
+SHA-256，可据此复现全部第三方源码与产物。
+
+语音热词分词词表：k2-fsa / csukuangfj 发布的 streaming bilingual Zipformer
+模型配套 bpe.vocab，Apache-2.0，未修改。源版本与 SHA-256 记录见
+third_party/asr-hotwords.json；与标点恢复模型使用的词表不同。
+
+精简版安装包中的流式中英 Zipformer encoder 从 k2-fsa/sherpa-onnx
+官方 mobile archive 按精确 tar 路径提取，归档和 encoder 的大小、SHA-256
+与来源见 third_party/model-archive.json。归档解析使用 Apache Commons
+Compress 1.28.0（Apache-2.0），其运行时依赖 commons-codec 1.19.0、
+commons-io 2.20.0、commons-lang3 3.18.0（均为 Apache-2.0）。对应许可证、
+NOTICE、上游来源和产物 SHA-256 随源码保存于 third_party/model-archive.json
+与 third_party/licenses/。
+Model download networking: OkHttp 4.12.0 and Okio JVM 3.6.0, Square, Inc.
+Licensed under Apache License 2.0 (https://www.apache.org/licenses/LICENSE-2.0).
+Unmodified upstream: https://github.com/square/okhttp/tree/parent-4.12.0
+and https://github.com/square/okio/tree/parent-3.6.0.

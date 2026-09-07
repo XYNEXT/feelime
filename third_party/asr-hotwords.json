@@ -1,0 +1,14 @@
+{
+  "component": "Streaming bilingual Zipformer BPE vocabulary",
+  "upstream": "https://huggingface.co/csukuangfj/sherpa-onnx-streaming-zipformer-bilingual-zh-en-2023-02-20",
+  "revision": "98590b7ed6443e77b714204da2757d75e1a642f4",
+  "license": "Apache-2.0",
+  "licenseEvidence": "https://huggingface.co/csukuangfj/sherpa-onnx-streaming-zipformer-bilingual-zh-en-2023-02-20/blob/98590b7ed6443e77b714204da2757d75e1a642f4/README.md",
+  "sourceFile": "bpe.vocab",
+  "packagedFile": "app/src/main/assets/asr-hotwords/bpe.vocab",
+  "bytes": 12564,
+  "sha256": "d0b642f3a2eacd5fadefdeff9e0e1358cab729647cbb7fe58cf738e1f7407029",
+  "matchingModelTokensSha256": "a8e0e4ec53810e433789b54a5c0134a7eaa2ffca595a6334d54c00da858841d3",
+  "modifications": "None. Upstream UTF-8 piece/score vocabulary is packaged unchanged in both full and thin builds.",
+  "licenseText": "third_party/licenses/mozc/abseil-Apache-2.0.txt"
+}

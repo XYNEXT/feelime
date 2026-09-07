@@ -1,0 +1,253 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Feelime 设置预览（真实设置源）</title>
+<style>
+:root { color-scheme: dark; }
+* { box-sizing: border-box; }
+html, body { margin: 0; min-height: 100%; background: #101114; color: #e6e7ec;
+  font-family: system-ui, "Noto Sans CJK SC", sans-serif; }
+body { height: 100dvh; display: flex; flex-direction: column; overflow: hidden; }
+#toolbar { flex: 0 0 auto; display: flex; flex-wrap: wrap; align-items: center; gap: 7px;
+  padding: 8px 10px; background: #1b1d22; border-bottom: 1px solid #2a2d34;
+  font-size: 12px; z-index: 5; }
+#toolbar b { font-size: 13px; margin-right: 3px; }
+#toolbar .dim { color: #c1c4cc; }
+#toolbar button { border: 1px solid #3a3e48; border-radius: 5px; background: #262932;
+  color: #e6e7ec; font-size: 12px; padding: 5px 10px; cursor: pointer; }
+#toolbar button:hover { border-color: #5cdeb0; }
+#toolbar button.active { background: #23c890; border-color: #23c890; color: #07180e; font-weight: 700; }
+#sourceStatus { margin-left: auto; color: #c1c4cc; }
+#stageWrap { position: relative; flex: 1 1 0; min-height: 0; overflow: hidden; display: flex;
+  justify-content: center; align-items: stretch; padding: 20px;
+  background: repeating-conic-gradient(#14161a 0% 25%, #101114 0% 50%) 50% / 24px 24px; }
+#stage { width: min(100%, 430px); height: 100%; min-height: 0; background: #202020;
+  overflow: hidden; border: 1px solid #2a2d34; box-shadow: 0 0 40px #000c; }
+#settings-frame { display: block; width: 100%; height: 100%; min-height: 0;
+  border: 0; background: #202020; }
+#logDrawer { position: fixed; right: 10px; top: 55px; width: min(390px, calc(100vw - 20px));
+  max-height: 70vh; overflow-y: auto; background: #16181df2; border: 1px solid #2a2d34;
+  border-radius: 10px; padding: 9px 11px; font-size: 11.5px; z-index: 10; display: none; }
+#logDrawer.open { display: block; }
+#logDrawer h4 { margin: 0 0 6px; color: #c1c4cc; font-size: 12px; }
+#logBody .entry { padding: 3px 0; border-bottom: 1px dashed #2a2d34; word-break: break-all; }
+#logBody b { color: #5cdeb0; }
+@media (max-width: 560px) {
+  #stageWrap { padding: 0; }
+  #stage { width: 100%; border-right: 0; border-left: 0; }
+  #sourceStatus { width: 100%; margin-left: 0; }
+}
+</style>
+</head>
+<body>
+<div id="toolbar">
+  <b>Feelime 设置预览</b>
+  <span class="dim">主题</span>
+  <button id="themeDark" class="active">深色</button>
+  <button id="themeLight">浅色</button>
+  <span class="dim">界面语言</span>
+  <button id="localeZh" class="active">中文</button>
+  <button id="localeEn">English</button>
+  <span class="dim">页面</span>
+  <button data-page="home" class="active">首页</button>
+  <button data-page="input">键盘</button>
+  <button data-page="voice">语音</button>
+  <button data-page="update">更新</button>
+  <button data-page="about">关于</button>
+  <button data-page="test">测试</button>
+  <button id="previewPlay">切换 Google Play 版</button>
+  <button id="toggleLog">桥日志</button>
+  <span id="sourceStatus">加载真实设置源…</span>
+</div>
+<div id="stageWrap"><div id="stage"><iframe id="settings-frame" title="Feelime 设置真实源预览"></iframe></div></div>
+<div id="logDrawer"><h4>SettingsBridge 调用（空操作）</h4><div id="logBody"></div></div>
+
+<script>
+'use strict';
+const frame = document.getElementById('settings-frame');
+const stage = document.getElementById('stage');
+const sourceStatus = document.getElementById('sourceStatus');
+const logBody = document.getElementById('logBody');
+const calls = [];
+const token = 'preview-settings-token';
+const THEMES = ['dark', 'light'];
+let theme = 'dark';
+let locale = 'zh';
+let currentPage = 'home';
+
+const state = {
+  theme,
+  channel: 'direct',
+  modelBackend: 'remote',
+  modelDownloadSource: { mode: 'hf_mirror', customBase: '', customArchiveUrl: '' },
+  uiLanguage: 'auto',
+  playDistribution: false,
+  uiLocale: locale,
+  ime: { enabled: true, isDefault: true },
+  mic: { granted: true },
+  models: [
+    { id: 'streaming-zipformer-bilingual-zh-en', title: '流式语音识别（中英）', sizeBytes: 122437672, downloadBytes: 364126525, state: 'missing' },
+    { id: 'paraformer-zh-small', title: '整句纠错识别', sizeBytes: 81904027, state: 'downloading' },
+    { id: 'offline-punct-zh-en', title: '中英标点恢复', sizeBytes: 75519198, state: 'installed' },
+  ],
+  asr: { stripPeriod: true, hotwords: 'Feelime\nGPU' },
+  custom: { enabled: true, summary: '已定制 2 个键', json: '{"version":1,"rows":[[]]}' },
+  update: { source: 'https://github.com/feelime/feelime', sourceMode: 'default', sourceConfigured: false,
+    autoCheck: false, autoCheckLastAttemptAt: 0, url: '', activeSource: 'built_in',
+    activeVersion: '3.22.0', activeContentHash: 'preview0123456789', state: 'READY', lastError: '',
+    lastSuccessAt: '2026-09-06 12:00' },
+  appVersion: '0.17.6-preview', keyboardVersion: '3.26.0',
+  device: { manufacturer: 'Google', model: 'Pixel 8', release: '15', sdkInt: 35 },
+  notices: 'Preview notice: loaded from app/src/main/assets/settings/index.html.\nThird-party notices are supplied by the native bridge.',
+};
+
+function esc(value) {
+  return String(value).replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+}
+function log(method, args) {
+  calls.push({ method, args });
+  const row = document.createElement('div');
+  row.className = 'entry';
+  row.innerHTML = '<b>' + esc(method) + '</b> ' + esc(JSON.stringify(args || []));
+  logBody.prepend(row);
+  while (logBody.children.length > 80) logBody.lastElementChild.remove();
+}
+function pushState() {
+  const win = frame.contentWindow;
+  if (win && win.FeelimeSettings) win.FeelimeSettings.onEvent({ type: 'state', state: { ...state, uiLocale: locale, theme } });
+}
+function notify(event) {
+  const win = frame.contentWindow;
+  if (win && win.FeelimeSettings) win.FeelimeSettings.onEvent(event);
+}
+function pageButtons() {
+  document.querySelectorAll('[data-page]').forEach(button => button.classList.toggle('active', button.dataset.page === currentPage));
+}
+function showPage(name) {
+  currentPage = name;
+  pageButtons();
+  if (frame.contentWindow && frame.contentWindow.FeelimeSettings) frame.contentWindow.FeelimeSettings.showPage(name);
+}
+function fitStage() {
+  const available = stage.parentElement ? stage.parentElement.clientWidth : 430;
+  stage.style.width = Math.min(430, available) + 'px';
+  stage.style.height = '100%';
+}
+
+/* This is intentionally a bridge-shaped object. The page under test calls it
+ * exactly as the Android SettingsBridge does, while the preview only records
+ * the call and updates local demo state where that makes a control useful. */
+window.PreviewBridge = {
+  ready(...args) { log('ready', args); pushState(); },
+  reportPage(...args) { log('reportPage', args); },
+  setUiLanguage(choice, ...args) {
+    log('setUiLanguage', [choice, ...args]);
+    state.uiLanguage = choice;
+    locale = choice === 'en' ? 'en' : choice === 'zh' ? 'zh' : (navigator.language || '').toLowerCase().startsWith('zh') ? 'zh' : 'en';
+    state.uiLocale = locale;
+    pushState();
+  },
+  setAutoUpdateCheck(enabled, ...args) {
+    log('setAutoUpdateCheck', [enabled, ...args]);
+    state.update.autoCheck = !!enabled;
+    pushState();
+  },
+  openAppStore(...args) { log('openAppStore', args); },
+  copyText(...args) { log('copyText', args); },
+  enableIme(...args) {
+    log('enableIme', args);
+    state.ime.enabled = true;
+    pushState();
+  },
+  pickIme(...args) {
+    log('pickIme', args);
+    // Preview the system picker round trip: the real Activity observes
+    // DEFAULT_INPUT_METHOD and receives the same state refresh afterward.
+    state.ime.enabled = true;
+    state.ime.isDefault = true;
+    pushState();
+  },
+  addImeShortcut(...args) { log('addImeShortcut', args); },
+  addImeWidget(...args) { log('addImeWidget', args); },
+  addImeTile(...args) { log('addImeTile', args); },
+  requestMic(...args) { log('requestMic', args); },
+  setModelBackend(value, ...args) { log('setModelBackend', [value, ...args]); state.modelBackend = value; pushState(); },
+  setModelDownloadSource(mode, customBase, customArchiveUrl, ...args) {
+    log('setModelDownloadSource', [mode, customBase, customArchiveUrl, ...args]);
+    state.modelDownloadSource = { mode, customBase, customArchiveUrl };
+    pushState();
+  },
+  downloadModel(id, ...args) {
+    log('downloadModel', [id, ...args]);
+    const model = state.models.find(item => item.id === id);
+    if (model && frame.contentWindow && frame.contentWindow.FeelimeSettings) {
+      frame.contentWindow.FeelimeSettings.onEvent({ type: 'modelDownloadConfirmation', id, name: model.title, bytes: model.downloadBytes || model.sizeBytes });
+    }
+  },
+  confirmModelDownload(id, approved, ...args) { log('confirmModelDownload', [id, approved, ...args]); },
+  openModelDocument(id, ...args) { log('openModelDocument', [id, ...args]); },
+  openKeyboardDocument(...args) { log('openKeyboardDocument', args); },
+  cancelModelDownload(...args) { log('cancelModelDownload', args); },
+  deleteModel(id, ...args) { log('deleteModel', [id, ...args]); },
+  saveAsrSettings(...args) { log('saveAsrSettings', args); },
+  saveCustom(...args) { log('saveCustom', args); },
+  checkUpdate(...args) { log('checkUpdate', args); notify({ type: 'updateError', code: 'TIMEOUT' }); },
+  installZip(...args) { log('installZip', args); },
+  restoreBuiltInKeyboard(...args) { log('restoreBuiltInKeyboard', args); },
+};
+
+async function fetchText(path) {
+  const response = await fetch(path + '?preview=' + Date.now());
+  if (!response.ok) throw new Error(path + ' (' + response.status + ')');
+  return response.text();
+}
+async function load() {
+  const paths = [
+    ['../app/src/main/assets/settings/index.html', '../app/src/main/assets/settings/settings.css', '../app/src/main/assets/settings/settings.js'],
+    ['settings-preview-src/index.html', 'settings-preview-src/settings.css', 'settings-preview-src/settings.js'],
+  ];
+  let error;
+  for (const [htmlPath, cssPath, jsPath] of paths) {
+    try {
+      const [html, css, js] = await Promise.all([fetchText(htmlPath), fetchText(cssPath), fetchText(jsPath)]);
+      const source = html
+        .replace(/<link rel="stylesheet" href="settings\.css">/, '<style>' + css + '</style>')
+        .replace(/<script src="settings\.js"><\/script>/,
+          '<script>window.Native=parent.PreviewBridge;<\/script><script>' + js + '<\/script>');
+      frame.srcdoc = source;
+      frame.addEventListener('load', () => {
+        sourceStatus.textContent = '已加载真实 settings 源';
+        frame.contentWindow.FeelimeSettings.onBridgeHello({ token, theme, uiLanguage: state.uiLanguage, uiLocale: locale });
+        pushState();
+        showPage(currentPage);
+      }, { once: true });
+      return;
+    } catch (caught) { error = caught; }
+  }
+  sourceStatus.textContent = '加载失败：' + error.message;
+}
+
+document.getElementById('themeDark').addEventListener('click', () => {
+  theme = 'dark'; state.theme = theme; document.getElementById('themeDark').classList.add('active'); document.getElementById('themeLight').classList.remove('active'); pushState();
+});
+document.getElementById('themeLight').addEventListener('click', () => {
+  theme = 'light'; state.theme = theme; document.getElementById('themeLight').classList.add('active'); document.getElementById('themeDark').classList.remove('active'); pushState();
+});
+document.getElementById('localeZh').addEventListener('click', () => {
+  locale = 'zh'; state.uiLocale = locale; state.uiLanguage = 'zh'; document.getElementById('localeZh').classList.add('active'); document.getElementById('localeEn').classList.remove('active'); pushState();
+});
+document.getElementById('localeEn').addEventListener('click', () => {
+  locale = 'en'; state.uiLocale = locale; state.uiLanguage = 'en'; document.getElementById('localeEn').classList.add('active'); document.getElementById('localeZh').classList.remove('active'); pushState();
+});
+document.querySelectorAll('[data-page]').forEach(button => button.addEventListener('click', () => showPage(button.dataset.page)));
+document.getElementById('previewPlay').onclick = () => { state.playDistribution = !state.playDistribution; document.getElementById('previewPlay').textContent = state.playDistribution ? '切换直接安装版' : '切换 Google Play 版'; pushState(); };
+document.getElementById('toggleLog').addEventListener('click', () => document.getElementById('logDrawer').classList.toggle('open'));
+fitStage();
+if (typeof ResizeObserver === 'function') new ResizeObserver(fitStage).observe(document.getElementById('stageWrap'));
+else window.addEventListener('resize', fitStage);
+load();
+</script>
+</body>
+</html>

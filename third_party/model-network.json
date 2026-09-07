@@ -1,0 +1,23 @@
+{
+  "purpose": "Network-bound model downloads with persistent request cancellation",
+  "components": [
+    {
+      "coordinate": "com.squareup.okhttp3:okhttp:4.12.0",
+      "source": "https://github.com/square/okhttp/tree/parent-4.12.0",
+      "license": "Apache-2.0",
+      "artifact": "okhttp-4.12.0.jar",
+      "bytes": 789531,
+      "sha256": "b1050081b14bb7a3a7e55a4d3ef01b5dcfabc453b4573a4fc019767191d5f4e0",
+      "modified": false
+    },
+    {
+      "coordinate": "com.squareup.okio:okio-jvm:3.6.0",
+      "source": "https://github.com/square/okio/tree/parent-3.6.0",
+      "license": "Apache-2.0",
+      "artifact": "okio-jvm-3.6.0.jar",
+      "bytes": 359580,
+      "sha256": "67543f0736fc422ae927ed0e504b98bc5e269fda0d3500579337cb713da28412",
+      "modified": false
+    }
+  ]
+}

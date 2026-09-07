@@ -1,0 +1,286 @@
+<!doctype html>
+<!-- Feelime full settings. The page is deliberately a thin, semantic shell:
+     all user-facing copy is keyed and translated by settings.js so the same
+     WebView can follow the device language without shipping another APK. -->
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Feelime 设置</title>
+<link rel="stylesheet" href="settings.css">
+</head>
+<body>
+
+<!-- Home: status, independent UI-language choice, and topic entries. -->
+<div class="page" data-page="home">
+  <header class="hero">
+    <div class="hero-mark">
+      <span class="hero-logo" aria-hidden="true">F.</span>
+      <div class="hero-titles">
+        <h1>Feelime</h1>
+        <p class="hero-tag" data-i18n="hero.tag">离线中英混合语音输入法</p>
+      </div>
+    </div>
+    <p class="hero-status" id="heroStatus" aria-live="polite">
+      <span data-i18n="hero.connecting">连接引擎…</span>
+    </p>
+  </header>
+
+  <main>
+    <section class="card" id="sec-ime" aria-labelledby="imeTitle">
+      <div class="section-heading">
+        <h2 id="imeTitle" data-i18n="ime.title">输入法状态</h2>
+        <span class="eyebrow" data-i18n="status.title">状态</span>
+      </div>
+      <div class="rows">
+        <div class="row" id="imeEnabledRow">
+          <span class="led" data-led aria-hidden="true"></span>
+          <span class="row-label" data-i18n="ime.enabled">在系统中启用 Feelime</span>
+          <button class="btn" id="btnEnableIme" type="button" data-i18n="ime.enableAction">去启用</button>
+        </div>
+        <div class="row" id="imeDefaultRow">
+          <span class="led" data-led aria-hidden="true"></span>
+          <span class="row-label" data-i18n="ime.default">设为默认输入法</span>
+          <button class="btn" id="btnPickIme" type="button" data-i18n="ime.pickAction">去切换</button>
+        </div>
+      </div>
+      <div class="actions ime-actions">
+        <button class="btn local" id="btnAddShortcut" type="button" data-i18n="ime.addShortcut">添加桌面快捷方式</button>
+        <button class="btn local" id="btnAddWidget" type="button" data-i18n="ime.addWidget">添加桌面小组件</button>
+        <button class="btn local" id="btnAddTile" type="button" data-i18n="ime.addTile">添加快捷设置磁贴</button>
+      </div>
+    </section>
+
+    <section class="card" id="sec-language" aria-labelledby="languageTitle">
+      <div class="section-heading">
+        <h2 id="languageTitle" data-i18n="language.title">界面语言</h2>
+        <span class="eyebrow" data-i18n="language.badge">界面</span>
+      </div>
+      <div class="row language-row">
+        <span class="row-label">
+          <span data-i18n="language.label">显示语言</span>
+          <small data-i18n="language.hint">默认跟随系统；只影响 Feelime 界面，不改变输入语言。</small>
+        </span>
+        <select id="uiLanguage" class="select" aria-describedby="languageHint" data-i18n-aria="language.label" aria-label="显示语言">
+          <option value="auto" data-i18n="language.auto">跟随系统</option>
+          <option value="zh" data-i18n="language.zh">中文</option>
+          <option value="en" data-i18n="language.en">English</option>
+        </select>
+      </div>
+      <p id="languageHint" class="hint" data-i18n="language.note">输入语言仍由键盘模式决定。</p>
+    </section>
+
+    <nav class="card entries" id="entries" aria-label="设置分组" data-i18n-aria="nav.groups">
+      <button class="entry" type="button" data-target="input">
+        <span class="entry-label"><span data-i18n="entry.input.title">键盘与输入</span><small data-i18n="entry.input.subtitle">双拼 · 定制键盘</small></span>
+        <span class="entry-chevron" aria-hidden="true">›</span>
+      </button>
+      <button class="entry" type="button" data-target="voice">
+        <span class="entry-label"><span data-i18n="entry.voice.title">语音识别</span><small data-i18n="entry.voice.subtitle">语音模型 · 识别设置</small></span>
+        <span class="entry-chevron" aria-hidden="true">›</span>
+      </button>
+      <button class="entry" type="button" data-target="update">
+        <span class="entry-label"><span data-i18n="entry.update.title">键盘热更新</span><small data-i18n="entry.update.subtitle">键盘前端文件更新</small></span>
+        <span class="entry-chevron" aria-hidden="true">›</span>
+      </button>
+      <button class="entry" type="button" data-target="about">
+        <span class="entry-label"><span data-i18n="entry.about.title">关于</span><small data-i18n="entry.about.subtitle">版本信息 · 组件说明</small></span>
+        <span class="entry-chevron" aria-hidden="true">›</span>
+      </button>
+      <button class="entry" type="button" data-target="test">
+        <span class="entry-label"><span data-i18n="entry.test.title">输入测试</span><small data-i18n="entry.test.subtitle">唤起键盘试一试</small></span>
+        <span class="entry-chevron" aria-hidden="true">›</span>
+      </button>
+    </nav>
+  </main>
+</div>
+
+<!-- Keyboard and input. -->
+<div class="page" data-page="input" hidden>
+  <header class="page-head">
+    <button class="page-back" type="button" data-back data-i18n-aria="nav.back" aria-label="返回首页">‹</button>
+    <h2 class="page-title" data-i18n="page.input">键盘与输入</h2>
+  </header>
+  <main>
+    <section class="card" id="sec-dp" aria-labelledby="dpTitle">
+      <div class="section-heading"><h2 id="dpTitle" data-i18n="input.double.title">双拼方案</h2><span class="eyebrow" data-i18n="input.double.badge">输入</span></div>
+      <p class="hint block" data-i18n="input.double.description">当前方案：自然码。自然码与全拼共用声母（zh=V、ch=I、sh=U 三个双声母除外）；韵母按自然码映射到对应按键，完整键位图见键盘快捷设置 → 双拼键位。零声母（a/e 开头）直接打全拼：啊=aa、爱=ai、安=an、恩=en、二=er。</p>
+    </section>
+
+    <section class="card" id="sec-custom" aria-labelledby="customTitle">
+      <div class="section-heading"><h2 id="customTitle" data-i18n="input.custom.title">定制键盘</h2><span class="eyebrow" data-i18n="input.custom.badge">高级</span></div>
+      <div class="rows">
+        <label class="row switch-row" for="customEnabled">
+          <span class="row-label"><span data-i18n="input.custom.enabled">启用定制键盘</span><small id="customSummary">未定制</small></span>
+          <input type="checkbox" id="customEnabled" class="toggle">
+        </label>
+      </div>
+      <label class="field-label" for="customJson" data-i18n="input.custom.jsonLabel">定制 JSON（{"version":1,"rows":[[{"t":"键面","tap":"点击输出","note":"备注"}]]}）</label>
+      <textarea id="customJson" rows="6" spellcheck="false" data-i18n-placeholder="input.custom.jsonPlaceholder" placeholder="粘贴定制 JSON"></textarea>
+      <div class="actions">
+        <button class="btn primary" id="btnSaveCustom" type="button" data-i18n="action.saveCustom">保存定制</button>
+        <button class="btn" id="btnCustomTemplate" type="button" data-i18n="action.insertTemplate">插入模板</button>
+        <span class="save-note" id="customNote" role="status" aria-live="polite"></span>
+      </div>
+      <p class="hint" data-i18n="input.custom.note">保存在本机，键盘下次载入时生效。</p>
+    </section>
+  </main>
+</div>
+
+<!-- Voice recognition and ASR options. -->
+<div class="page" data-page="voice" hidden>
+  <header class="page-head">
+    <button class="page-back" type="button" data-back data-i18n-aria="nav.back" aria-label="返回首页">‹</button>
+    <h2 class="page-title" data-i18n="page.voice">语音识别</h2>
+  </header>
+  <main>
+    <section class="card" id="sec-voice" aria-labelledby="voiceTitle">
+      <div class="section-heading"><h2 id="voiceTitle" data-i18n="voice.models.title">麦克风与语音模型</h2><span class="eyebrow" data-i18n="voice.models.badge">语音</span></div>
+      <div class="rows">
+        <div class="row" id="micRow">
+          <span class="led" data-led aria-hidden="true"></span>
+          <span class="row-label"><span data-i18n="voice.mic.permission">麦克风权限</span><small data-i18n="voice.mic.hint">语音输入必需，全程本地处理</small></span>
+          <button class="btn" id="btnMic" type="button" data-i18n="voice.mic.action">去授权</button>
+        </div>
+      </div>
+      <div class="rows">
+        <label class="row" for="modelBackend">
+          <span class="row-label"><span data-i18n="voice.backend.label">模型来源</span></span>
+          <select id="modelBackend" class="select">
+            <option value="auto" data-i18n="voice.backend.auto">安装包优先</option>
+            <option value="remote" data-i18n="voice.backend.remote">使用下载模型</option>
+          </select>
+        </label>
+      </div>
+      <p class="hint" data-i18n="voice.backend.hint">切换后下次录音生效。选择下载模型会覆盖安装包中的模型，请先下载所需模型。</p>
+      <div class="rows model-source-settings">
+        <label class="row" for="modelDownloadSource">
+          <span class="row-label"><span data-i18n="voice.downloadSource.label">模型下载源</span></span>
+          <select id="modelDownloadSource" class="select">
+            <option value="hf_mirror" data-i18n="voice.downloadSource.hfMirror">HF 镜像（默认）</option>
+            <option value="official" data-i18n="voice.downloadSource.official">Hugging Face 官方</option>
+            <option value="custom" data-i18n="voice.downloadSource.custom">自定义源</option>
+          </select>
+        </label>
+        <label class="field-label" id="modelDownloadCustomLabel" for="modelDownloadCustom" data-i18n="voice.downloadSource.custom">自定义源</label>
+        <input type="url" id="modelDownloadCustom" data-i18n-placeholder="voice.downloadSource.customPlaceholder" placeholder="例如：https://example.com/huggingface" autocomplete="off" hidden>
+        <label class="field-label" id="modelDownloadArchiveLabel" for="modelDownloadArchive" data-i18n="voice.downloadSource.archive">流式模型压缩包地址</label>
+        <input type="url" id="modelDownloadArchive" data-i18n-placeholder="voice.downloadSource.archivePlaceholder" placeholder="例如：https://example.com/model.tar.bz2" autocomplete="off" hidden>
+        <div class="actions">
+          <button class="btn" id="btnSaveModelSource" type="button" data-i18n="voice.downloadSource.save">保存下载源</button>
+        </div>
+      </div>
+      <p class="hint" data-i18n="voice.downloadSource.hint">下载后会校验文件完整性；压缩包地址只用于流式模型的大文件，自定义源需同时填写仓库地址和对应的 tar.bz2 地址。</p>
+      <div class="rows" id="modelRows"></div>
+      <div class="consent" id="modelConsent" hidden role="dialog" aria-labelledby="modelConsentTitle" aria-describedby="modelConsentMessage">
+        <div class="section-heading">
+          <h3 id="modelConsentTitle" data-i18n="model.consent.title">确认下载流量</h3>
+          <span class="eyebrow" data-i18n="model.consent.badge">流量提示</span>
+        </div>
+        <p class="hint block" id="modelConsentMessage"></p>
+        <div class="actions">
+          <button class="btn" id="modelConsentCancel" type="button" data-i18n="model.consent.cancel">取消</button>
+          <button class="btn primary" id="modelConsentConfirm" type="button" data-i18n="model.consent.confirm">继续下载</button>
+        </div>
+      </div>
+      <p class="save-note model-note" id="modelNote" role="status" aria-live="polite"></p>
+      <p class="hint" data-i18n="voice.models.note">完整安装包已内置全部模型；精简安装包在此按需下载（断点续传，逐文件校验）。</p>
+      <p class="hint" data-i18n="model.importFormat">仅支持与内置清单对应的官方模型 tar.bz2 或 zip 归档。</p>
+    </section>
+
+    <section class="card" id="sec-asr" aria-labelledby="asrTitle">
+      <div class="section-heading"><h2 id="asrTitle" data-i18n="voice.asr.title">语音识别设置</h2><span class="eyebrow" data-i18n="voice.asr.badge">识别</span></div>
+      <div class="rows">
+        <label class="row switch-row" for="stripPeriod">
+          <span class="row-label"><span data-i18n="voice.asr.stripPeriod">去掉句尾句号</span><small data-i18n="voice.asr.stripHint">问号、叹号保留；关闭后保留模型输出</small></span>
+          <input type="checkbox" id="stripPeriod" class="toggle">
+        </label>
+      </div>
+      <label class="field-label" for="hotwords" data-i18n="voice.asr.hotwordsLabel">热词（一行一个，可填中文或英文；识别优先考虑这些词）</label>
+      <textarea id="hotwords" rows="4" data-i18n-placeholder="voice.asr.hotwordsPlaceholder" placeholder="例如：&#10;倪妮&#10;GPU"></textarea>
+      <div class="actions">
+        <button class="btn primary" id="btnSaveAsr" type="button" data-i18n="action.saveAsr">保存识别设置</button>
+        <span class="save-note" id="asrNote" role="status" aria-live="polite"></span>
+      </div>
+    </section>
+  </main>
+</div>
+
+<!-- Keyboard hot update. -->
+<div class="page" data-page="update" hidden>
+  <header class="page-head">
+    <button class="page-back" type="button" data-back data-i18n-aria="nav.back" aria-label="返回首页">‹</button>
+    <h2 class="page-title" data-i18n="page.update">键盘热更新</h2>
+  </header>
+  <main>
+    <section class="card" id="sec-update" aria-labelledby="updateTitle">
+      <div class="section-heading"><h2 id="updateTitle" data-i18n="update.title">键盘热更新</h2><span class="eyebrow" data-i18n="update.badge">更新</span></div>
+      <p class="hint block" data-i18n="update.note">仅替换 HTML/CSS/JS，不涉及引擎、词典与语音模型。</p>
+      <label class="field-label" for="updateSource" data-i18n="update.sourceLabel">更新源地址（metainfo.json）</label>
+      <input type="url" id="updateSource" data-i18n-placeholder="update.sourcePlaceholder" placeholder="https://example.com/feelime/metainfo.json" autocomplete="off">
+      <label class="row switch-row" for="autoUpdateCheck">
+        <span class="row-label"><span data-i18n="update.autoCheck">启动时自动检查更新</span><small data-i18n="update.autoCheckHint">每天最多检查一次；清空更新源后自动检查停用</small></span>
+        <input type="checkbox" id="autoUpdateCheck" class="toggle">
+      </label>
+      <label class="field-label" for="updateUrl" data-i18n="update.urlLabel">键盘包地址（联网下载）</label>
+      <input type="url" id="updateUrl" data-i18n-placeholder="update.urlPlaceholder" placeholder="https://example.com/feelime-keyboard.zip" autocomplete="off">
+      <div class="actions">
+        <button class="btn primary" id="btnCheckUpdate" type="button" data-i18n="action.checkUpdate">检查更新</button>
+        <button class="btn" id="btnInstallZip" type="button" data-i18n="action.install">联网下载安装</button>
+        <button class="btn local" id="btnImportZip" type="button" data-i18n="action.importLocal">从本地 ZIP 导入</button>
+        <button class="btn" id="btnRestore" type="button" data-i18n="action.restore">恢复内置</button>
+      </div>
+      <p class="hint" data-i18n="update.localHint">从本地 ZIP 导入不需要网络，仍会校验签名和兼容性。</p>
+      <pre class="status-block" id="updateStatus" aria-live="polite"></pre>
+      <p class="danger-note" id="updateDanger" hidden data-i18n="update.unsigned">⚠ 未签名键盘拥有 IME 权限（仅限调试构建）</p>
+    </section>
+  </main>
+</div>
+
+<!-- About and component notices. -->
+<div class="page" data-page="about" hidden>
+  <header class="page-head">
+    <button class="page-back" type="button" data-back data-i18n-aria="nav.back" aria-label="返回首页">‹</button>
+    <h2 class="page-title" data-i18n="page.about">关于</h2>
+  </header>
+  <main>
+    <section class="card" id="sec-about" aria-labelledby="aboutTitle">
+      <div class="section-heading"><h2 id="aboutTitle" data-i18n="about.versionTitle">版本信息</h2><span class="eyebrow" data-i18n="about.badge">信息</span></div>
+      <div class="rows" id="aboutRows"></div>
+      <div class="actions">
+        <button class="btn primary" id="btnCopyAbout" type="button" data-i18n="action.copyVersion">复制版本信息</button>
+        <button class="btn" id="btnAppStore" type="button" hidden data-i18n="action.appStore">在 Google Play 查看应用</button>
+        <span class="save-note" id="aboutNote" role="status" aria-live="polite"></span>
+      </div>
+      <p class="hint" data-i18n="about.copyHint">反馈问题时直接粘贴；复制内容标记为敏感，不会进入键盘剪贴板历史。</p>
+      <p class="hint" data-i18n="about.offlineHint">全程离线：语音识别与文字候选都不联网。</p>
+    </section>
+
+    <section class="card" id="sec-notices" aria-labelledby="noticesTitle">
+      <div class="section-heading"><h2 id="noticesTitle" data-i18n="about.noticesTitle">第三方许可与组件说明</h2><span class="eyebrow" data-i18n="about.legalBadge">许可</span></div>
+      <details>
+        <summary data-i18n="about.expandNotices">展开完整说明</summary>
+        <pre class="notices" id="noticesText"></pre>
+      </details>
+    </section>
+  </main>
+</div>
+
+<!-- Test field intentionally stays a real input so the IME is exercised. -->
+<div class="page" data-page="test" hidden>
+  <header class="page-head">
+    <button class="page-back" type="button" data-back data-i18n-aria="nav.back" aria-label="返回首页">‹</button>
+    <h2 class="page-title" data-i18n="page.test">输入测试</h2>
+  </header>
+  <main>
+    <section class="card" id="sec-test" aria-labelledby="testTitle">
+      <div class="section-heading"><h2 id="testTitle" data-i18n="test.title">试输入一段文字</h2><span class="eyebrow" data-i18n="test.badge">测试</span></div>
+      <input type="text" id="testInput" data-i18n-placeholder="test.placeholder" data-i18n-aria="test.title" aria-label="试输入一段文字" placeholder="点这里唤起 Feelime 试一试" autocomplete="off">
+      <p class="hint" data-i18n="test.note">输入内容只留在当前编辑框中。</p>
+    </section>
+  </main>
+</div>
+
+<script src="settings.js"></script>
+</body>
+</html>

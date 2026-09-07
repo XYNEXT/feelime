@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 2,
+  "status": "closed-for-g1-review",
+  "policy": "Every shipped native/data artifact is bound to an exact source entry, build script hash, dependency-cache manifest, output byte length/hash, APK path and local license/NOTICE file in manifest.json.",
+  "correspondingSource": {
+    "method": "Run scripts/research/fetch-native-engine-inputs.sh, which downloads and verifies all 13 canonical archives; scripts/research/create-builder-input-archive.sh then creates the audited allowlisted builder input archive. LGPL Rime source/data archives are included unmodified alongside Feelime's original schema and adapters.",
+    "inputArchive": {
+      "publicName": "feelime-builder-inputs-v9.tar",
+      "bytes": 270458880,
+      "sha256": "c10b261abb00b8437cc6464aacd33ef05af6d2b22aecbd6b46fb9bf177edf882",
+      "verification": "The builder reassembled the transferred chunks, matched byte length and SHA-256, verified every inputs.sha256 entry and required exact path/length equality with inputs.entries."
+    },
+    "dependencyManifests": ["scripts/research/builder-provenance/mozc-dependencies.json", "scripts/research/builder-provenance/mozc-repository-cache.json"],
+    "licenseBundle": "third_party/licenses/"
+  },
+  "excluded": ["third-party IME APKs/code/native libraries/models/dictionaries", "AOSP LatinIME Lexiteria dictionaries"],
+  "excludedReason": "No excluded package contributed code, library, model or dictionary bytes to the APK.",
+  "originalFeelimeAdapters": [
+    "spikes/native-engine-smoke/native-src/rime/feelime_rime_bridge.cpp",
+    "spikes/native-engine-smoke/native-src/hunspell/feelime_hunspell_bridge.cpp",
+    "spikes/native-engine-smoke/native-src/smoke/native_smoke.cpp",
+    "spikes/native-engine-smoke/app/src/main/java/com/feelime/ime/nativeengine/ProtoWire.kt",
+    "spikes/native-engine-smoke/app/src/main/java/com/feelime/ime/nativeengine/MozcSmoke.kt",
+    "spikes/native-engine-smoke/app/src/main/java/com/feelime/ime/nativeengine/NativeContractSmoke.kt",
+    "spikes/native-engine-smoke/app/src/main/java/com/feelime/ime/nativeengine/PrefixIndex.kt",
+    "spikes/native-engine-smoke/original-schemas/ziranma_double_pinyin.schema.yaml"
+  ],
+  "modifications": "No upstream source was modified. Feelime adapters and the independently authored natural-code double-pinyin Rime schema are separate original files; the schema was compiled with the pinned host librime deployer.",
+  "releaseObligation": "A production release must ship this license bundle and make the exact corresponding-source archives plus Feelime adapter/schema source available."
+}

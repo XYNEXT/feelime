@@ -1,0 +1,12 @@
+{
+  "purpose": "Offline default shortcut for saved phrases; user can edit ambiguous readings.",
+  "source": "rime-luna-pinyin@56b934b099dfbeab842320f13aa8b461a6ab3e42",
+  "archiveSha256": "876c7ba559794f476abf7195a255aea29000cee281e6f5ec664928dce018bd90",
+  "simplificationSource": "engine-data/rime/opencc/TSCharacters.txt (see third_party/manifest.json)",
+  "simplificationSha256": "a0ded7c0aefe350bd96bb0995a604623ee2cc98fe7e3870c886b73fa3184bed6",
+  "license": "third_party/licenses/rime-data/luna-pinyin-LGPL-3.0.txt",
+  "generator": "scripts/generate-phrase-initials.py",
+  "output": "app/src/main/assets/phrase-initials.tsv",
+  "outputSha256": "4d5bfa25eee46fe8efb89c5041f77f4561db105758e31018e38c1dfb7af256d1",
+  "characters": 42065
+}

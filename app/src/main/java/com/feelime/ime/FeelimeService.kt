@@ -1,0 +1,2174 @@
+package com.feelime.ime
+
+import android.Manifest
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.graphics.Color
+import android.inputmethodservice.InputMethodService
+import android.os.Handler
+import android.os.Looper
+import android.text.InputType
+import android.view.KeyEvent
+import android.view.View
+import android.view.ViewGroup
+import android.view.inputmethod.EditorInfo
+import android.view.inputmethod.InputConnection
+import android.view.inputmethod.InputMethodManager
+import android.webkit.JavascriptInterface
+import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
+import android.webkit.WebSettings
+import android.webkit.WebView
+import android.webkit.WebViewClient
+import android.widget.FrameLayout
+import androidx.core.content.ContextCompat
+import com.feelime.ime.engine.DirectTextEngine
+import com.feelime.ime.engine.InputConnectionEditorPort
+import com.feelime.ime.engine.InputMode
+import com.feelime.ime.engine.TextInputCoordinator
+import com.feelime.ime.update.BridgeContract
+import com.feelime.ime.update.KeyboardUpdateCenter
+import java.security.SecureRandom
+import java.util.ArrayDeque
+import org.json.JSONArray
+import org.json.JSONObject
+
+class FeelimeService : InputMethodService(), AsrEngine.Listener {
+    private val main = Handler(Looper.getMainLooper())
+    private val background = java.util.concurrent.Executors.newSingleThreadExecutor()
+    /** getExtractedText is a synchronous editor RPC. Keep it off the IME
+     * main thread; one scrub call handles its whole bounded delta. */
+    private val cursorQueryExecutor = java.util.concurrent.Executors.newSingleThreadExecutor()
+    private lateinit var engine: AsrEngine
+    private lateinit var editorPort: InputConnectionEditorPort
+    private lateinit var coordinator: TextInputCoordinator
+    private lateinit var clipboardStore: com.feelime.ime.panel.ClipboardStore
+    private lateinit var favoritesStore: com.feelime.ime.panel.FavoritesStore
+    private var keyboardView: WebView? = null
+    private var assetStore: KeyboardAssetStore? = null
+    private var state = VoiceState.IDLE
+    private var acceptAsrResults = false
+    private var composing = false
+    private var level = 0f
+    private var currentPartial = ""
+    /** One composing span owns the complete voice session. Keeping endpoint
+     * segments here makes cancellation able to remove the whole recording. */
+    private data class VoiceSession(
+        val editorGeneration: Long,
+        /** Null means the host reported a non-empty selection but did not
+         * expose its text. In that case voice text stays buffered until the
+         * user normally stops, so cancellation cannot erase unknown text. */
+        val originalSelection: String?,
+        val streamToEditor: Boolean,
+        var finalizedText: String = "",
+        var text: String = "",
+        var composingApplied: Boolean = false,
+        var cancelled: Boolean = false,
+    )
+    private var voiceSession: VoiceSession? = null
+    private var voiceStartPending = false
+    private var voiceCancelRequested = false
+    private var voiceStartEditorGeneration = -1L
+    private var voiceRequestId = 0L
+    private var voiceStartRequestId = 0L
+    private var inputConnectionGeneration = 0L
+    private var cursorQueryGeneration = 0L
+    private val pendingCursorDeltas = ArrayDeque<Int>()
+    private var cursorQueryActive = false
+    private var cursorQueryRequest = 0L
+    private val cursorSnapshotSupport = CursorSnapshotSupport()
+    private val expectedCursorSelections = ArrayDeque<Pair<Int, Int>>()
+ // Set while a keyboard-panel input (phrase add/edit) has
+    // focus. The system InputConnection always belongs to the host app
+    // editor - a WebView input inside the IME's own view never re-routes
+    // it - so editor writes must be redirected back into the panel input.
+    @Volatile private var panelInputActive = false
+    private var panelComposeSupported = false
+    private var panelInputRequested = false
+    private var panelRouteGeneration = 0L
+    private var panelSession = 0
+    private var pendingPanelSelection: Triple<Int, Int, Int>? = null
+    private var hostSelectionStart = -1
+    private var hostSelectionEnd = -1
+
+    // Bridge handshake state (design section 5.3). A fresh random token is
+    // minted per page load; every call must carry the live token.
+    private var pageToken = ""
+    private var pageReady = false
+    private var rejectedCalls = 0L
+    private var servedRevision = ""
+    private val callTimes = ArrayDeque<Long>()
+ // Runtime keyboard height (PHYSICAL px; 0 = the 272dp
+    // default). The user drags the keyboard's top edge in quick settings;
+    // the value persists per orientation in feelime_keyboard prefs.
+    private var keyboardHeightOverride = 0
+ // A: drag-time setKeyboardHeight calls coalesce into one pref
+    // commit (see setKeyboardHeight).
+    private var pendingHeightWrite = 0
+ // Review P3-4: the slot is decided when the value is DRAGGED,
+    // not when the debounce fires - a mid-drag rotation must not file the
+    // old orientation's height under the new one.
+    private var pendingHeightLandscape = false
+ // A popup moved into the float band above the keyboard; the
+    // band is transparent and NOT touchable until this flips (see
+    // onComputeInsets).
+    private var overlayOpen = false
+    // Last notified bottom safe area; never used as the current measurement.
+    private var lastSafeBottom = -1
+    /** Resolved once per process - navigation_bar_height
+     * capped at 32dp, -1 = not resolved yet (see effectiveBottomInset). */
+    private var navInsetFallback = -1
+    private var insetWatcherInstalled = false
+    private val flushHeightPref = Runnable {
+        val px = pendingHeightWrite
+        if (px > 0) {
+            pendingHeightWrite = 0
+            getSharedPreferences("feelime_keyboard", MODE_PRIVATE).edit()
+                .putInt(
+                    if (pendingHeightLandscape) {
+                        "keyboard_height_landscape"
+                    } else {
+                        "keyboard_height_portrait"
+                    },
+                    px,
+                )
+                .apply()
+        }
+    }
+    private val updateReceiver = object : android.content.BroadcastReceiver() {
+        override fun onReceive(context: android.content.Context?, intent: android.content.Intent?) {
+            if (intent?.action == KeyboardUpdateCenter.ACTION_KEYBOARD_UPDATED) reloadKeyboardFiles()
+        }
+    }
+
+    /** UI language is shared with SetupActivity. Keep an already visible
+     * keyboard in sync when settings changes in another window. */
+    private val uiLanguageListener =
+        android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+            if (key == UiLanguage.KEY_CHOICE) {
+                onMain {
+                    pushBridgeHello()
+                    pushState()
+                }
+            }
+        }
+
+    /** Language data readiness for the HTML mode menu. */
+    private fun engineDataReady(mode: String): Boolean {
+        val inputMode = InputModeBridge.fromWire(mode) ?: com.feelime.ime.engine.InputMode.DIRECT
+        return com.feelime.ime.engine.EngineDataStore.isModeReady(applicationContext, inputMode)
+    }
+
+    private fun newToken(): String {
+        val bytes = ByteArray(16)
+        SecureRandom().nextBytes(bytes)
+        return bytes.joinToString("") { "%02x".format(it) }
+    }
+
+    override fun onCreate() {
+        super.onCreate()
+        UiLanguage.preferences(this)
+            .registerOnSharedPreferenceChangeListener(uiLanguageListener)
+        engine = AsrEngine(applicationContext, this)
+        editorPort = InputConnectionEditorPort(this)
+        clipboardStore = com.feelime.ime.panel.ClipboardStore(applicationContext)
+        favoritesStore = com.feelime.ime.panel.FavoritesStore(applicationContext)
+        // Panel-side freshness: mutations made in SetupActivity must reach an
+        // open favorites tab on the keyboard . Removals through the
+        // panel push themselves; this listener covers the Setup->panel
+        // direction. Panel ids the panel no longer has are inert.
+        com.feelime.ime.panel.PanelStoreSignals.favorites.add {
+            main.post { pushFavorites() }
+        }
+        clipboardStore.start()
+        registerReceiver(
+            updateReceiver,
+            android.content.IntentFilter(KeyboardUpdateCenter.ACTION_KEYBOARD_UPDATED),
+            androidx.core.content.ContextCompat.RECEIVER_NOT_EXPORTED,
+        )
+        com.feelime.ime.engine.EngineDataStore.ensureAsync(applicationContext) {
+            main.post { pushBridgeHello() }
+        }
+        coordinator = TextInputCoordinator(
+            editor = object : com.feelime.ime.engine.EditorPort by editorPort {
+                override fun commitText(text: String) {
+                    if (panelInputActive) panelCommit(text) else editorPort.commitText(text)
+                }
+
+                override fun reopenComposing(start: Int, end: Int, word: String): Boolean {
+                    if (!panelInputActive) return editorPort.reopenComposing(start, end, word)
+                    if (!panelComposeSupported) return false
+                    val payload = JSONObject().put("start", start).put("end", end)
+                        .put("word", word).put("session", panelSession)
+                    evaluate("window.Feelime && window.Feelime.onPanelReopen && window.Feelime.onPanelReopen($payload)")
+                    return true
+                }
+
+                override fun selectedText(): String? =
+                    if (panelInputActive) null else editorPort.selectedText()
+
+                override fun sendDeleteKey() {
+                    if (panelInputActive) panelDelete() else editorPort.sendDeleteKey()
+                }
+
+                // Latin-composing modes (FR/RU/JA) would write their in-flight
+                // spelling into the host editor while the panel input is the
+                // intended target; hold the span back (the final commit still
+                // redirects through commitText above).
+                override fun setComposing(text: String) {
+                    if (!panelInputActive) editorPort.setComposing(text)
+                    else if (panelComposeSupported) {
+                        val payload = JSONObject().put("text", text).put("session", panelSession)
+                        evaluate("window.Feelime && window.Feelime.onPanelComposing && window.Feelime.onPanelComposing($payload)")
+                    }
+                }
+
+                override fun finishComposing() {
+                    if (!panelInputActive) editorPort.finishComposing()
+                    else if (panelComposeSupported) {
+                        val payload = JSONObject().put("session", panelSession)
+                        evaluate("window.Feelime && window.Feelime.onPanelFinishComposing && window.Feelime.onPanelFinishComposing($payload)")
+                    }
+                }
+            },
+            listener = { event ->
+                val payload = JSONObject()
+                    .put("phase", event.phase.name)
+                    .put("revision", event.revision)
+                    .put("consumed", event.consumed)
+                    .put("code", event.code.name)
+                    .put("mode", event.stamp.mode.wireName)
+                    .put("composing", event.state.composing)
+                    .put("rawInput", event.state.rawInput)
+                    .put("commit", event.state.commit ?: "")
+                    .put(
+                        "candidates",
+                        JSONArray(event.state.candidates.map { candidate ->
+                            JSONObject().put("id", candidate.id).put("text", candidate.text)
+                        }),
+                    )
+                    .put("hasPreviousPage", event.state.hasPreviousPage)
+                    .put("hasNextPage", event.state.hasNextPage)
+                evaluate("window.Feelime && window.Feelime.onEngineState && window.Feelime.onEngineState($payload)")
+            },
+            engineFactory = { mode -> EngineFactory.create(applicationContext, mode) },
+            asrGuard = { stopVoice(discardResults = true) },
+            mainPoster = { block -> main.post(block) },
+            background = background,
+            modeStore = sharedPreferencesModeStore(),
+            delayPoster = { delay, block -> main.postDelayed(block, delay) },
+        )
+    }
+
+    /** survives process death via SharedPreferences. */
+    private fun sharedPreferencesModeStore(): TextInputCoordinator.ModeStore {
+        val prefs = getSharedPreferences("feelime_engine", MODE_PRIVATE)
+        return object : TextInputCoordinator.ModeStore {
+            override fun save(mode: com.feelime.ime.engine.InputMode) {
+                prefs.edit().putString("selected_input_mode", mode.name).apply()
+            }
+
+            override fun load(): com.feelime.ime.engine.InputMode? {
+                val name = prefs.getString("selected_input_mode", null) ?: return null
+                return runCatching { com.feelime.ime.engine.InputMode.valueOf(name) }.getOrNull()
+            }
+        }
+    }
+
+    override fun onCreateInputView(): View {
+        pageToken = newToken()
+        pageReady = false
+        val active = KeyboardUpdateCenter.activeKeyboard(this)
+        servedRevision = active.revision
+        assetStore = KeyboardAssetStore(active.dir)
+        keyboardHeightOverride = storedKeyboardHeight()
+        val keyboardHeight = dp(272)
+ // The WebView is transparent - the float band above the
+        // keyboard shows the app through it, and the keyboard area paints
+        // its own themed background in CSS.
+        val view = WebView(this).apply {
+            setBackgroundColor(Color.TRANSPARENT)
+            settings.apply {
+                javaScriptEnabled = true
+                domStorageEnabled = true
+                allowFileAccess = false
+                allowContentAccess = false
+                allowFileAccessFromFileURLs = false
+                allowUniversalAccessFromFileURLs = false
+                blockNetworkLoads = true
+                mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
+                setSupportMultipleWindows(false)
+                javaScriptCanOpenWindowsAutomatically = false
+                mediaPlaybackRequiresUserGesture = true
+            }
+            removeJavascriptInterface("searchBoxJavaBridge_")
+            removeJavascriptInterface("accessibility")
+            removeJavascriptInterface("accessibilityTraversal")
+            addJavascriptInterface(ImeBridge(), BRIDGE_NAME)
+            webViewClient = object : WebViewClient() {
+                override fun shouldInterceptRequest(
+                    view: WebView,
+                    request: WebResourceRequest,
+                ): WebResourceResponse? {
+                    val url = request.url
+                    return if (url.scheme == "https" && url.host == LOCAL_HOST &&
+                        url.path.orEmpty().startsWith("/keyboard/")
+                    ) assetStore?.response(url.path.orEmpty()) ?: blocked() else blocked()
+                }
+
+                override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
+                    val url = request.url
+                    return !(url.scheme == "https" && url.host == LOCAL_HOST &&
+                        url.path.orEmpty().startsWith("/keyboard/"))
+                }
+
+                override fun onPageFinished(view: WebView, url: String) {
+                    pushBridgeHello()
+                }
+            }
+            WebView.setWebContentsDebuggingEnabled(BuildConfig.DEBUG)
+            loadUrl(KEYBOARD_URL)
+        }
+        keyboardView = view
+        view.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
+            onBottomInsetChanged()
+        }
+        installBottomInsetWatcher()
+        return FixedHeightInputView(keyboardHeight).apply {
+            setBackgroundColor(Color.TRANSPARENT)
+            minimumHeight = keyboardHeight
+            addView(
+                view,
+                FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                ),
+            )
+        }
+    }
+
+    override fun onEvaluateInputViewShown(): Boolean = true
+
+    override fun onEvaluateFullscreenMode(): Boolean = false
+
+    /**
+     * The input view is keyboard + float band (transparent strip
+     * ABOVE the keyboard where popups live). The app must still only make
+     * room for the KEYBOARD: content insets stop at the band's bottom edge,
+     * and the band passes touches through to the app unless a popup opened
+     * there (setOverlayOpen).
+     */
+    override fun onComputeInsets(outInsets: android.inputmethodservice.InputMethodService.Insets) {
+        super.onComputeInsets(outInsets)
+        val band = floatBandPx()
+        if (band <= 0) return
+        outInsets.contentTopInsets = band
+        outInsets.visibleTopInsets = if (overlayOpen) 0 else band
+        outInsets.touchableInsets =
+            android.inputmethodservice.InputMethodService.Insets.TOUCHABLE_INSETS_VISIBLE
+    }
+
+    /** Popup band height - capped at 40% of the current screen
+     * height so landscape keyboards keep most of the short edge for keys.
+     * Landscape caps at 30% of the REAL screen (measured off
+     * heightPixels the band starved the keyboard: chrome + 4x32css row floor
+     * + safe-bottom no longer fit under it and the last row slid beneath the
+     * gesture strip); 30% still keeps the mode menu in its floating branch
+     * (>=120css). */
+    private fun floatBandPx(): Int {
+        val metrics = resources.displayMetrics
+        val landscape =
+            resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
+        val budget = if (landscape) realHeightPixels() * 30 else metrics.heightPixels * 40
+        return minOf(dp(200), budget / 100)
+    }
+
+    override fun onStartInput(attribute: EditorInfo?, restarting: Boolean) {
+        super.onStartInput(attribute, restarting)
+        inputConnectionGeneration += 1
+        invalidatePendingVoiceStartOnEditorChange()
+        cursorQueryGeneration += 1
+        pendingCursorDeltas.clear()
+        cursorQueryActive = false
+        expectedCursorSelections.clear()
+        cursorSnapshotSupport.reset()
+        android.util.Log.d("FeelimePanel", "onStartInput type=${attribute?.inputType} restarting=$restarting")
+        stopVoice(discardResults = true)
+        // Clipboard collection follows editor sensitivity (design §3.6):
+        // arm on a normal editor, keep off for password fields. Re-capture the
+        // current clip so copies made while hidden are not lost .
+        // [attribute] is the editor identity for THIS callback. Reading
+        // currentInputEditorInfo here can still return the previous field
+        // while Android is handing us a new one, which would incorrectly
+        // carry a password/Direct restriction into a normal text editor.
+        val sensitive = isSensitiveEditor(attribute)
+        clipboardStore.collectEnabled = !sensitive
+        if (clipboardStore.collectEnabled) clipboardStore.captureCurrent()
+        // TYPE_NULL (terminal) editors: force the Direct engine there - see
+ // TextInputCoordinator.onEditorStarted .
+        val terminalLike = isTerminalLikeEditor(attribute)
+        hostSelectionStart = attribute?.initialSelStart ?: -1
+        hostSelectionEnd = attribute?.initialSelEnd ?: -1
+        panelInputActive = false
+        panelInputRequested = false
+        panelRouteGeneration += 1
+        coordinator.onEditorStarted(sensitive, terminalLike, hostSelectionStart, hostSelectionEnd)
+        main.post { pushEditorInfo() }
+    }
+
+    override fun onUpdateSelection(
+        oldSelStart: Int,
+        oldSelEnd: Int,
+        newSelStart: Int,
+        newSelEnd: Int,
+        candidatesStart: Int,
+        candidatesEnd: Int,
+    ) {
+        super.onUpdateSelection(
+            oldSelStart,
+            oldSelEnd,
+            newSelStart,
+            newSelEnd,
+            candidatesStart,
+            candidatesEnd,
+        )
+        val ownSelection = expectedCursorSelections.lastIndexOf(newSelStart to newSelEnd)
+        if (ownSelection >= 0) {
+            // setSelection() is asynchronous. If an older own callback lands
+            // after a newer request was already issued, keep the newest
+            // expected position as the text-before/text-after baseline.
+            val baseline = cursorSelectionBaseline(
+                newSelStart to newSelEnd,
+                expectedCursorSelections.toList(),
+            )
+            repeat(ownSelection + 1) { expectedCursorSelections.removeFirst() }
+            hostSelectionStart = baseline.first
+            hostSelectionEnd = baseline.second
+        } else if (oldSelStart != newSelStart || oldSelEnd != newSelEnd) {
+            expectedCursorSelections.clear()
+            cursorQueryGeneration += 1
+            pendingCursorDeltas.clear()
+            hostSelectionStart = newSelStart
+            hostSelectionEnd = newSelEnd
+        } else if (expectedCursorSelections.isEmpty()) {
+            // A host may report its initial selection without a movement.
+            hostSelectionStart = newSelStart
+            hostSelectionEnd = newSelEnd
+        }
+        // This callback is asynchronous and does not query editor text. It
+        // invalidates the coordinator's last-word transaction whenever the
+        // host moves/selects the caret outside our own bridge action.
+        if (::coordinator.isInitialized && !panelInputActive) {
+            coordinator.onEditorSelectionChanged(oldSelStart, oldSelEnd, newSelStart, newSelEnd)
+        }
+    }
+
+    override fun onFinishInputView(finishingInput: Boolean) {
+        inputConnectionGeneration += 1
+        invalidatePendingVoiceStartOnEditorChange()
+        cursorQueryGeneration += 1
+        pendingCursorDeltas.clear()
+        cursorQueryActive = false
+        expectedCursorSelections.clear()
+        cursorSnapshotSupport.reset()
+        if (::coordinator.isInitialized) coordinator.onExternalEditorMutation()
+        stopVoice(discardResults = true)
+        // No focused editor: never record (password managers' copies stay out).
+        clipboardStore.collectEnabled = false
+        composing = false
+        // The system may hide the IME without delivering touchend/cancel to
+        // the WebView. Clear its gesture-owned visual/timer state while the
+        // page is still alive; the JS hook is optional for older keyboard
+        // assets and the next show path still resets home as before.
+        evaluate("window.Feelime && window.Feelime.cancelTouches && window.Feelime.cancelTouches()")
+        super.onFinishInputView(finishingInput)
+    }
+
+    override fun onStartInputView(editorInfo: EditorInfo?, restarting: Boolean) {
+        super.onStartInputView(editorInfo, restarting)
+        onBottomInsetChanged()
+        // Showing the same editor after hiding may skip onStartInput.
+        // Restore collection disabled by onFinishInputView and capture copies
+        // made while hidden, except for sensitive editors.
+        clipboardStore.collectEnabled = !isSensitiveEditor()
+        if (clipboardStore.collectEnabled) clipboardStore.captureCurrent()
+ // A fresh show always lands on the main view - a
+        // keyboard hidden from the symbol layer must not come back there.
+        if (!restarting) {
+            installBottomInsetWatcher()
+            evaluate("window.Feelime && window.Feelime.resetToHome && window.Feelime.resetToHome()")
+        }
+    }
+
+    override fun onDestroy() {
+        acceptAsrResults = false
+        inputConnectionGeneration += 1
+        cursorQueryGeneration += 1
+        pendingCursorDeltas.clear()
+        cursorQueryActive = false
+        cursorSnapshotSupport.reset()
+        clipboardStore.stop()
+        unregisterReceiver(updateReceiver)
+        UiLanguage.preferences(this)
+            .unregisterOnSharedPreferenceChangeListener(uiLanguageListener)
+        // close any live engine session before tearing down.
+        runCatching { coordinator.close() }
+        engine.release()
+        background.shutdown()
+        cursorQueryExecutor.shutdownNow()
+        keyboardView?.apply {
+            removeJavascriptInterface(BRIDGE_NAME)
+            destroy()
+        }
+        keyboardView = null
+        super.onDestroy()
+    }
+
+    /**
+     * Hot-update reload (design §8.3): re-resolve the active keyboard and, if
+     * the revision changed, reload the synthetic origin so the next page load
+     * serves the new files with a fresh page token. Never force-stops.
+     */
+    private fun reloadKeyboardFiles() = onMain {
+        val active = KeyboardUpdateCenter.activeKeyboard(this)
+        if (active.revision == servedRevision) return@onMain
+        servedRevision = active.revision
+        assetStore = KeyboardAssetStore(active.dir)
+        pageToken = newToken()
+        pageReady = false
+        keyboardView?.loadUrl(KEYBOARD_URL)
+    }
+
+    private fun startVoice() = onMain {
+        if (state != VoiceState.IDLE && state != VoiceState.ERROR) return@onMain
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) !=
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            state = VoiceState.ERROR
+            pushState(
+                message = t(
+                    this,
+                    "请先打开 Feelime 设置并授予麦克风权限",
+                    "Open Feelime settings and grant microphone permission first",
+                ),
+                messageCode = "MIC_PERMISSION_REQUIRED",
+            )
+            return@onMain
+        }
+        if (currentInputConnection == null) {
+            state = VoiceState.ERROR
+            pushState(
+                message = t(this, "当前应用没有可输入的文本框", "The current app has no editable text field"),
+                messageCode = "NO_EDITOR",
+            )
+            return@onMain
+        }
+        if (isSensitiveEditor()) {
+            state = VoiceState.ERROR
+            pushState(
+                message = t(this, "密码输入框已停用语音识别", "Voice input is disabled in password fields"),
+                messageCode = "SENSITIVE_EDITOR",
+            )
+            return@onMain
+        }
+        val requestId = ++voiceRequestId
+        voiceStartRequestId = requestId
+        val editorGeneration = inputConnectionGeneration
+        voiceStartEditorGeneration = editorGeneration
+        voiceStartPending = true
+        voiceSession = null
+        voiceCancelRequested = false
+        acceptAsrResults = true
+        currentPartial = ""
+        state = VoiceState.LOADING
+        pushState()
+        coordinator.beginVoiceSession(
+            isCurrent = { inputConnectionGeneration == editorGeneration },
+        ) {
+            onMain {
+                // beginVoiceSession may wait for an engine warm-up. A stop,
+                // editor switch, or a newer request must invalidate this
+                // callback before it can start the old recording.
+                if (!voiceStartPending || voiceStartRequestId != requestId) return@onMain
+                if (requestId != voiceRequestId ||
+                    !acceptAsrResults || state != VoiceState.LOADING
+                ) {
+                    finishPendingVoiceStart(requestId)
+                    return@onMain
+                }
+                voiceStartPending = false
+                val selected = runCatching { editorPort.selectedText() }.getOrNull()
+                val selectionKnownNonEmpty =
+                    hostSelectionStart >= 0 && hostSelectionEnd >= 0 &&
+                        hostSelectionEnd != hostSelectionStart
+                voiceSession = VoiceSession(
+                    editorGeneration = inputConnectionGeneration,
+                    originalSelection = if (selected != null) selected
+                    else if (selectionKnownNonEmpty) null
+                    else "",
+                    // A null selected-text result plus a known non-empty
+                    // selection cannot be safely replaced by a composing span.
+                    streamToEditor = selected != null || !selectionKnownNonEmpty,
+                )
+                engine.start()
+            }
+        }
+    }
+
+    private fun stopVoice(discardResults: Boolean = false) = onMain {
+        if (discardResults) {
+            cancelVoiceOnMain()
+            return@onMain
+        }
+        if (voiceStartPending) {
+            // No AsrEngine callback will complete a request that has not
+            // reached engine.start yet. Invalidate its after callback and let
+            // that callback finish the coordinator transition when it lands.
+            voiceCancelRequested = true
+            voiceRequestId += 1
+            state = VoiceState.STOPPING
+            pushState()
+            return@onMain
+        }
+        if (state == VoiceState.LISTENING || state == VoiceState.LOADING) {
+            state = VoiceState.STOPPING
+            pushState()
+            engine.stop()
+        }
+    }
+
+    /**
+     * An editor transition clears the coordinator's warmup queue. If that
+     * queue contained the continuation that would start voice recording, no
+     * ASR callback can settle the service's pending marker afterwards. Clear
+     * the marker here; the lifecycle handler owns the coordinator reset for
+     * the new editor, so ending the old voice session would touch the new one.
+     */
+    private fun invalidatePendingVoiceStartOnEditorChange() {
+        if (!voiceStartPending) return
+        voiceStartPending = false
+        voiceRequestId += 1
+        voiceStartRequestId = 0L
+        voiceStartEditorGeneration = -1L
+        voiceCancelRequested = false
+        acceptAsrResults = false
+        voiceSession = null
+        composing = false
+        currentPartial = ""
+        level = 0f
+        state = VoiceState.IDLE
+        pushState(partial = "")
+    }
+
+    /** Cancel the whole recording, including endpoint segments already seen. */
+    private fun cancelVoice() = onMain { cancelVoiceOnMain() }
+
+    private fun cancelVoiceOnMain() {
+        if (state == VoiceState.IDLE || state == VoiceState.ERROR) return
+        voiceCancelRequested = true
+        voiceRequestId += 1
+        voiceSession?.let { session ->
+            session.cancelled = true
+            // Clear the editor span synchronously. The recognizer's worker
+            // still has to release the recorder, but cancellation must be
+            // visible immediately and must not wait for that cleanup.
+            if (session.editorGeneration == inputConnectionGeneration) {
+                rollbackVoiceSession(session)
+            }
+        }
+        acceptAsrResults = false
+        currentPartial = ""
+        level = 0f
+        if (state == VoiceState.LOADING || state == VoiceState.LISTENING ||
+            state == VoiceState.STOPPING
+        ) {
+            state = VoiceState.STOPPING
+            pushState(partial = "")
+        }
+        if (voiceStartPending) return
+        // A normal stop may already have put the service in STOPPING; cancel
+        // still has to switch the engine from drain to discard semantics.
+        engine.cancel()
+    }
+
+    private fun finishPendingVoiceStart(requestId: Long) {
+        if (!voiceStartPending || voiceStartRequestId != requestId) return
+        voiceStartPending = false
+        acceptAsrResults = false
+        currentPartial = ""
+        level = 0f
+        state = VoiceState.IDLE
+        if (voiceStartEditorGeneration == inputConnectionGeneration) {
+            coordinator.endVoiceSession()
+        }
+        voiceCancelRequested = false
+        pushState(partial = "")
+    }
+
+    private fun sendKey(code: Int) = onMain {
+        val connection = currentInputConnection ?: return@onMain
+        connection.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, code))
+        connection.sendKeyEvent(KeyEvent(KeyEvent.ACTION_UP, code))
+    }
+
+    /**
+     * Move the caret inside a normal editor without blocking the IME main
+     * thread. getExtractedText is a synchronous InputConnection RPC and some
+     * in-process WebViews take the framework's two-second timeout. Query one
+     * snapshot on a worker, then calculate the whole bounded delta by Unicode
+     * code point before applying setSelection on the main thread.
+     *
+     * TYPE_NULL editors deliberately retain physical arrow events: terminals
+     * own their cursor semantics and do not expose a reliable selection model.
+     * A normal editor without full snapshots is reconstructed from its text
+     * around the known host selection before falling back to native arrows.
+     */
+    private fun moveCursorWithinEditor(delta: Int) = onMain {
+        val connection = currentInputConnection ?: return@onMain
+        val info = currentInputEditorInfo
+        if (isKeyEventCursorEditor(info)) {
+            val code = if (delta < 0) KeyEvent.KEYCODE_DPAD_LEFT else KeyEvent.KEYCODE_DPAD_RIGHT
+            repeat(kotlin.math.abs(delta)) {
+                connection.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, code))
+                connection.sendKeyEvent(KeyEvent(KeyEvent.ACTION_UP, code))
+            }
+            coordinator.onExternalEditorMutation()
+            return@onMain
+        }
+
+        // Invalidate the word-undo transaction before the potentially slow
+        // query. A host selection/caret change must never resurrect a word.
+        coordinator.onExternalEditorMutation()
+        // Some WebView InputConnections do not expose either full snapshot
+        // API. A failed probe cools down before native arrows are used, so a
+        // transient null does not permanently disable later setSelection.
+        if (cursorSnapshotSupport.strategy(
+                connection,
+                android.os.SystemClock.elapsedRealtime(),
+            ) == CursorSnapshotSupport.Strategy.NATIVE_ARROWS
+        ) {
+            sendNativeCursorArrows(connection, listOf(delta))
+            return@onMain
+        }
+        // Scrub frames can enqueue several bounded bridge calls before the
+        // first editor RPC returns. Preserve their net movement and issue one
+        // snapshot at a time; replacing an in-flight request would silently
+        // lose earlier steps.
+        // Keep direction changes ordered: cancelling opposite deltas loses
+        // movement when the first segment reaches an editor boundary.
+        val previous = pendingCursorDeltas.lastOrNull()
+        if (previous != null && (previous < 0) == (delta < 0) &&
+            kotlin.math.abs(previous + delta) <= MAX_CURSOR_DELTA) {
+            pendingCursorDeltas.removeLast()
+            pendingCursorDeltas.addLast(previous + delta)
+        } else pendingCursorDeltas.addLast(delta)
+        startCursorQueryIfNeeded()
+    }
+
+    private fun startCursorQueryIfNeeded() {
+        if (cursorQueryActive || pendingCursorDeltas.isEmpty()) return
+        val connection = currentInputConnection ?: run {
+            pendingCursorDeltas.clear()
+            return
+        }
+        val probeStrategy = cursorSnapshotSupport.strategy(
+            connection,
+            android.os.SystemClock.elapsedRealtime(),
+        )
+        if (probeStrategy == CursorSnapshotSupport.Strategy.NATIVE_ARROWS) {
+            val deltas = ArrayList<Int>(pendingCursorDeltas.size)
+            while (pendingCursorDeltas.isNotEmpty()) {
+                deltas.add(pendingCursorDeltas.removeFirst())
+            }
+            sendNativeCursorArrows(connection, deltas)
+            return
+        }
+        val delta = pendingCursorDeltas.removeFirst()
+        cursorQueryActive = true
+        val editorGeneration = inputConnectionGeneration
+        val queryGeneration = cursorQueryGeneration
+        // These callbacks are the only absolute selection offsets available
+        // when a host implements neither full snapshot API. Capture them on
+        // the main thread before the worker starts querying text around the
+        // cursor.
+        val selectionStart = hostSelectionStart
+        val selectionEnd = hostSelectionEnd
+        val request = ++cursorQueryRequest
+        cursorQueryExecutor.execute {
+            val snapshot = if (probeStrategy == CursorSnapshotSupport.Strategy.FULL_SNAPSHOT) {
+                runCatching {
+                    connection.getExtractedText(android.view.inputmethod.ExtractedTextRequest().apply {
+                        hintMaxChars = 0
+                    }, 0)
+                }.getOrNull()?.let { extracted ->
+                    if (extracted.partialStartOffset >= 0 || extracted.partialEndOffset >= 0) {
+                        null
+                    } else {
+                        val text = extracted.text?.toString() ?: return@let null
+                        CursorSnapshot(text, extracted.selectionStart, extracted.selectionEnd, extracted.startOffset)
+                    }
+                }
+            } else null
+            val surroundingSnapshot = if (
+                snapshot == null && probeStrategy == CursorSnapshotSupport.Strategy.FULL_SNAPSHOT &&
+                    android.os.Build.VERSION.SDK_INT >= 31
+            ) {
+                runCatching { connection.getSurroundingText(2048, 2048, 0) }
+                    .getOrNull()?.let { surrounding ->
+                        if (surrounding.offset < 0) null else CursorSnapshot(
+                            surrounding.text.toString(), surrounding.selectionStart,
+                            surrounding.selectionEnd, surrounding.offset,
+                        )
+                    }
+            } else null
+            val textSnapshot = if (snapshot == null && surroundingSnapshot == null) {
+                val before = runCatching {
+                    connection.getTextBeforeCursor(MAX_CURSOR_CONTEXT_CHARS, 0)?.toString()
+                }.getOrNull()
+                val after = if (before != null) {
+                    runCatching {
+                        connection.getTextAfterCursor(MAX_CURSOR_CONTEXT_CHARS, 0)?.toString()
+                    }.getOrNull()
+                } else null
+                val selectedText = if (
+                    before != null && after != null && selectionStart >= 0 && selectionEnd >= 0 &&
+                    selectionStart != selectionEnd
+                ) {
+                    runCatching { connection.getSelectedText(0)?.toString() }.getOrNull()
+                } else null
+                if (before != null && after != null) {
+                    cursorSnapshotAroundSelection(
+                        before,
+                        after,
+                        selectionStart,
+                        selectionEnd,
+                        selectedText,
+                        MAX_CURSOR_CONTEXT_CHARS,
+                    )
+                } else null
+            } else null
+            val usableSnapshot = snapshot ?: surroundingSnapshot ?: textSnapshot
+            val usedTextFallback = textSnapshot != null
+            main.post {
+                // A previous editor's completion never owns the current
+                // request and must not clear its active flag or queued work.
+                if (request != cursorQueryRequest || editorGeneration != inputConnectionGeneration) return@post
+                cursorQueryActive = false
+                if (connection === currentInputConnection) {
+                    when {
+                        usedTextFallback -> cursorSnapshotSupport.markTextFallback(connection)
+                        usableSnapshot == null -> {
+                            // Null can be a timeout or an invalidated
+                            // connection, so keep native arrows only until a
+                            // later probe is allowed. Do this before the
+                            // generation check: a stale selection callback
+                            // must not make every following frame repeat the
+                            // slow pair of snapshot calls.
+                            cursorSnapshotSupport.markUnsupported(
+                                connection,
+                                android.os.SystemClock.elapsedRealtime(),
+                            )
+                        }
+                        probeStrategy != CursorSnapshotSupport.Strategy.FULL_SNAPSHOT ->
+                            cursorSnapshotSupport.markSupported(connection)
+                    }
+                }
+                if (queryGeneration != cursorQueryGeneration) {
+                    // A host selection change invalidates both this snapshot
+                    // and its delta. The lifecycle may also have replaced the
+                    // InputConnection, so this check must precede the
+                    // identity-recovery path below; otherwise an obsolete
+                    // delta would be requeued after onUpdateSelection had
+                    // deliberately cleared pending movement.
+                    startCursorQueryIfNeeded()
+                    return@post
+                }
+                if (connection !== currentInputConnection) {
+                    // Some InputConnection implementations replace their
+                    // proxy before the lifecycle callback that advances the
+                    // generation. The query's delta has not reached the
+                    // editor yet, so return it to the front of the queue and
+                    // retry against the live connection. Leaving the active
+                    // flag set here would strand every later scrub request.
+                    pendingCursorDeltas.addFirst(delta)
+                    startCursorQueryIfNeeded()
+                    return@post
+                }
+                // A drag can enqueue more deltas while the snapshot RPC is in
+                // flight. Drain that burst against the same immutable text
+                // snapshot; querying once per queued segment made a slow
+                // editor turn continuous scrubbing into visible lag. The
+                // sequence helper still clamps each segment independently,
+                // preserving Unicode boundaries and native selection collapse
+                // at either end of the text.
+                val deltas = ArrayList<Int>(pendingCursorDeltas.size + 1)
+                deltas.add(delta)
+                while (pendingCursorDeltas.isNotEmpty()) {
+                    deltas.add(pendingCursorDeltas.removeFirst())
+                }
+                // xterm.js-style WebView terminals present a hidden
+                // helper textarea to the IME. Its snapshot reads empty and its
+                // caret never represents the visible terminal cursor, so a
+                // snapshot-driven setSelection is a silent no-op there: the
+                // terminal only follows real key events. An empty snapshot can
+                // never honour a non-zero delta either, so route that movement
+                // through the arrow-key channel, like the TYPE_NULL path.
+                val usable = usableSnapshot?.takeIf { it.text.isNotEmpty() }
+                var applied = false
+                if (usable != null) {
+                    val target = CursorMovement.targetSequence(usable, deltas)
+                    if (target != null) {
+                        val same = usable.selectionStart + usable.startOffset == target &&
+                            usable.selectionEnd + usable.startOffset == target
+                        if (!same) {
+                            if (connection.setSelection(target, target)) {
+                                expectedCursorSelections.addLast(target to target)
+                                // The host callback is asynchronous; subsequent
+                                // text-before/text-after queries must use the
+                                // position we just requested immediately.
+                                hostSelectionStart = target
+                                hostSelectionEnd = target
+                                coordinator.onExternalEditorMutation()
+                                applied = true
+                            }
+                        } else {
+                            applied = true
+                        }
+                    }
+                }
+                if (!applied) {
+                    // Editors without extracted text still support their
+                    // native arrow protocol (including custom web editors).
+                    sendNativeCursorArrows(connection, deltas)
+                }
+                startCursorQueryIfNeeded()
+            }
+        }
+    }
+
+    private fun sendNativeCursorArrows(
+        connection: InputConnection,
+        deltas: Iterable<Int>,
+    ) {
+        val flags = KeyEvent.FLAG_SOFT_KEYBOARD or KeyEvent.FLAG_KEEP_TOUCH_MODE
+        deltas.forEach { movement ->
+            val code = if (movement < 0) KeyEvent.KEYCODE_DPAD_LEFT else KeyEvent.KEYCODE_DPAD_RIGHT
+            repeat(kotlin.math.abs(movement)) {
+                val downAt = android.os.SystemClock.uptimeMillis()
+                connection.sendKeyEvent(
+                    KeyEvent(
+                        downAt,
+                        downAt,
+                        KeyEvent.ACTION_DOWN,
+                        code,
+                        0,
+                        0,
+                        android.view.KeyCharacterMap.VIRTUAL_KEYBOARD,
+                        0,
+                        flags,
+                    ),
+                )
+                connection.sendKeyEvent(
+                    KeyEvent(
+                        downAt,
+                        android.os.SystemClock.uptimeMillis(),
+                        KeyEvent.ACTION_UP,
+                        code,
+                        0,
+                        0,
+                        android.view.KeyCharacterMap.VIRTUAL_KEYBOARD,
+                        0,
+                        flags,
+                    ),
+                )
+            }
+        }
+    }
+
+    private fun enter() = onMain {
+        // The coordinator owns the action decision because a warmup-queued
+        // Enter can only be classified after preceding queued keys replay.
+        coordinator.enterRaw()
+    }
+
+    private fun switchIme() = onMain {
+        // The engine's pinyin raw buffer is rendered only in the keyboard UI;
+        // accept it before the system hands the editor to another IME.  The
+        // coordinator also resets its engine session, so returning to this
+        // IME cannot replay the same composition a second time.
+        coordinator.acceptCurrentComposition {
+            if (shouldOfferSwitchingToNextInputMethod()) {
+                switchToNextInputMethod(false)
+            } else {
+                getSystemService(InputMethodManager::class.java).showInputMethodPicker()
+            }
+        }
+    }
+
+    private fun openSetup() = onMain {
+        startActivity(
+            Intent(this, SetupActivity::class.java)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                .putExtra(SetupActivity.SETUP_LAUNCH_EXTRA, android.os.SystemClock.elapsedRealtimeNanos()),
+        )
+    }
+
+    /** System dark/light for the keyboard's auto theme (WebView prefers-
+     *  color-scheme is unreliable across OEM WebView builds). */
+    private fun systemTheme(): String {
+        val night = resources.configuration.uiMode and
+            android.content.res.Configuration.UI_MODE_NIGHT_MASK
+        return if (night == android.content.res.Configuration.UI_MODE_NIGHT_YES) "dark" else "light"
+    }
+
+    override fun onConfigurationChanged(newConfig: android.content.res.Configuration) {
+        super.onConfigurationChanged(newConfig)
+        main.post {
+ // Each orientation keeps its own height.
+            keyboardHeightOverride = storedKeyboardHeight()
+            (keyboardView?.parent as? View)?.requestLayout()
+            pushBridgeHello()
+            pushState()
+        }
+    }
+
+    private fun pushBridgeHello() {
+        installBottomInsetWatcher()
+        val landscape =
+            resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
+        val payload = JSONObject()
+            .put("nativeApiVersion", NATIVE_API_VERSION)
+            .put("capabilities", JSONArray(CAPABILITIES.toList()))
+            .put("theme", systemTheme())
+            .put("uiLanguage", UiLanguage.choice(this))
+            .put("uiLocale", UiLanguage.locale(this))
+            .put("orientation", if (landscape) "landscape" else "portrait")
+            // Content stays above the system navigation/gesture area in
+            // either orientation; the native view carries the extra space.
+            .put("safeBottom", (navBottomInset() / resources.displayMetrics.density).toInt())
+ // The transparent popup band above the keyboard.
+            .put("floatBand", (floatBandPx() / resources.displayMetrics.density).toInt())
+            .put("heightDefault", (minOf(dp(272), if (landscape) realHeightPixels() / 2
+                else resources.displayMetrics.heightPixels * 45 / 100) /
+                resources.displayMetrics.density).toInt())
+            // The height-card drag range must follow the REAL screen
+            // ceiling (same formula as setKeyboardHeight's clamp). The WebView's
+            // own innerHeight rides the keyboard (band + keys), so deriving the
+            // range there pinned the thumb at an end on open (landscape: below
+            // min).
+            .put(
+                "heightFloor",
+                if (landscape) 170 else 210,
+            )
+            .put(
+                "heightCeil",
+                (
+                    (
+                        if (landscape) realHeightPixels() / 2
+                        else (resources.displayMetrics.heightPixels * 45) / 100
+                    ) / resources.displayMetrics.density
+                ).toInt(),
+            )
+            .put("pageGenerationToken", pageToken)
+            .put("mode", coordinator.currentMode.wireName)
+            .put(
+                "engineDataReady",
+                JSONObject().apply {
+                    listOf("pinyin", "double-pinyin", "japanese", "french", "russian").forEach { mode ->
+                        put(mode, engineDataReady(mode))
+                    }
+                },
+            )
+        evaluate("window.Feelime && window.Feelime.onBridgeHello && window.Feelime.onBridgeHello($payload)")
+    }
+
+    private fun pushEditorInfo() {
+        val info = currentInputEditorInfo
+        val payload = JSONObject()
+            .put("inputType", info?.inputType ?: 0)
+            .put("imeOptions", info?.imeOptions ?: 0)
+            .put("packageName", info?.packageName ?: "")
+            .put("sensitive", isSensitiveEditor(info))
+            .put("terminalLike", isTerminalLikeEditor(info))
+        evaluate("window.Feelime && window.Feelime.onEditorInfo($payload)")
+    }
+
+    private fun pushClipboard() {
+        // Password fields get an empty list: password managers' copied content
+        // must not be renderable on screen while a sensitive editor is focused.
+        val sensitive = isSensitiveEditor()
+        val items = if (sensitive) emptyList() else clipboardStore.items()
+        val payload = JSONObject().put(
+            "items",
+            JSONArray().apply {
+                items.forEach { item ->
+                    put(JSONObject().put("id", item.id).put("time", item.time).put("text", item.text))
+                }
+            },
+        )
+        evaluate("window.Feelime && window.Feelime.onClipboard && window.Feelime.onClipboard($payload)")
+    }
+
+    private fun pushFavorites() {
+        val payload = JSONObject().put(
+            "items",
+            JSONArray().apply {
+                favoritesStore.items().forEach { item ->
+                    put(JSONObject().put("id", item.id).put("time", item.time)
+                        .put("text", item.text).put("code", item.code).put("rank", item.rank))
+                }
+            },
+        )
+        evaluate("window.Feelime && window.Feelime.onFavorites && window.Feelime.onFavorites($payload)")
+    }
+
+    private fun pushState(
+        message: String? = null,
+        partial: String? = null,
+        messageCode: String? = null,
+    ) {
+        val payload = JSONObject()
+            .put("state", state.wireName)
+            .put("uiLanguage", UiLanguage.choice(this))
+            .put("uiLocale", UiLanguage.locale(this))
+            .put("messageCode", messageCode ?: "")
+            .put("message", message ?: "")
+            .put("partial", partial ?: currentPartial)
+            .put("level", level.toDouble())
+        evaluate("window.Feelime && window.Feelime.onNativeState($payload)")
+    }
+
+    private fun evaluate(script: String) = onMain {
+        keyboardView?.evaluateJavascript(script, null)
+    }
+
+    /** Redirect editor writes into the focused panel input . */
+    private fun panelCommit(text: String) {
+        val payload = JSONObject().put("text", text).put("session", panelSession)
+        evaluate("window.Feelime && window.Feelime.onPanelCommit && window.Feelime.onPanelCommit($payload)")
+    }
+
+    private fun panelDelete(count: Int = 1) {
+        val payload = JSONObject().put("count", count).put("session", panelSession)
+        evaluate("window.Feelime && window.Feelime.onPanelDelete && window.Feelime.onPanelDelete($payload)")
+    }
+
+    private fun onMain(block: () -> Unit) {
+        if (Looper.myLooper() == Looper.getMainLooper()) block() else main.post(block)
+    }
+
+    private fun renderVoiceText(session: VoiceSession) {
+        if (!session.streamToEditor) {
+            // Unknown non-empty selections are deliberately buffered. The
+            // normal stop commits into the still-live selection; cancellation
+            // performs no editor write at all.
+            composing = false
+            return
+        }
+        val connection = currentInputConnection ?: return
+        if (session.text.isEmpty()) {
+            // Do not touch a pre-existing selection before the recognizer has
+            // produced its first non-empty text. Once this session owns a
+            // span, an empty update is allowed to clear that span while
+            // retaining the ownership needed for cancellation rollback.
+            if (!session.composingApplied) {
+                composing = false
+                return
+            }
+            connection.setComposingText("", 1)
+            composing = false
+            return
+        }
+        connection.setComposingText(session.text, 1)
+        if (session.text.isNotEmpty()) session.composingApplied = true
+        composing = session.text.isNotEmpty()
+    }
+
+    private fun commitVoiceSession(session: VoiceSession) {
+        if (session.text.isBlank()) {
+            // A recognizer may retract a partial without producing a final.
+            // If that partial had replaced a selection, restore it before
+            // ending the otherwise empty session.
+            if (session.streamToEditor && session.composingApplied) {
+                rollbackVoiceSession(session)
+            }
+            return
+        }
+        val connection = currentInputConnection ?: return
+        if (session.streamToEditor && session.composingApplied) {
+            connection.finishComposingText()
+        } else {
+            // Buffered sessions retain the original selection until normal
+            // stop, so this single commit replaces it atomically.
+            connection.commitText(session.text, 1)
+        }
+    }
+
+    private fun rollbackVoiceSession(session: VoiceSession) {
+        if (!session.streamToEditor || !session.composingApplied) return
+        val connection = currentInputConnection ?: return
+        connection.setComposingText("", 1)
+        connection.finishComposingText()
+        // setComposingText replaced the selection. Put the exact selected
+        // text back only after the temporary span has been cleared.
+        session.originalSelection?.takeIf { it.isNotEmpty() }?.let {
+            connection.commitText(it, 1)
+        }
+        session.composingApplied = false
+        composing = false
+    }
+
+    override fun onLoading() = onMain {
+        if (!acceptAsrResults) return@onMain
+        state = VoiceState.LOADING
+        pushState()
+    }
+
+    override fun onListening() = onMain {
+        if (!acceptAsrResults) return@onMain
+        state = VoiceState.LISTENING
+        pushState()
+    }
+
+    override fun onPartial(text: String) = onMain {
+        val session = voiceSession ?: return@onMain
+        if (!acceptAsrResults || session.cancelled ||
+            session.editorGeneration != inputConnectionGeneration
+        ) return@onMain
+        session.text = session.finalizedText + text
+        currentPartial = text
+        renderVoiceText(session)
+        pushState(partial = text)
+    }
+
+    override fun onFinal(text: String) = onMain {
+        val session = voiceSession ?: return@onMain
+        if (!acceptAsrResults || session.cancelled ||
+            session.editorGeneration != inputConnectionGeneration || text.isBlank()
+        ) return@onMain
+        session.finalizedText += text
+        session.text = session.finalizedText
+        renderVoiceText(session)
+        currentPartial = ""
+        pushState(partial = "")
+    }
+
+    override fun onLevel(level: Float) = onMain {
+        this.level = level
+        if (acceptAsrResults && state == VoiceState.LISTENING) pushState()
+    }
+
+    override fun onStopped() = onMain {
+        val session = voiceSession
+        val cancelled = voiceCancelRequested || session?.cancelled == true || !acceptAsrResults
+        if (session != null && session.editorGeneration == inputConnectionGeneration) {
+            if (cancelled) rollbackVoiceSession(session) else commitVoiceSession(session)
+        }
+        composing = false
+        acceptAsrResults = false
+        currentPartial = ""
+        level = 0f
+        voiceSession = null
+        voiceStartPending = false
+        voiceCancelRequested = false
+        state = VoiceState.IDLE
+        if (session == null || session.editorGeneration == inputConnectionGeneration) {
+            coordinator.endVoiceSession()
+        }
+        pushState()
+    }
+
+    override fun onError(message: String) = onMain {
+        val session = voiceSession
+        val cancelled = voiceCancelRequested || session?.cancelled == true || !acceptAsrResults
+        if (session != null && session.editorGeneration == inputConnectionGeneration) {
+            if (cancelled) rollbackVoiceSession(session) else commitVoiceSession(session)
+        }
+        composing = false
+        acceptAsrResults = false
+        currentPartial = ""
+        level = 0f
+        voiceSession = null
+        voiceStartPending = false
+        voiceCancelRequested = false
+        state = VoiceState.ERROR
+        if (session == null || session.editorGeneration == inputConnectionGeneration) {
+            coordinator.endVoiceSession()
+        }
+        val english = when {
+            message.contains("热词词表校验失败") -> "Hotword vocabulary is damaged. Reinstall the app."
+            message.contains("模型与热词词表不匹配") -> "Speech model and hotword vocabulary do not match. Download the speech model again."
+            message.contains("无法准备语音热词词表") -> "Could not prepare the speech hotword vocabulary."
+            message.contains("热词含不支持的分隔符") -> "A hotword contains an unsupported separator. Enter words only."
+            message.contains("热词含语音模型不支持的字符") -> "A hotword contains characters unsupported by the speech model."
+            message.contains("行热词为空或过长") -> "A hotword is empty or too long."
+            message.startsWith("热词最多") -> "Enter at most 50 hotwords."
+            else -> message
+        }
+        pushState(message = t(this, message, english), messageCode = "ASR_ERROR")
+    }
+
+    inner class ImeBridge {
+        @JavascriptInterface
+        fun keyboardReady(keyboardVersion: String, minNativeApi: Int, requiredCapabilities: String, token: String) {
+            onMain {
+                if (token != pageToken) {
+                    rejectedCalls += 1
+                    return@onMain
+                }
+                if (keyboardVersion.length > 64 || requiredCapabilities.length > MAX_JSON_CHARS) {
+                    rejectedCalls += 1
+                    return@onMain
+                }
+                val required = runCatching {
+                    JSONArray(requiredCapabilities).let { array ->
+                        (0 until array.length()).map(array::getString)
+                    }
+                }.getOrDefault(emptyList())
+                val compatible = minNativeApi in 1..NATIVE_API_VERSION &&
+                    required.all(CAPABILITIES::contains)
+                if (compatible) {
+                    val firstReady = !pageReady
+                    pageReady = true
+                    panelComposeSupported = "panel-compose-v1" in required
+                    // Review P2-1: a fresh page never has a band popup open,
+                    // but a hot-update reload can arrive while the OLD page
+                    // left overlayOpen=true - the new page would then never
+                    // emit setOverlayOpen(false) and the band area would eat
+                    // host touches until some popup toggled. Only reset for
+                    // a fresh page: same-page inset updates must preserve
+                    // the touch region of an already-open card.
+                    if (firstReady && overlayOpen) {
+                        overlayOpen = false
+                        (keyboardView?.parent as? View)?.requestLayout()
+                    }
+                    // §8.3: cleanup runs only after a successful ready handshake.
+                    background.execute {
+                        runCatching { KeyboardUpdateCenter.store(this@FeelimeService).onHandshakeComplete() }
+                    }
+                    pushEditorInfo()
+                } else {
+                    rejectedCalls += 1
+                }
+            }
+        }
+
+        @JavascriptInterface
+        fun key(char: String, token: String) = guarded(token, limited = false) {
+            if (char.length > MAX_JSON_CHARS || char.codePointCount(0, char.length) != 1) {
+                rejectedCalls += 1
+                return@guarded
+            }
+            coordinator.key(char.codePointAt(0))
+        }
+
+        @JavascriptInterface
+        fun setComposition(keys: String, token: String) = guarded(token, limited = false) {
+            // Variant parses are short key sequences ('xc'an').  Unicode
+            // letters and combining marks are accepted for accent variants;
+            // punctuation and whitespace remain rejected by the contract
+            // validator.
+            if (!BridgeContract.isValidComposition(keys)) {
+                rejectedCalls += 1
+                return@guarded
+            }
+            coordinator.setComposition(keys)
+        }
+
+        @JavascriptInterface
+        fun space(token: String) = guarded(token, limited = false) { coordinator.space() }
+
+        @JavascriptInterface
+        fun backspace(token: String) = guarded(token, limited = true) { coordinator.backspace() }
+
+        @JavascriptInterface
+        fun enter(token: String) = guarded(token, limited = false) { enter() }
+
+        @JavascriptInterface
+        fun moveCursor(delta: Int, token: String) = guarded(token, limited = false) {
+            if (delta == 0 || delta < -MAX_CURSOR_DELTA || delta > MAX_CURSOR_DELTA) {
+                rejectedCalls += 1
+                return@guarded
+            }
+            moveCursorWithinEditor(delta)
+        }
+
+        /**
+         * Control-layer combos (Ctrl+C, Alt+., Ctrl+Shift+V, ...)
+         * reach the HOST editor as raw key events - terminals and editors own
+         * those bindings, and the IME has no business interpreting them. The
+         * keycode and meta state are whitelisted: anything outside the
+         * control layer's palette is dropped like other bridge abuse.
+         */
+        @JavascriptInterface
+        fun keyEvent(keyCode: Int, metaState: Int, token: String) = guarded(token, limited = true) {
+            val connection = validKeyEvent(keyCode, metaState) ?: return@guarded
+ // Name the physical LEFT key beside the generic bit
+            // (a real left-ctrl press reports both) - RDP hosts resolve a
+            // generic-only bit to no side key and drop the combo.
+            val wire = withLeftMetaBits(metaState)
+            val stamp = android.os.SystemClock.uptimeMillis()
+            connection.sendKeyEvent(KeyEvent(stamp, stamp, KeyEvent.ACTION_DOWN, keyCode, 0, wire))
+            connection.sendKeyEvent(KeyEvent(stamp, stamp, KeyEvent.ACTION_UP, keyCode, 0, wire))
+            // Device-suite observability (same pattern as the engine tag).
+            android.util.Log.i("FeelimeBridge", "keyEvent code=$keyCode meta=$metaState wire=$wire")
+        }
+
+        /**
+         * The PHYSICAL combo form for RDP hosts that treat the
+         * Windows key differently from ctrl/alt/shift: the armed modifier's
+         * LEFT key is pressed and released around the combo key (meta down,
+         * key down/up, meta up), which is what a real hand does. Verified
+         * against the user's test host: single-event META+D never reached
+         * the remote Win handler; the discrete sequence does.
+         */
+        @JavascriptInterface
+        fun keyEventPhysical(keyCode: Int, metaState: Int, token: String) =
+            guarded(token, limited = true) {
+                val connection = validKeyEvent(keyCode, metaState) ?: return@guarded
+                val wire = withLeftMetaBits(metaState)
+                val stamp = android.os.SystemClock.uptimeMillis()
+ // (RDP round 4): four events sharing ONE timestamp
+                // arrive coalesced/reordered at the client - the remote saw
+                // Win down+up pair off (toggling Start) with the letter
+                // trailing as a stray key. Real hardware advances eventTime;
+                // step it per event so the DOWN/UP order survives.
+                var eventTime = stamp
+                fun emit(action: Int, code: Int, meta: Int) {
+                    eventTime += 12
+                    connection.sendKeyEvent(KeyEvent(stamp, eventTime, action, code, 0, meta))
+                }
+                fun mod(modBit: Int, leftCode: Int, ownBit: Int, down: Boolean) {
+                    if (metaState and modBit != 0) {
+ // (RDP round 3): the client swallows events
+                        // whose meta state carries a filtered bit (META, and
+                        // generically anything it special-cases) - a physical
+                        // keyboard carries NO meta state on its scancodes, the
+                        // host derives modifier state from the DOWN/UP order
+                        // itself. Emit the modifier bare.
+                        emit(if (down) KeyEvent.ACTION_DOWN else KeyEvent.ACTION_UP, leftCode, 0)
+                    }
+                }
+                mod(KeyEvent.META_SHIFT_ON, KeyEvent.KEYCODE_SHIFT_LEFT, KeyEvent.META_SHIFT_ON, down = true)
+                mod(KeyEvent.META_CTRL_ON, KeyEvent.KEYCODE_CTRL_LEFT, KeyEvent.META_CTRL_ON, down = true)
+                mod(KeyEvent.META_ALT_ON, KeyEvent.KEYCODE_ALT_LEFT, KeyEvent.META_ALT_ON, down = true)
+                mod(KeyEvent.META_META_ON, KeyEvent.KEYCODE_META_LEFT, KeyEvent.META_META_ON, down = true)
+ // (RDP round 2): the Windows App client DROPS a
+                // key event whose meta state carries META bits (dedicated Win
+                // handling) - Win+D reached the host as a bare Win tap and
+                // toggled the Start menu instead of showing the desktop. The
+                // discrete MetaLeft DOWN/UP above already forwards, so the
+                // combo key itself rides with the non-META bits only and the
+                // host combines it with the held Win key.
+                val keyWire = wire and (KeyEvent.META_META_ON or KeyEvent.META_META_LEFT_ON).inv()
+                emit(KeyEvent.ACTION_DOWN, keyCode, keyWire)
+                emit(KeyEvent.ACTION_UP, keyCode, keyWire)
+                mod(KeyEvent.META_META_ON, KeyEvent.KEYCODE_META_LEFT, KeyEvent.META_META_ON, down = false)
+                mod(KeyEvent.META_ALT_ON, KeyEvent.KEYCODE_ALT_LEFT, KeyEvent.META_ALT_ON, down = false)
+                mod(KeyEvent.META_CTRL_ON, KeyEvent.KEYCODE_CTRL_LEFT, KeyEvent.META_CTRL_ON, down = false)
+                mod(KeyEvent.META_SHIFT_ON, KeyEvent.KEYCODE_SHIFT_LEFT, KeyEvent.META_SHIFT_ON, down = false)
+                android.util.Log.i(
+                    "FeelimeBridge",
+                    "keyEvent code=$keyCode meta=$metaState wire=$wire form=physical",
+                )
+            }
+
+        /** Shared keyEvent validation: the keycode whitelist (A..Z + the
+         * control palette) and the meta-bit mask. Null = rejected. */
+        private fun validKeyEvent(keyCode: Int, metaState: Int): android.view.inputmethod.InputConnection? {
+ // RDP hosts (Windows App) resolve a generic meta bit
+            // to no physical side key and drop the combo - the wire state
+            // must name the LEFT variant beside the generic bit (a physical
+            // left-ctrl press reports both), so both are accepted here.
+            val allowedMeta = KeyEvent.META_SHIFT_ON or KeyEvent.META_ALT_ON or
+                KeyEvent.META_CTRL_ON or KeyEvent.META_META_ON or
+                KeyEvent.META_SHIFT_LEFT_ON or KeyEvent.META_ALT_LEFT_ON or
+                KeyEvent.META_CTRL_LEFT_ON or KeyEvent.META_META_LEFT_ON
+            val codeAllowed = keyCode in KeyEvent.KEYCODE_A..KeyEvent.KEYCODE_Z ||
+                keyCode in KEY_EVENT_CODES
+            if (!codeAllowed || metaState and allowedMeta.inv() != 0) {
+                rejectedCalls += 1
+                return null
+            }
+            return currentInputConnection
+        }
+
+        /** Generic meta bits name their LEFT variant too (the
+         * wire form a physical left-key press reports). */
+        private fun withLeftMetaBits(metaState: Int): Int {
+            var wire = metaState
+            if (metaState and KeyEvent.META_SHIFT_ON != 0) wire = wire or KeyEvent.META_SHIFT_LEFT_ON
+            if (metaState and KeyEvent.META_ALT_ON != 0) wire = wire or KeyEvent.META_ALT_LEFT_ON
+            if (metaState and KeyEvent.META_CTRL_ON != 0) wire = wire or KeyEvent.META_CTRL_LEFT_ON
+            if (metaState and KeyEvent.META_META_ON != 0) wire = wire or KeyEvent.META_META_LEFT_ON
+            return wire
+        }
+
+        private fun leftMetaBit(keyCode: Int): Int = when (keyCode) {
+            KeyEvent.KEYCODE_SHIFT_LEFT -> KeyEvent.META_SHIFT_ON or KeyEvent.META_SHIFT_LEFT_ON
+            KeyEvent.KEYCODE_CTRL_LEFT -> KeyEvent.META_CTRL_ON or KeyEvent.META_CTRL_LEFT_ON
+            KeyEvent.KEYCODE_ALT_LEFT -> KeyEvent.META_ALT_ON or KeyEvent.META_ALT_LEFT_ON
+            KeyEvent.KEYCODE_META_LEFT -> KeyEvent.META_META_ON or KeyEvent.META_META_LEFT_ON
+            else -> 0
+        }
+
+        @JavascriptInterface
+        fun chooseCandidate(revision: Long, candidateId: String, token: String) = guarded(token, limited = false) {
+            if (candidateId.length > MAX_CANDIDATE_ID_CHARS ||
+                !candidateId.all { it in '0'..'9' || it in 'a'..'f' || it == ':' }
+            ) {
+                rejectedCalls += 1
+                return@guarded
+            }
+            coordinator.choose(revision, candidateId)
+        }
+
+        @JavascriptInterface
+        fun pageNext(revision: Long, token: String) = guarded(token, limited = false) { coordinator.pageNext(revision) }
+
+        @JavascriptInterface
+        fun pagePrevious(revision: Long, token: String) = guarded(token, limited = false) { coordinator.pagePrevious(revision) }
+
+        @JavascriptInterface
+        fun selectMode(mode: String, token: String) = guarded(token, limited = false) {
+            if (mode.length > 32) {
+                rejectedCalls += 1
+                return@guarded
+            }
+            val next = InputModeBridge.fromWire(mode)
+            val ready = next?.let { engineDataReady(mode) } == true
+            android.util.Log.i("FeelimeEngine", "bridge selectMode wire=$mode parsed=$next ready=$ready")
+            if (next == null || !ready) {
+                rejectedCalls += 1
+                if (next != null && !ready) {
+                    pushState(
+                        message = t(
+                            this@FeelimeService,
+                            "该输入法正在准备语言数据，请稍后再试",
+                            "Language data is still being prepared. Try again shortly",
+                        ),
+                        messageCode = "ENGINE_DATA_PREPARING",
+                    )
+                }
+                return@guarded
+            }
+            when (coordinator.selectMode(next)) {
+                TextInputCoordinator.ModeSelectionResult.BLOCKED_SENSITIVE_EDITOR -> {
+                    pushState(
+                        message = t(
+                            this@FeelimeService,
+                            "密码输入框只能使用英文键盘",
+                            "Password fields only support English Direct",
+                        ),
+                        messageCode = "SENSITIVE_EDITOR_DIRECT_ONLY",
+                    )
+                }
+                else -> Unit
+            }
+            pushBridgeHello()
+        }
+
+        @JavascriptInterface
+        fun startVoice(token: String) = guarded(token, limited = false) { startVoice() }
+
+        @JavascriptInterface
+        fun stopVoice(token: String) = guarded(token, limited = false) { stopVoice() }
+
+        @JavascriptInterface
+        fun cancelVoice(token: String) = guarded(token, limited = false) { cancelVoice() }
+
+        @JavascriptInterface
+        fun switchInputMethod(token: String) = guarded(token, limited = false) { switchIme() }
+
+        /**
+         * The height the user dragged (CSS px from the WebView,
+         * where 1px == 1dp). Clamped: never below a usable keyboard, never
+         * above 45% of the portrait height / half of the landscape height
+         * (F key), and persisted per orientation.
+         */
+        @JavascriptInterface
+        fun setKeyboardHeight(heightCssPx: Int, token: String) = guarded(token, limited = false) {
+            val landscape =
+                resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
+            if (heightCssPx == 0) {
+                // Reset this orientation; do not let a queued drag save put
+                // the old value back after the user restores the default.
+                if (pendingHeightLandscape == landscape) {
+                    main.removeCallbacks(flushHeightPref)
+                    pendingHeightWrite = 0
+                }
+                getSharedPreferences("feelime_keyboard", MODE_PRIVATE).edit()
+                    .remove(if (landscape) "keyboard_height_landscape" else "keyboard_height_portrait")
+                    .apply()
+                keyboardHeightOverride = 0
+                (keyboardView?.parent as? View)?.requestLayout()
+                pushBridgeHello()
+                return@guarded
+            }
+            val metrics = resources.displayMetrics
+            val physical = (heightCssPx * metrics.density).toInt()
+            val available = metrics.heightPixels
+ // C: the old landscape budget (screen/3) sat BELOW the
+            // 170dp floor, so coerceIn(min, min) pinned every drag to the
+            // same value - the gesture read as dead. Half the screen lifts
+            // the ceiling back above the floor.
+            val min = dp(if (landscape) 170 else 210)
+ // the landscape ceiling is a fraction of the REAL
+            // screen (app-space heightPixels drops the system bars and landed
+            // BELOW the keyboard's content minimum - bottom row clipped).
+            val max = if (landscape) realHeightPixels() / 2 else (available * 45) / 100
+            val clamped = physical.coerceIn(min, maxOf(min, max))
+            if (clamped != keyboardHeightOverride) {
+                keyboardHeightOverride = clamped
+                (keyboardView?.parent as? View)?.requestLayout()
+            }
+ // A: the drag flushes one call per frame - commit the
+            // pref on a debounce so the flash never rides a disk write.
+            pendingHeightWrite = clamped
+            pendingHeightLandscape = landscape
+            main.removeCallbacks(flushHeightPref)
+            main.postDelayed(flushHeightPref, HEIGHT_PREF_DEBOUNCE_MS)
+            android.util.Log.i("FeelimeBridge", "setKeyboardHeight css=$heightCssPx px=$clamped orientation=${if (landscape) "landscape" else "portrait"}")
+        }
+
+        /** A popup moved into the float band above the keyboard -
+         * the band must become touchable until it closes (onComputeInsets
+         * reads overlayOpen). The requestLayout ride makes the IME recompute
+         * its insets on the next traversal. */
+        @JavascriptInterface
+        fun setOverlayOpen(open: Boolean, token: String) = guarded(token, limited = false) {
+            onMain {
+                if (overlayOpen == open) return@onMain
+                overlayOpen = open
+                (keyboardView?.parent as? View)?.requestLayout()
+                android.util.Log.i("FeelimeBridge", "setOverlayOpen open=$open")
+            }
+        }
+
+        @JavascriptInterface
+        fun hideKeyboard(token: String) = guarded(token, limited = false) { onMain { requestHideSelf(0) } }
+
+        @JavascriptInterface
+        fun openSetup(token: String) = guarded(token, limited = false) { openSetup() }
+
+        /** design §15: the custom-keyboard table's native mirror (the
+         * settings page edits the same store). Synchronous prefs read on the
+         * bridge thread; empty string = unset, "disabled" = the settings
+         * switch turned the custom layer off (the keyboard must
+         * be able to tell that apart from unset, or the switch is a no-op). */
+        @JavascriptInterface
+        fun customKeys(token: String): String {
+            if (token != pageToken) return ""
+            val store = com.feelime.ime.CustomKeysStore(applicationContext)
+            return if (store.enabled()) store.json() else "disabled"
+        }
+
+        @JavascriptInterface
+        fun setCustomKeys(json: String, token: String) = guarded(token, limited = false) {
+            if (json.isNotEmpty() && json.length <= MAX_JSON_CHARS) {
+                com.feelime.ime.CustomKeysStore(applicationContext).save(json, enabled = true)
+            }
+        }
+
+        /** The panel add/edit inputs report focus here so editor
+         * writes can be redirected into them (see panelInputActive). */
+        @JavascriptInterface
+        fun panelInput(active: Boolean, token: String) = guarded(token, limited = false) {
+            panelInputRequested = active
+            pendingPanelSelection = null
+            val generation = ++panelRouteGeneration
+            coordinator.acceptCurrentComposition {
+                if (generation == panelRouteGeneration) {
+                    panelInputActive = active
+                    if (active) coordinator.onInputTargetSelection(-1, -1)
+                    else coordinator.onInputTargetSelection(hostSelectionStart, hostSelectionEnd)
+                }
+            }
+        }
+
+        @JavascriptInterface
+        fun panelSelection(start: Int, end: Int, session: Int, token: String) = guarded(token, limited = false) {
+            if (!panelComposeSupported || !panelInputRequested || start < 0 || end < 0 || session < 0) {
+                rejectedCalls += 1
+                return@guarded
+            }
+            pendingPanelSelection = Triple(start, end, session)
+            val generation = panelRouteGeneration
+            // Capture every field transition in the same input queue. A
+            // mutable latest selection would send keys typed in B into C
+            // when A's event is still waiting on the main looper.
+            coordinator.acceptCurrentComposition {
+                if (generation == panelRouteGeneration && panelInputActive) {
+                    panelSession = session
+                    coordinator.onInputTargetSelection(start, end)
+                }
+            }
+        }
+
+        @JavascriptInterface
+        fun panelFlush(session: Int, token: String) = guarded(token, limited = false) {
+            if (!panelComposeSupported || !panelInputRequested ||
+                session != (pendingPanelSelection?.third ?: panelSession)) {
+                rejectedCalls += 1
+                return@guarded
+            }
+            val generation = panelRouteGeneration
+            coordinator.acceptCurrentComposition {
+                if (generation == panelRouteGeneration && panelInputActive && session == panelSession) {
+                    val payload = JSONObject().put("session", session)
+                    evaluate("window.Feelime && window.Feelime.onPanelFlushed && window.Feelime.onPanelFlushed($payload)")
+                }
+            }
+        }
+
+        /** Phrase CRUD happens IN the favorites panel (the bridge
+         * calls below); the old native-manager deep link is gone.
+         * [rank] is the 1-based candidate slot for exact code
+         * matches (default 1 = pool head, as before rank slots existed). */
+        @JavascriptInterface
+        fun favoritesAdd(text: String, code: String, rank: Int, token: String) = guarded(token, limited = false) {
+            if (text.isEmpty() || text.length > MAX_JSON_CHARS || code.length > 12 ||
+                rank < 1 || rank > 99
+            ) {
+                rejectedCalls += 1
+                return@guarded
+            }
+            favoritesStore.add(text, code.trim(), rank)
+        }
+
+        @JavascriptInterface
+        fun favoritesUpdate(id: String, text: String, code: String, rank: Int, token: String) = guarded(token, limited = false) {
+            if (id.isEmpty() || id.length > 64 || text.isEmpty() ||
+                text.length > MAX_JSON_CHARS || code.length > 12 ||
+                rank < 1 || rank > 99
+            ) {
+                rejectedCalls += 1
+                return@guarded
+            }
+            favoritesStore.update(id, text, code.trim(), rank)
+        }
+
+        @JavascriptInterface
+        fun favoritesRemove(id: String, token: String) = guarded(token, limited = false) {
+            if (id.isEmpty() || id.length > 64) {
+                rejectedCalls += 1
+                return@guarded
+            }
+            favoritesStore.remove(id)
+        }
+
+        @JavascriptInterface
+        fun favoritesMove(id: String, to: Int, token: String) = guarded(token, limited = false) {
+            if (id.isEmpty() || id.length > 64 || to < 0 || to > 200) {
+                rejectedCalls += 1
+                return@guarded
+            }
+            favoritesStore.move(id, to)
+        }
+
+        @JavascriptInterface
+        fun reloadKeyboard(token: String) = guarded(token, limited = false) {
+            onMain { reloadKeyboardFiles() }
+        }
+
+        @JavascriptInterface
+        fun requestState() {
+            onMain {
+                pushBridgeHello()
+                pushState()
+                pushEditorInfo()
+            }
+        }
+
+        /** Panel paste (clipboard/favorites): multi-code-point external commit. */
+        @JavascriptInterface
+        fun commitText(text: String, token: String) = guarded(token, limited = false) {
+            val valid = text.isNotEmpty() &&
+                text.codePointCount(0, text.length) <= MAX_COMMIT_CODE_POINTS &&
+                runCatching {
+                    var index = 0
+                    while (index < text.length) {
+                        val codePoint = text.codePointAt(index)
+                        // Reject NUL and unpaired surrogates (not valid text).
+                        if (codePoint == 0) return@runCatching false
+                        if (Character.isHighSurrogate(text[index]) &&
+                            (index + 1 >= text.length || !Character.isLowSurrogate(text[index + 1]))
+                        ) {
+                            return@runCatching false
+                        }
+                        if (Character.isLowSurrogate(text[index])) return@runCatching false
+                        index += Character.charCount(codePoint)
+                    }
+                    true
+                }.getOrDefault(false)
+            if (!valid) {
+                rejectedCalls += 1
+                return@guarded
+            }
+            coordinator.pasteExternal(text)
+        }
+
+        /** Candidate-bar ×: abort composition, restore the toolbar.
+         * During a voice session the editor span belongs to the ASR partial,
+         * so only the engine pinyin buffer is reset . */
+        @JavascriptInterface
+        fun clearComposing(token: String) = guarded(token, limited = false) {
+            onMain {
+                coordinator.clearComposing(scrubEditor = state == VoiceState.IDLE)
+            }
+        }
+
+        /** Delete the highlighted candidate from the engine's
+         * user lexicon (librime Shift+Delete channel). Old keyboards never
+         * call this; older APKs simply lack the method and the keyboard
+         * feature-detects it. */
+        @JavascriptInterface
+        fun deleteHighlightedCandidate(token: String) = guarded(token, limited = false) {
+            onMain { coordinator.deleteHighlighted() }
+        }
+
+        /** Delete ANY candidate by pool id (seek + move highlight
+         * + Shift+Delete). Same id alphabet as chooseCandidate. */
+        @JavascriptInterface
+        fun deleteCandidate(revision: Long, candidateId: String, token: String) =
+            guarded(token, limited = false) {
+                if (candidateId.length > MAX_CANDIDATE_ID_CHARS ||
+                    !candidateId.all { it in '0'..'9' || it in 'a'..'f' || it == ':' }
+                ) {
+                    rejectedCalls += 1
+                    return@guarded
+                }
+                onMain { coordinator.deleteCandidate(candidateId) }
+            }
+
+        @JavascriptInterface
+        fun getClipboard(token: String) = guarded(token, limited = false) {
+            onMain { pushClipboard() }
+        }
+
+        @JavascriptInterface
+        fun removeClipboard(id: String, token: String) = guarded(token, limited = true) {
+            if (!isPanelId(id)) {
+                rejectedCalls += 1
+                return@guarded
+            }
+            // Push only after the mutation lands, or the panel re-renders the
+            // pre-removal list .
+            background.execute {
+                clipboardStore.remove(id)
+                main.post { pushClipboard() }
+            }
+        }
+
+        @JavascriptInterface
+        fun clearClipboard(token: String) = guarded(token, limited = true) {
+            background.execute {
+                clipboardStore.clear()
+                main.post { pushClipboard() }
+            }
+        }
+
+        @JavascriptInterface
+        fun getFavorites(token: String) = guarded(token, limited = false) {
+            onMain { pushFavorites() }
+        }
+
+        @JavascriptInterface
+        fun removeFavorite(id: String, token: String) = guarded(token, limited = true) {
+            if (!isPanelId(id)) {
+                rejectedCalls += 1
+                return@guarded
+            }
+            background.execute {
+                favoritesStore.remove(id)
+                main.post { pushFavorites() }
+            }
+        }
+
+        /** Panel ids are hex timestamps (PanelStore idCounter format). */
+        private fun isPanelId(id: String): Boolean =
+            id.isNotEmpty() && id.length <= 16 && id.all { it in '0'..'9' || it in 'a'..'f' }
+
+        /** Token gate plus the 25/s sliding-window throttle for repeatable keys. */
+        private fun guarded(token: String, limited: Boolean, action: () -> Unit) {
+            onMain {
+                if (token != pageToken || !pageReady) {
+                    rejectedCalls += 1
+                    return@onMain
+                }
+                if (limited && !throttleAllows()) {
+                    rejectedCalls += 1
+                    return@onMain
+                }
+                action()
+            }
+        }
+
+        private fun throttleAllows(): Boolean {
+            val now = android.os.SystemClock.elapsedRealtime()
+            while (callTimes.isNotEmpty() && now - callTimes.first() > 1000) callTimes.removeFirst()
+            if (callTimes.size >= CALLS_PER_SECOND) return false
+            callTimes.addLast(now)
+            return true
+        }
+    }
+
+    private fun isSensitiveEditor(info: EditorInfo? = currentInputEditorInfo): Boolean =
+        com.feelime.ime.engine.InputSensitivity.isSensitive(info?.inputType)
+
+    private fun isTerminalLikeEditor(info: EditorInfo?): Boolean =
+        info != null && info.inputType and InputType.TYPE_MASK_CLASS == InputType.TYPE_NULL
+
+    /**
+     * Editors whose VISIBLE text surface is not the
+     * InputConnection buffer at all. xterm.js-style web terminal shells
+     * (Tauri-based WebView hosts) mirror committed text into a hidden helper
+     * textarea: snapshots read "abc" and setSelection callbacks report the
+     * caret moving, while the terminal cursor never follows - only real
+     * key events reach it (device-logged 2026-09-07; Found the
+     * same lie for deletion). Whole-app terminal shells are listed here so
+     * cursor scrub rides the arrow-key channel; mixed hosts (browsers)
+     * must NOT be listed - their ordinary text fields need the snapshot
+     * path. Native terminals keep the TYPE_NULL detection above.
+     */
+    private fun isKeyEventCursorEditor(info: EditorInfo?): Boolean {
+        if (isTerminalLikeEditor(info)) return true
+        return info?.packageName in KEY_EVENT_CURSOR_PACKAGES
+    }
+
+    private fun blocked() = WebResourceResponse(
+        "text/plain",
+        "UTF-8",
+        403,
+        "Blocked",
+        emptyMap(),
+        java.io.ByteArrayInputStream(ByteArray(0)),
+    )
+
+    private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
+
+    /** Real display height (physical px, rotation-aware). The APP-space
+     * heightPixels excludes the system bars, so a cap derived from it sits
+     * below the keyboard's own content minimum once Grew the
+     * landscape toolbar - the bottom key row clipped on every landscape
+     * device (AVD 1080x2400: cap 508px vs content 522px).
+     * caps must be fractions of the REAL screen. */
+    private fun realHeightPixels(): Int {
+        return if (android.os.Build.VERSION.SDK_INT >= 30) {
+            val wm = getSystemService(android.view.WindowManager::class.java)
+            wm?.maximumWindowMetrics?.bounds?.height() ?: resources.displayMetrics.heightPixels
+        } else {
+            val real = android.util.DisplayMetrics()
+            @Suppress("DEPRECATION")
+            display?.getRealMetrics(real)
+            if (real.heightPixels > 0) real.heightPixels else resources.displayMetrics.heightPixels
+        }
+    }
+
+    /** Persisted keyboard height for the CURRENT orientation (physical px,
+     * 0 when unset). . */
+    private fun storedKeyboardHeight(): Int {
+        val prefs = getSharedPreferences("feelime_keyboard", MODE_PRIVATE)
+        val landscape =
+            resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
+        return prefs.getInt(if (landscape) "keyboard_height_landscape" else "keyboard_height_portrait", 0)
+    }
+
+    /** Current system area overlapped by the keyboard. WindowMetrics avoids
+     * decor insets already consumed by InputMethodService; layout callbacks
+     * recheck overlap after the window has moved or changed orientation. */
+    @Suppress("DEPRECATION")
+    private fun navBottomInset(): Int {
+        if (android.os.Build.VERSION.SDK_INT >= 30) {
+            val metrics = getSystemService(android.view.WindowManager::class.java).currentWindowMetrics
+            // Gesture-start regions can be larger than the visible system
+            // bar. Reserve drawing/tap occlusion, not that entire region.
+            val types = android.view.WindowInsets.Type.navigationBars() or
+                android.view.WindowInsets.Type.tappableElement()
+            val reserved = metrics.windowInsets.getInsets(types).bottom
+            if (reserved == 0) return 0
+            if (reserved > 0) {
+                // Decor insets may already be consumed by InputMethodService.
+                // Reserve only the part our actual WebView overlaps; windows
+                // already placed above the system area need no second padding.
+                val view = keyboardView
+                val bottom = if (view != null && view.isLaidOut && view.height > 0) {
+                    val location = IntArray(2)
+                    view.getLocationOnScreen(location)
+                    location[1] + view.height
+                } else metrics.bounds.bottom
+                return (bottom - (metrics.bounds.bottom - reserved)).coerceIn(0, reserved)
+            }
+        }
+        val insets = window?.window?.decorView?.rootWindowInsets
+        val reported = if (android.os.Build.VERSION.SDK_INT >= 29 && insets != null) {
+            maxOf(insets.systemWindowInsetBottom, insets.tappableElementInsets.bottom)
+        } else insets?.systemWindowInsetBottom ?: 0
+        return effectiveBottomInset(reported)
+    }
+
+    /** ColorOS landscape reports navigationBars.bottom == 0
+     * while the gesture strip still overlays the screen bottom (observed
+     * on device: the last key row sat half under it). When the system refuses to
+     * report the inset, fall back to the platform navigation_bar_height
+     * dimen - capped at 32dp because the strip this guards is a thin band.
+     * This legacy resource estimate stays landscape-only. Portrait uses
+     * measured system areas and never adds a fixed guessed inset. */
+    private fun effectiveBottomInset(reported: Int): Int {
+        if (reported > 0) return reported
+        if (resources.configuration.orientation !=
+            android.content.res.Configuration.ORIENTATION_LANDSCAPE
+        ) return 0
+        if (navInsetFallback < 0) {
+            val id = resources.getIdentifier("navigation_bar_height", "dimen", "android")
+            val raw = if (id > 0) resources.getDimensionPixelSize(id) else 0
+            navInsetFallback = minOf(raw, (32 * resources.displayMetrics.density).toInt())
+        }
+        return navInsetFallback
+    }
+
+    /** Watch the decor view's insets so a navigation-bar inset
+     * that lands after the first hello still reaches the keyboard (re-push
+     * hello on change). */
+    private fun installBottomInsetWatcher() {
+        if (insetWatcherInstalled) return
+        val decor = window?.window?.decorView ?: return
+        insetWatcherInstalled = true
+        decor.setOnApplyWindowInsetsListener { view, insets ->
+            view.post { onBottomInsetChanged() }
+            view.onApplyWindowInsets(insets)
+        }
+        decor.requestApplyInsets()
+    }
+
+    private fun onBottomInsetChanged() {
+        val effective = navBottomInset()
+        if (effective == lastSafeBottom) return
+        lastSafeBottom = effective
+        (keyboardView?.parent as? View)?.requestLayout()
+        pushBridgeHello()
+    }
+
+    private inner class FixedHeightInputView(private val desiredHeight: Int) : FrameLayout(this) {
+        override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+ // A user-dragged height wins when set; landscape
+            // must never cover a third of the screen - the host editor above
+            // stays usable. Portrait keeps the 272dp design budget unless
+            // the user adjusted it.
+            //
+            // The height must come from STABLE quantities
+            // only. Deriving it from the incoming measure spec bakes in the
+            // transient height ColorOS reports while the IME window is still
+            // animating in (~120px spec -> 40px view) and nothing re-measures
+            // once the window settles at its real 360px - the keyboard stayed
+            // a 40px sliver, reproducible on every landscape show. The window
+            // wraps this view, so it settles at exactly the height measured
+            // here; the display metrics do not fluctuate mid-animation.
+            val landscape =
+                resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
+            val base = if (keyboardHeightOverride > 0) keyboardHeightOverride else desiredHeight
+            val screenH = resources.displayMetrics.heightPixels
+ // Review Mirror setKeyboardHeight's clamps here so a
+            // pref carried to a smaller screen (backup restore, freeform)
+            // cannot push the keyboard past its budget either.
+ // the landscape ceiling mirrors the real-screen
+            // fraction (see setKeyboardHeight) - app-space heightPixels sits
+            // below the content minimum and clipped the bottom row. The view
+            // is bottom-anchored to the SCREEN, so the gesture-nav strip
+            // (lastSafeBottom) overlaps it: the keyboard's own budget must
+            // grow by the inset or the JS row floor (32css) overflows and
+            // the bottom row lands under the strip.
+            val height = when {
+ // Review P2-6: navBottomInset resolves the -1
+                // "not observed yet" sentinel through the fallback chain;
+                // the raw field could subtract a pixel from the first frame.
+                landscape && screenH > 0 ->
+                    minOf(base, realHeightPixels() / 2) + navBottomInset()
+                screenH > 0 -> minOf(base, (screenH * 45) / 100) + navBottomInset()
+                else -> base + navBottomInset()
+            }
+ // The view carries the transparent popup band on
+            // top; onComputeInsets keeps the app sized to the keyboard
+            // alone (contentTopInsets = band).
+            val total = height + floatBandPx()
+            super.onMeasure(
+                widthMeasureSpec,
+                View.MeasureSpec.makeMeasureSpec(total, View.MeasureSpec.EXACTLY),
+            )
+        }
+    }
+
+    private enum class VoiceState(val wireName: String) {
+        IDLE("idle"),
+        LOADING("loading"),
+        LISTENING("listening"),
+        STOPPING("stopping"),
+        ERROR("error"),
+    }
+
+    private companion object {
+        const val LOCAL_HOST = "feelime.local"
+        const val KEYBOARD_URL = "https://$LOCAL_HOST/keyboard/index.html"
+        const val BRIDGE_NAME = "FeelimeNative"
+ // The control layer's palette - Esc/Tab/Home/End, the
+        // four arrows, PgUp/PgDn, forward delete (Del) and '.' (Alt+.) / F4.
+ // F1..F12 (Fn sticky layer + custom keys) and the physical
+        // Backspace/Enter/Space join the palette (custom-key DSL).
+        val KEY_EVENT_CODES = intArrayOf(
+            KeyEvent.KEYCODE_ESCAPE,
+            KeyEvent.KEYCODE_TAB,
+            KeyEvent.KEYCODE_MOVE_HOME,
+            KeyEvent.KEYCODE_MOVE_END,
+            KeyEvent.KEYCODE_PAGE_UP,
+            KeyEvent.KEYCODE_PAGE_DOWN,
+            KeyEvent.KEYCODE_DPAD_UP,
+            KeyEvent.KEYCODE_DPAD_DOWN,
+            KeyEvent.KEYCODE_DPAD_LEFT,
+            KeyEvent.KEYCODE_DPAD_RIGHT,
+            KeyEvent.KEYCODE_FORWARD_DEL,
+            KeyEvent.KEYCODE_PERIOD,
+            KeyEvent.KEYCODE_F4,
+            KeyEvent.KEYCODE_ENTER,
+            KeyEvent.KEYCODE_SPACE,
+            KeyEvent.KEYCODE_DEL,
+            KeyEvent.KEYCODE_F1,
+            KeyEvent.KEYCODE_F2,
+            KeyEvent.KEYCODE_F3,
+            KeyEvent.KEYCODE_F5,
+            KeyEvent.KEYCODE_F6,
+            KeyEvent.KEYCODE_F7,
+            KeyEvent.KEYCODE_F8,
+            KeyEvent.KEYCODE_F9,
+            KeyEvent.KEYCODE_F10,
+            KeyEvent.KEYCODE_F11,
+            KeyEvent.KEYCODE_F12,
+ // A second tap on an armed sticky modifier fires the
+            // BARE left key (Win alone opens the Start menu, Alt alone the
+            // menu bar) instead of silently disarming.
+            KeyEvent.KEYCODE_CTRL_LEFT,
+            KeyEvent.KEYCODE_ALT_LEFT,
+            KeyEvent.KEYCODE_META_LEFT,
+        )
+        val NATIVE_API_VERSION get() = BridgeContract.NATIVE_API_VERSION
+        val CAPABILITIES get() = BridgeContract.CAPABILITIES
+        const val MAX_JSON_CHARS = 4096
+        const val MAX_CANDIDATE_ID_CHARS = 96
+        const val MAX_COMMIT_CODE_POINTS = 2000
+        const val MAX_CURSOR_DELTA = 256
+        const val MAX_CURSOR_CONTEXT_CHARS = 2048
+        const val MAX_PENDING_CURSOR_DELTA = 16_384L
+        const val CALLS_PER_SECOND = 25
+        const val HEIGHT_PREF_DEBOUNCE_MS = 300L
+
+        /**
+         * Whole-app terminal shells (see [isKeyEventCursorEditor]): their
+         * only editable surface is a web/native terminal, so every cursor
+         * movement rides key events. Termux is listed for completeness -
+         * its TYPE_NULL inputType already matches.
+         */
+        val KEY_EVENT_CURSOR_PACKAGES = setOf(
+            "com.termux",
+            "com.ohmyterm.mobile",
+        )
+    }
+}

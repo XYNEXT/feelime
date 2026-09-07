@@ -1,0 +1,789 @@
+{
+  "buildRecipes": {
+    "cmake-native": {
+      "command": "FEELIME_M0_INPUTS=<verified-inputs> FEELIME_M0_NDK=<verified-r29> FEELIME_M0_WORK=<new-empty-dir> scripts/research/build-cmake-native-engines.sh",
+      "script": "scripts/research/build-cmake-native-engines.sh",
+      "scriptSha256": "152452fb27e9e2637a0d1a7d56f78e4f1491d3c8a4dc869cb0200fbd89392483"
+    },
+    "mozc-android": {
+      "command": "FEELIME_M0_INPUTS=<verified-inputs> FEELIME_M0_NDK=<verified-r29> FEELIME_M0_NDK_ARCHIVE=<verified-r29-archive> FEELIME_M0_BAZELISK=<verified-bazelisk> FEELIME_M0_REPOSITORY_CACHE_SEED=<verified-cache> FEELIME_M0_REPOSITORY_CACHE_MANIFEST=<verified-cache-manifest> FEELIME_M0_WORK=<new-empty-dir> scripts/research/build-mozc-android.sh",
+      "script": "scripts/research/build-mozc-android.sh",
+      "scriptSha256": "ee52305a630acf3219f0471cbdaf688958aaf0a031f15f5d899d5dc4558af719"
+    }
+  },
+  "builder": "user-controlled-x86_64-builder",
+  "dependencyClosure": {
+    "contentAddressedPayloadBytes": 134289627,
+    "contentAddressedPayloadCount": 392,
+    "materializedModules": 28,
+    "moduleManifest": "scripts/research/builder-provenance/mozc-dependencies.json",
+    "moduleManifestSha256": "85e3266182f63edd18f9c94d4af16b75302c66fef251f41c2b667e3c8b91a085",
+    "re2MaterializedForTargets": false,
+    "repositoryCacheEntries": 18772,
+    "repositoryCacheFileBytes": 474508269,
+    "repositoryCacheManifest": "scripts/research/builder-provenance/mozc-repository-cache.json",
+    "repositoryCacheManifestSha256": "eb66b6b5d41311bcaecd18bced9e822112c47ae8bd6774e281421885d257138c",
+    "selectedModules": 42
+  },
+  "formalBuildEvidence": {
+    "buildCommandSha256": "d7e75607f64c2d7d7927fd9b28d2ea9ea9f2721d028270b39f3d43f8085c5b68",
+    "cmakeBuildLogSha256": "1fbe4c52f1832ed3d0c74bb6b0db4e9ff24f4a75cbf6a468854d5d275164b49a",
+    "cmakeReproducibility": "two independent clean builds; exact 23-file SHA-256 set match",
+    "dependenciesManifestSha256": "eb66b6b5d41311bcaecd18bced9e822112c47ae8bd6774e281421885d257138c",
+    "inputsManifestSha256": "fe33294e5b11e0d65984938a26eaebb15edcfd557a8f4c62ec5e47e697aa8a2a",
+    "offlineReplayLog": "not distributed; reproduce with scripts/research/build-mozc-android.sh",
+    "offlineReplayLogSha256": "ce95043780bb354c7a9c81e313526b689982a2e28b7b1a9f133cd94f1a3dce34",
+    "outputsManifestSha256": "440bc4cd8d4e029b73e48567b58fcfad7f054691a671acb788d071cbc4f02a2f",
+    "returnArchive": "not distributed; verify with scripts/research/verify-builder-return-archive.sh",
+    "returnArchiveBytes": 124989440,
+    "returnArchiveSha256": "8b1fa8151356c9b6559666dc2e6691dc9b51517daf8c717b50bae538df025724",
+    "returnVerifierSha256": "a53aae442b66e1edc6d9a9792542d9c13df2ad071c4d3d3d7bb4c9cd03bebdf5",
+    "toolchainManifestSha256": "bb38d0a3f1e92f5466f046e8c7653df2df2d7be6ea2056bc34d852d2e1607516"
+  },
+  "licenseBundle": {
+    "fileCount": 35,
+    "root": "third_party/licenses",
+    "treeDigestCommand": "find third_party/licenses -type f -print0 | sort -z | xargs -0 sha256sum | sha256sum",
+    "treeSha256": "e02b42335a24db7302c692b07ff43b1a58fe35520e2575347f187e221e8ff2b0",
+    "zlibLicenseSha256": "ee1e64c3fcad42e638318e43217d89791e1e61a50a1a2fa516ccee8725909d1e"
+  },
+  "originalComponents": [
+    {
+      "buildRecipes": [
+        "cmake-native",
+        "mozc-android"
+      ],
+      "license": "Feelime project license",
+      "name": "feelime-original-adapters",
+      "origin": "this repository",
+      "paths": [
+        "spikes/native-engine-smoke/native-src/rime/feelime_rime_bridge.cpp",
+        "spikes/native-engine-smoke/native-src/hunspell/feelime_hunspell_bridge.cpp",
+        "spikes/native-engine-smoke/native-src/smoke/native_smoke.cpp",
+        "spikes/native-engine-smoke/app/src/main/java/com/feelime/ime/nativeengine/ProtoWire.kt",
+        "spikes/native-engine-smoke/app/src/main/java/com/feelime/ime/nativeengine/MozcSmoke.kt",
+        "spikes/native-engine-smoke/app/src/main/java/com/feelime/ime/nativeengine/NativeContractSmoke.kt",
+        "spikes/native-engine-smoke/app/src/main/java/com/feelime/ime/nativeengine/PrefixIndex.kt"
+      ]
+    },
+    {
+      "buildRecipe": "cmake-native",
+      "derivation": "authored in this repository; the natural-code double-pinyin mapping is a public scheme; no third-party IME bytes",
+      "license": "Feelime project license",
+      "name": "feelime-original-schema",
+      "origin": "this repository",
+      "paths": [
+        "spikes/native-engine-smoke/original-schemas/ziranma_double_pinyin.schema.yaml"
+      ]
+    },
+    {
+      "apkPaths": [
+        "lib/*/libc++_shared.so"
+      ],
+      "archiveSha256": "4abbbcdc842f3d4879206e9695d52709603e52dd68d3c1fff04b3b5e7a308ecf",
+      "licenseFiles": [
+        "third_party/licenses/android-ndk/NOTICE.toolchain"
+      ],
+      "name": "android-ndk",
+      "origin": "https://developer.android.com/ndk/downloads",
+      "revision": "29.0.14206865"
+    }
+  ],
+  "outputs": [
+    {
+      "apkPath": "assets/engine-data/hunspell/fr.aff",
+      "buildRecipe": "cmake-native",
+      "bytes": 199870,
+      "path": "app/src/main/assets/engine-data/hunspell/fr.aff",
+      "sha256": "c176610cd5dc4846806a65ddd029f422d87978bf58f224aa44222662a16a2de5",
+      "sources": [
+        "libreoffice-dictionaries"
+      ]
+    },
+    {
+      "apkPath": "assets/engine-data/hunspell/fr.dic",
+      "buildRecipe": "cmake-native",
+      "bytes": 1236490,
+      "path": "app/src/main/assets/engine-data/hunspell/fr.dic",
+      "sha256": "b78a868e31dd6e373b6c3217969afb898a9acde828a5e7ef97308da42218c88c",
+      "sources": [
+        "libreoffice-dictionaries"
+      ]
+    },
+    {
+      "apkPath": "assets/engine-data/hunspell/fr.prefix.txt",
+      "buildRecipe": "cmake-native",
+      "bytes": 880960,
+      "path": "app/src/main/assets/engine-data/hunspell/fr.prefix.txt",
+      "sha256": "7fece5007ad662dd8993d948663f1278ebef3e8c067e789a47401523ee4d28de",
+      "sources": [
+        "libreoffice-dictionaries"
+      ]
+    },
+    {
+      "apkPath": "assets/engine-data/hunspell/ru_RU.aff",
+      "buildRecipe": "cmake-native",
+      "bytes": 71236,
+      "path": "app/src/main/assets/engine-data/hunspell/ru_RU.aff",
+      "sha256": "38ce7d4af78e211e9bafe4bf7e3d6a2c420591136cb738ec6648f8fdf6524cd7",
+      "sources": [
+        "libreoffice-dictionaries"
+      ]
+    },
+    {
+      "apkPath": "assets/engine-data/hunspell/ru_RU.dic",
+      "buildRecipe": "cmake-native",
+      "bytes": 3473191,
+      "path": "app/src/main/assets/engine-data/hunspell/ru_RU.dic",
+      "sha256": "f6047416a0204adbecf3a451b874ec8a97ee37e2cbc714466ef04d8dbcc0d6fc",
+      "sources": [
+        "libreoffice-dictionaries"
+      ]
+    },
+    {
+      "apkPath": "assets/engine-data/hunspell/ru_RU.prefix.txt",
+      "buildRecipe": "cmake-native",
+      "bytes": 3153999,
+      "path": "app/src/main/assets/engine-data/hunspell/ru_RU.prefix.txt",
+      "sha256": "075d8a501f0e5231c36284ab74d65dee1af6fe100544ae5e4cec2234a029ee58",
+      "sources": [
+        "libreoffice-dictionaries"
+      ]
+    },
+    {
+      "apkPath": "assets/engine-data/mozc/mozc.data",
+      "buildRecipe": "mozc-android",
+      "bytes": 18855160,
+      "path": "app/src/main/assets/engine-data/mozc/mozc.data",
+      "sha256": "fbb9a23419d677a33968145cfe1979dac6e7d3c28712d469854b4707a5965ed1",
+      "sources": [
+        "mozc"
+      ]
+    },
+    {
+      "apkPath": "assets/engine-data/rime/ziranma_double_pinyin.prism.bin",
+      "buildRecipe": "cmake-native",
+      "bytes": 22344,
+      "path": "app/src/main/assets/engine-data/rime/ziranma_double_pinyin.prism.bin",
+      "sha256": "89ffda87a368a36eb8db0ecee177f998bb6c24a05bc40d5fbabf0c02f2444038",
+      "sources": [
+        "rime-prelude",
+        "rime-essay",
+        "rime-luna-pinyin",
+        "feelime-original-schema"
+      ]
+    },
+    {
+      "apkPath": "assets/engine-data/rime/ziranma_double_pinyin.prism.txt",
+      "buildRecipe": "cmake-native",
+      "bytes": 13406,
+      "path": "app/src/main/assets/engine-data/rime/ziranma_double_pinyin.prism.txt",
+      "sha256": "9f7a15c1d38194250c0332bb9dd325e8d03a0280e15eb2db99bcd4b1ba0b5683",
+      "sources": [
+        "rime-prelude",
+        "rime-essay",
+        "rime-luna-pinyin",
+        "feelime-original-schema"
+      ]
+    },
+    {
+      "apkPath": "assets/engine-data/rime/ziranma_double_pinyin.schema.yaml",
+      "buildRecipe": "cmake-native",
+      "bytes": 39293,
+      "path": "app/src/main/assets/engine-data/rime/ziranma_double_pinyin.schema.yaml",
+      "sha256": "7d4f5c1e0beb8d7f9ff6c9ca70c29999f2ea9a33f6025c4d9665eb79bd97d2ab",
+      "sources": [
+        "feelime-original-schema"
+      ]
+    },
+    {
+      "apkPath": "assets/engine-data/rime/luna_pinyin.prism.bin",
+      "buildRecipe": "cmake-native",
+      "bytes": 31728,
+      "path": "app/src/main/assets/engine-data/rime/luna_pinyin.prism.bin",
+      "sha256": "7d189de553bc37a6003cfff05c52d37a043095d2c79edea2f74a71e6cf016337",
+      "sources": [
+        "rime-prelude",
+        "rime-essay",
+        "rime-luna-pinyin"
+      ]
+    },
+    {
+      "apkPath": "assets/engine-data/rime/luna_pinyin.prism.txt",
+      "buildRecipe": "cmake-native",
+      "bytes": 20222,
+      "path": "app/src/main/assets/engine-data/rime/luna_pinyin.prism.txt",
+      "sha256": "3d7078bdd7c30fc453677c39f21dfe1f66eb977ecff35f18d6c348436ca2a65b",
+      "sources": [
+        "rime-prelude",
+        "rime-essay",
+        "rime-luna-pinyin"
+      ]
+    },
+    {
+      "apkPath": "assets/engine-data/rime/luna_pinyin.reverse.bin",
+      "buildRecipe": "cmake-native",
+      "bytes": 252760,
+      "path": "app/src/main/assets/engine-data/rime/luna_pinyin.reverse.bin",
+      "sha256": "bd314158c00bf36c9ba8f7321d7e6ab6dfbdaa283b11c4856adfd2f58a781179",
+      "sources": [
+        "rime-prelude",
+        "rime-essay",
+        "rime-luna-pinyin"
+      ]
+    },
+    {
+      "apkPath": "assets/engine-data/rime/luna_pinyin.schema.yaml",
+      "buildRecipe": "cmake-native",
+      "bytes": 42151,
+      "path": "app/src/main/assets/engine-data/rime/luna_pinyin.schema.yaml",
+      "sha256": "2ef49c09687dc4c0d4dfc13339c2a5445ff2062cac134eb96ba4d6643608bb9a",
+      "sources": [
+        "rime-prelude",
+        "rime-essay",
+        "rime-luna-pinyin"
+      ]
+    },
+    {
+      "apkPath": "assets/engine-data/rime/luna_pinyin.table.bin",
+      "buildRecipe": "cmake-native",
+      "bytes": 13011464,
+      "path": "app/src/main/assets/engine-data/rime/luna_pinyin.table.bin",
+      "sha256": "55a54e8e55deaade0e4d7646a7ad2b8602901f4007b60c637d993468eff64e03",
+      "sources": [
+        "rime-essay",
+        "rime-luna-pinyin"
+      ]
+    },
+    {
+      "apkPath": "assets/engine-data/rime/luna_pinyin.table.txt",
+      "buildRecipe": "cmake-native",
+      "bytes": 12263660,
+      "path": "app/src/main/assets/engine-data/rime/luna_pinyin.table.txt",
+      "sha256": "7213f6acfe24af622f82eb50fa84578d807fcb9378c6288368afa6f7eebb212b",
+      "sources": [
+        "rime-essay",
+        "rime-luna-pinyin"
+      ]
+    },
+    {
+      "apkPath": "lib/arm64-v8a/libc++_shared.so",
+      "buildRecipe": "cmake-native",
+      "bytes": 9290184,
+      "path": "app/src/main/jniLibs/arm64-v8a/libc++_shared.so",
+      "sha256": "0c52cfab2df0d957d8b346a2bdc5ae8d71feca2591924d77e1cd724d5bf74352",
+      "sources": [
+        "android-ndk"
+      ]
+    },
+    {
+      "apkPath": "lib/arm64-v8a/libfeelime_hunspell.so",
+      "buildRecipe": "cmake-native",
+      "bytes": 1452768,
+      "path": "app/src/main/jniLibs/arm64-v8a/libfeelime_hunspell.so",
+      "sha256": "748883ae5e0c8895625a201527d7abce49b8cadb77e4fa832d16c602ec424a34",
+      "sources": [
+        "hunspell"
+      ]
+    },
+    {
+      "apkPath": "lib/arm64-v8a/libfeelime_rime.so",
+      "buildRecipe": "cmake-native",
+      "bytes": 4931120,
+      "path": "app/src/main/jniLibs/arm64-v8a/libfeelime_rime.so",
+      "sha256": "5ef46bf8436928c6fc22f5fd3ab03fc6f704f6fc296ecf92bc768e7af71f6915",
+      "sources": [
+        "librime",
+        "darts-clone",
+        "utf8cpp",
+        "x11-keysymdef",
+        "boost",
+        "glog",
+        "yaml-cpp",
+        "leveldb",
+        "marisa-trie",
+        "opencc",
+        "rapidjson"
+      ]
+    },
+    {
+      "apkPath": "lib/arm64-v8a/libfeelime_smoke.so",
+      "buildRecipe": "cmake-native",
+      "bytes": 47400,
+      "path": "app/src/main/jniLibs/arm64-v8a/libfeelime_smoke.so",
+      "sha256": "ab40365100e2a65cb3ee8c6563b0764da9de25fc2dfefd198b0be2d3c57242c5",
+      "sources": [
+        "feelime-original-adapters"
+      ]
+    },
+    {
+      "apkPath": "lib/arm64-v8a/libmozc.so",
+      "buildRecipe": "mozc-android",
+      "bytes": 16174992,
+      "path": "app/src/main/jniLibs/arm64-v8a/libmozc.so",
+      "sha256": "428ec7be87f35767fc1dea8c7044302cc149b1000242c72a927e73bbd24ebbe3",
+      "sources": [
+        "mozc",
+        "abseil-cpp",
+        "protobuf",
+        "zlib"
+      ]
+    },
+    {
+      "apkPath": "lib/x86_64/libc++_shared.so",
+      "buildRecipe": "cmake-native",
+      "bytes": 9015544,
+      "path": "spikes/native-engine-smoke/app/src/main/jniLibs/x86_64/libc++_shared.so",
+      "sha256": "e28cb9e0f456caf8498d0e8562b3ac3f73bf78c07555a52b5602396f240abec3",
+      "sources": [
+        "android-ndk"
+      ]
+    },
+    {
+      "apkPath": "lib/x86_64/libfeelime_hunspell.so",
+      "buildRecipe": "cmake-native",
+      "bytes": 1470136,
+      "path": "spikes/native-engine-smoke/app/src/main/jniLibs/x86_64/libfeelime_hunspell.so",
+      "sha256": "3187fa05c269a629c7295aba2eb95abcf92b1b72892c38343689ef33be15b402",
+      "sources": [
+        "hunspell"
+      ]
+    },
+    {
+      "apkPath": "lib/x86_64/libfeelime_rime.so",
+      "buildRecipe": "cmake-native",
+      "bytes": 4976736,
+      "path": "spikes/native-engine-smoke/app/src/main/jniLibs/x86_64/libfeelime_rime.so",
+      "sha256": "729b0aa5186c56aea342fc1b40489ccf2a52a67984fe9192f9a59c48853d05f3",
+      "sources": [
+        "librime",
+        "darts-clone",
+        "utf8cpp",
+        "x11-keysymdef",
+        "boost",
+        "glog",
+        "yaml-cpp",
+        "leveldb",
+        "marisa-trie",
+        "opencc",
+        "rapidjson"
+      ]
+    },
+    {
+      "apkPath": "lib/x86_64/libfeelime_smoke.so",
+      "buildRecipe": "cmake-native",
+      "bytes": 47624,
+      "path": "spikes/native-engine-smoke/app/src/main/jniLibs/x86_64/libfeelime_smoke.so",
+      "sha256": "e8e2ae2d8259f98a83149a4f071c4611ccdbbdc486c0598244abdbf6cf07a33c",
+      "sources": [
+        "feelime-original-adapters"
+      ]
+    },
+    {
+      "apkPath": "lib/x86_64/libmozc.so",
+      "buildRecipe": "mozc-android",
+      "bytes": 15155848,
+      "path": "spikes/native-engine-smoke/app/src/main/jniLibs/x86_64/libmozc.so",
+      "sha256": "644b7fa9be2f36b49a87d10aabc9e624e492ad3d063a8e95d64fc8ce4044e9af",
+      "sources": [
+        "mozc",
+        "abseil-cpp",
+        "protobuf",
+        "zlib"
+      ]
+    }
+  ],
+  "schemaVersion": 2,
+  "sourceInputArchive": {
+    "bytes": 270458880,
+    "creator": "scripts/research/create-builder-input-archive.sh",
+    "creatorSha256": "1ba2eb74cd8645e7d5203fd7a200948e1d4397d72a5a1d91c36e63b22e481284",
+    "name": "feelime-builder-inputs-v11.tar",
+    "sha256": "925b62a5e189a0a57665869ba057abd7703614b5e5cc58b2c0b192d8d36ef952"
+  },
+  "sources": [
+    {
+      "apkPaths": [
+        "lib/*/libfeelime_rime.so"
+      ],
+      "archive": "librime-417db2385f732cb0fa194b497042c42abb897d99.tar.gz",
+      "archiveBytes": 2657776,
+      "archiveSha256": "479cfdccae4caeb2a54867fc1ce9b2f02891c41e2b3bc7faff3e5be84dc70c54",
+      "buildRecipe": "cmake-native",
+      "correspondingSource": "verified input archive",
+      "license": "BSD-3-Clause",
+      "licenseFiles": [
+        "third_party/licenses/rime/librime-BSD-3-Clause.txt"
+      ],
+      "modified": "none; Feelime adapter is separate original code",
+      "name": "librime",
+      "origin": "https://github.com/rime/librime",
+      "revision": "417db2385f732cb0fa194b497042c42abb897d99"
+    },
+    {
+      "apkPaths": [
+        "lib/*/libfeelime_rime.so"
+      ],
+      "archive": "librime include/darts.h",
+      "archiveSha256": "479cfdccae4caeb2a54867fc1ce9b2f02891c41e2b3bc7faff3e5be84dc70c54",
+      "buildRecipe": "cmake-native",
+      "correspondingSource": "pinned librime archive",
+      "license": "BSD-3-Clause",
+      "licenseFiles": [
+        "third_party/licenses/rime/darts-clone-notice.txt"
+      ],
+      "modified": "none",
+      "name": "darts-clone",
+      "origin": "https://github.com/s-yata/darts-clone",
+      "revision": "bundled by pinned librime"
+    },
+    {
+      "apkPaths": [
+        "lib/*/libfeelime_rime.so"
+      ],
+      "archive": "librime bundled headers",
+      "archiveSha256": "479cfdccae4caeb2a54867fc1ce9b2f02891c41e2b3bc7faff3e5be84dc70c54",
+      "buildRecipe": "cmake-native",
+      "correspondingSource": "pinned librime archive",
+      "license": "BSL-1.0",
+      "licenseFiles": [
+        "third_party/licenses/rime/utf8cpp-notice.txt"
+      ],
+      "modified": "none",
+      "name": "utf8cpp",
+      "origin": "https://github.com/nemtrif/utfcpp",
+      "revision": "bundled by pinned librime"
+    },
+    {
+      "apkPaths": [
+        "lib/*/libfeelime_rime.so"
+      ],
+      "archive": "librime bundled header",
+      "archiveSha256": "479cfdccae4caeb2a54867fc1ce9b2f02891c41e2b3bc7faff3e5be84dc70c54",
+      "buildRecipe": "cmake-native",
+      "correspondingSource": "pinned librime archive",
+      "license": "MIT-like",
+      "licenseFiles": [
+        "third_party/licenses/rime/x11-keysym-notice.txt"
+      ],
+      "modified": "none",
+      "name": "x11-keysymdef",
+      "origin": "https://gitlab.freedesktop.org/xorg/proto/xorgproto",
+      "revision": "bundled header copy in pinned librime"
+    },
+    {
+      "apkPaths": [
+        "assets/engine-data/rime/*"
+      ],
+      "archive": "rime-prelude-082425ea0684bca36474415d4a0e8db9b016487e.tar.gz",
+      "archiveBytes": 18436,
+      "archiveSha256": "66239ba4745d54471e5ce5540b45e86ec663ff5dba004cb23c95531a3bdec00f",
+      "buildRecipe": "cmake-native",
+      "correspondingSource": "verified input archive",
+      "license": "LGPL-3.0-only",
+      "licenseFiles": [
+        "third_party/licenses/rime-data/prelude-LGPL-3.0.txt"
+      ],
+      "modified": "none",
+      "name": "rime-prelude",
+      "origin": "https://github.com/rime/rime-prelude",
+      "revision": "082425ea0684bca36474415d4a0e8db9b016487e"
+    },
+    {
+      "apkPaths": [
+        "assets/engine-data/rime/*"
+      ],
+      "archive": "rime-essay-e9b1a374a6ea015fca5bdd04318924b4483ac35a.tar.gz",
+      "archiveBytes": 2577432,
+      "archiveSha256": "11559224d48709b0d77009a550804bfc2b763cfdf048c8d8fe224b3d36ba441c",
+      "buildRecipe": "cmake-native",
+      "correspondingSource": "verified input archive",
+      "license": "LGPL-3.0-only",
+      "licenseFiles": [
+        "third_party/licenses/rime-data/essay-LGPL-3.0.txt"
+      ],
+      "modified": "none",
+      "name": "rime-essay",
+      "origin": "https://github.com/rime/rime-essay",
+      "revision": "e9b1a374a6ea015fca5bdd04318924b4483ac35a"
+    },
+    {
+      "apkPaths": [
+        "assets/engine-data/rime/*"
+      ],
+      "archive": "rime-luna-pinyin-56b934b099dfbeab842320f13aa8b461a6ab3e42.tar.gz",
+      "archiveBytes": 395336,
+      "archiveSha256": "876c7ba559794f476abf7195a255aea29000cee281e6f5ec664928dce018bd90",
+      "buildRecipe": "cmake-native",
+      "correspondingSource": "verified input archive plus reproducible host deploy command",
+      "license": "LGPL-3.0-only",
+      "licenseFiles": [
+        "third_party/licenses/rime-data/luna-pinyin-LGPL-3.0.txt"
+      ],
+      "modified": "host-compiled data only",
+      "name": "rime-luna-pinyin",
+      "origin": "https://github.com/rime/rime-luna-pinyin",
+      "revision": "56b934b099dfbeab842320f13aa8b461a6ab3e42"
+    },
+    {
+      "apkPaths": [
+        "lib/*/libfeelime_rime.so"
+      ],
+      "archive": "boost-1.89.0-cmake.tar.xz",
+      "archiveBytes": 102078704,
+      "archiveSha256": "67acec02d0d118b5de9eb441f5fb707b3a1cdd884be00ca24b9a73c995511f74",
+      "buildRecipe": "cmake-native",
+      "correspondingSource": "verified input archive",
+      "license": "BSL-1.0",
+      "licenseFiles": [
+        "third_party/licenses/rime/boost-BSL-1.0.txt"
+      ],
+      "modified": "none",
+      "name": "boost",
+      "origin": "https://github.com/boostorg/boost",
+      "revision": "1.89.0"
+    },
+    {
+      "apkPaths": [
+        "lib/*/libfeelime_rime.so"
+      ],
+      "archive": "glog-7b134a5c82c0c0b5698bb6bf7a835b230c5638e4.tar.gz",
+      "archiveBytes": 182928,
+      "archiveSha256": "9c48c7c631be5af3502a19d06ebdb5c2f67d8d0bf216f896848089c1792e6193",
+      "buildRecipe": "cmake-native",
+      "correspondingSource": "verified input archive",
+      "license": "BSD-3-Clause",
+      "licenseFiles": [
+        "third_party/licenses/rime/glog-BSD-3-Clause.txt"
+      ],
+      "modified": "none",
+      "name": "glog",
+      "origin": "https://github.com/google/glog",
+      "revision": "7b134a5c82c0c0b5698bb6bf7a835b230c5638e4"
+    },
+    {
+      "apkPaths": [
+        "lib/*/libfeelime_rime.so"
+      ],
+      "archive": "yaml-cpp-2f86d13775d119edbb69af52e5f566fd65c6953b.tar.gz",
+      "archiveBytes": 1050633,
+      "archiveSha256": "923b2298148581b14ef21d9ce29d83eca102ff671a547dfdbd227245a199bcd8",
+      "buildRecipe": "cmake-native",
+      "correspondingSource": "verified input archive",
+      "license": "MIT",
+      "licenseFiles": [
+        "third_party/licenses/rime/yaml-cpp-MIT.txt"
+      ],
+      "modified": "none",
+      "name": "yaml-cpp",
+      "origin": "https://github.com/jbeder/yaml-cpp",
+      "revision": "2f86d13775d119edbb69af52e5f566fd65c6953b"
+    },
+    {
+      "apkPaths": [
+        "lib/*/libfeelime_rime.so"
+      ],
+      "archive": "leveldb-99b3c03b3284f5886f9ef9a4ef703d57373e61be.tar.gz",
+      "archiveBytes": 243094,
+      "archiveSha256": "bc87b9bbc5674c91246a89813355e78401759761342cc049e1c3d56350a8a9d1",
+      "buildRecipe": "cmake-native",
+      "correspondingSource": "verified input archive",
+      "license": "BSD-3-Clause",
+      "licenseFiles": [
+        "third_party/licenses/rime/leveldb-BSD-3-Clause.txt"
+      ],
+      "modified": "none",
+      "name": "leveldb",
+      "origin": "https://github.com/google/leveldb",
+      "revision": "99b3c03b3284f5886f9ef9a4ef703d57373e61be"
+    },
+    {
+      "apkPaths": [
+        "lib/*/libfeelime_rime.so"
+      ],
+      "archive": "marisa-trie-3e87d53b78e15f2f43783d5e376561a8c9722051.tar.gz",
+      "archiveBytes": 212943,
+      "archiveSha256": "c24516edc43be8049ef4e23e50a574d4670036fe3595c49c0f01d4d87ce58f57",
+      "buildRecipe": "cmake-native",
+      "correspondingSource": "verified input archive",
+      "license": "BSD-2-Clause",
+      "licenseFiles": [
+        "third_party/licenses/rime/marisa-trie.txt"
+      ],
+      "modified": "none",
+      "name": "marisa-trie",
+      "origin": "https://github.com/s-yata/marisa-trie",
+      "revision": "3e87d53b78e15f2f43783d5e376561a8c9722051"
+    },
+    {
+      "apkPaths": [
+        "lib/*/libfeelime_rime.so"
+      ],
+      "archive": "opencc-e9f3bb3fa1d058fe2fd4f096503222854bdc31ab.tar.gz",
+      "archiveBytes": 11792375,
+      "archiveSha256": "903c03e92c18c3573b72431e16af3e641e87911236e9fbe4a562e6fde469e215",
+      "buildRecipe": "cmake-native",
+      "correspondingSource": "verified input archive",
+      "license": "Apache-2.0",
+      "licenseFiles": [
+        "third_party/licenses/rime/opencc-Apache-2.0.txt"
+      ],
+      "modified": "none",
+      "name": "opencc",
+      "origin": "https://github.com/BYVoid/OpenCC",
+      "revision": "e9f3bb3fa1d058fe2fd4f096503222854bdc31ab"
+    },
+    {
+      "apkPaths": [
+        "lib/*/libfeelime_rime.so"
+      ],
+      "archive": "opencc-e9f3bb3fa1d058fe2fd4f096503222854bdc31ab.tar.gz:deps/rapidjson-1.1.0/rapidjson",
+      "archiveBytes": 11792375,
+      "archiveSha256": "903c03e92c18c3573b72431e16af3e641e87911236e9fbe4a562e6fde469e215",
+      "buildRecipe": "cmake-native",
+      "correspondingSource": "exact embedded headers in verified OpenCC input archive",
+      "license": "MIT AND BSD-3-Clause (msinttypes); JSON-license directory documented but not embedded/compiled",
+      "licenseFiles": [
+        "third_party/licenses/rime/rapidjson-1.1.0-LICENSE.txt",
+        "third_party/licenses/rime/rapidjson-1.1.0.txt"
+      ],
+      "modified": "none; header-only code statically compiled through OpenCC",
+      "name": "rapidjson",
+      "origin": "https://github.com/Tencent/rapidjson",
+      "revision": "1.1.0; tag object f54b0e47a08782a6131cc3d60f94d038fa6e0a51; bundled by pinned OpenCC"
+    },
+    {
+      "apkPaths": [
+        "lib/*/libfeelime_hunspell.so"
+      ],
+      "archive": "hunspell-f143a42a0b95578c39f8657101624ed44dea6514.tar.gz",
+      "archiveBytes": 574823,
+      "archiveSha256": "17055a5fc8a8c6aea1dabe8f2c3c9956499a6a265a991422533ac1904d3c2565",
+      "buildRecipe": "cmake-native",
+      "correspondingSource": "verified input archive",
+      "license": "MPL-1.1",
+      "licenseFiles": [
+        "third_party/licenses/hunspell/MPL-1.1.txt"
+      ],
+      "modified": "none; Feelime adapter is separate original code",
+      "name": "hunspell",
+      "origin": "https://github.com/hunspell/hunspell",
+      "revision": "f143a42a0b95578c39f8657101624ed44dea6514"
+    },
+    {
+      "apkPaths": [
+        "assets/engine-data/hunspell/*"
+      ],
+      "archive": "libreoffice-dictionaries-32b006a2c22a4ac7e8ed3f03346f7b3d85a970a4.tar.gz",
+      "archiveBytes": 119463975,
+      "archiveSha256": "cbd790eca560de5e8ec8bd64117a00dfd0bc06b091c8f52d23e44ea00d3e8461",
+      "buildRecipe": "cmake-native",
+      "correspondingSource": "verified input archive",
+      "license": "MPL-2.0 AND LicenseRef-Russian-Dictionary-BSD-Like",
+      "licenseFiles": [
+        "third_party/licenses/dictionaries/MPL-2.0.txt",
+        "third_party/licenses/dictionaries/french-grammalecte-notice.txt",
+        "third_party/licenses/dictionaries/russian-dictionary-notice.txt"
+      ],
+      "modified": "only fr_FR and ru_RU aff/dic selected unchanged",
+      "name": "libreoffice-dictionaries",
+      "origin": "https://github.com/LibreOffice/dictionaries",
+      "revision": "32b006a2c22a4ac7e8ed3f03346f7b3d85a970a4"
+    },
+    {
+      "apkPaths": [
+        "lib/*/libmozc.so",
+        "assets/engine-data/mozc/mozc.data"
+      ],
+      "archive": "mozc-851c3fe33060d2a6090363e4d7ec44fafde2c03d.tar.gz",
+      "archiveBytes": 29115923,
+      "archiveSha256": "04b2112ba202cccbd9553bbbaf109ef0ab1b438a4c4c677d348dd6975b6598e3",
+      "buildRecipe": "mozc-android",
+      "correspondingSource": "verified input archive and mozc-dependencies.json",
+      "license": "BSD-3-Clause AND LicenseRef-Mozc-Dictionary-Notices",
+      "licenseFiles": [
+        "third_party/licenses/mozc/mozc-BSD-3-Clause.txt",
+        "third_party/licenses/mozc/mozc-dictionary-notices.txt"
+      ],
+      "modified": "none; Feelime wire adapter is separate original code",
+      "name": "mozc",
+      "origin": "https://github.com/google/mozc",
+      "revision": "851c3fe33060d2a6090363e4d7ec44fafde2c03d"
+    },
+    {
+      "apkPaths": [
+        "lib/*/libmozc.so"
+      ],
+      "archive": "BCR source archive",
+      "archiveBytes": 2301097,
+      "archiveSha256": "4314e2a7cbac89cac25a2f2322870f343d81579756ceff7f431803c2c9090195",
+      "buildRecipe": "mozc-android",
+      "correspondingSource": "content-addressed archive in mozc-dependencies.json",
+      "license": "Apache-2.0",
+      "licenseFiles": [
+        "third_party/licenses/mozc/abseil-Apache-2.0.txt"
+      ],
+      "modified": "none",
+      "name": "abseil-cpp",
+      "origin": "https://github.com/abseil/abseil-cpp",
+      "revision": "20260107.1"
+    },
+    {
+      "apkPaths": [
+        "lib/*/libmozc.so"
+      ],
+      "archive": "BCR source archive",
+      "archiveBytes": 7038508,
+      "archiveSha256": "9f0933ad12abb0a8957b3b64aefc34774ccbe57f77f890c66cb4067519bb83c1",
+      "buildRecipe": "mozc-android",
+      "correspondingSource": "content-addressed archive in mozc-dependencies.json",
+      "license": "BSD-3-Clause",
+      "licenseFiles": [
+        "third_party/licenses/mozc/protobuf-BSD-3-Clause.txt"
+      ],
+      "modified": "none",
+      "name": "protobuf",
+      "origin": "https://github.com/protocolbuffers/protobuf",
+      "revision": "34.1"
+    },
+    {
+      "apkPaths": [
+        "lib/*/libmozc.so"
+      ],
+      "archive": "BCR source archive",
+      "archiveBytes": 1512791,
+      "archiveSha256": "9a93b2b7dfdac77ceba5a558a580e74667dd6fede4585b91eefb60f03b72df23",
+      "buildRecipe": "mozc-android",
+      "correspondingSource": "content-addressed archive and patch hashes in mozc-dependencies.json",
+      "license": "Zlib",
+      "licenseFiles": [
+        "third_party/licenses/mozc/zlib-Zlib.txt"
+      ],
+      "modified": "BCR build metadata only",
+      "name": "zlib",
+      "origin": "https://github.com/madler/zlib",
+      "revision": "1.3.1"
+    }
+  ],
+  "status": "closed-for-g1-review",
+  "toolchain": {
+    "androidNdk": {
+      "archiveBytes": 783549481,
+      "archiveSha256": "4abbbcdc842f3d4879206e9695d52709603e52dd68d3c1fff04b3b5e7a308ecf",
+      "notice": "third_party/licenses/android-ndk/NOTICE.toolchain",
+      "version": "29.0.14206865"
+    },
+    "bazel": {
+      "sha256": "422e7a1690b76d7e615c29091d3aca28d0bd3a93fe3c93cbefb8f72d774926d5",
+      "version": "9.0.2"
+    },
+    "bazelisk": {
+      "sha256": "5a408715e932c0250d28bd84555f12edbf70117de42f9181691c736eacc4a992",
+      "version": "1.29.0"
+    },
+    "environmentVerifier": {
+      "path": "scripts/research/verify-builder-environment.sh",
+      "sha256": "e9012ccc63511cc874b1be22abd1ff63fb19c31bacbb678c9a76ad7b0cbee1a8"
+    }
+  }
+}

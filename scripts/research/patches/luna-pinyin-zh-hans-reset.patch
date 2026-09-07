@@ -1,0 +1,12 @@
+Upstream leaves the zh option switch unreset, so a fresh librime profile
+starts in traditional Chinese. Feelime ships simplified-first: pin the
+session-start state at the source level before the schema is compiled.
+--- a/luna_pinyin.schema.yaml
++++ b/luna_pinyin.schema.yaml
+@@ -29,4 +29,5 @@
+       - zh_hans
+       - zh_hant_hk
+       - zh_hant_tw
++    reset: 1
+     states:
+       - 傳統漢字

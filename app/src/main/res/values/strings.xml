@@ -1,0 +1,30 @@
+<resources>
+    <string name="app_name">Feelime</string>
+    <string name="ime_name">Feelime 中英语音输入法</string>
+    <string name="ime_subtype">中英语音</string>
+    <string name="setup_title">Feelime</string>
+    <string name="setup_intro">离线中英混合流式语音输入法。键盘界面全部运行在本地 HTML 中。</string>
+    <string name="grant_microphone">1. 授予麦克风权限</string>
+    <string name="enable_ime">2. 启用 Feelime 输入法</string>
+    <string name="choose_ime">3. 切换到 Feelime</string>
+    <string name="shortcut_ime_short">切换输入法</string>
+    <string name="shortcut_ime_long">打开系统输入法选择器</string>
+    <string name="shortcut_unsupported">当前系统不支持桌面快捷方式</string>
+    <string name="shortcut_unavailable">当前桌面不支持应用内固定快捷方式，请长按桌面手动添加</string>
+    <string name="shortcut_request_sent">已向桌面发出固定快捷方式请求</string>
+    <string name="shortcut_request_rejected">桌面没有接受固定快捷方式请求</string>
+    <string name="ime_tile_name">输入法切换</string>
+    <string name="ime_tile_added">输入法磁贴已加入控制中心</string>
+    <string name="ime_tile_already_added">输入法磁贴已经在控制中心里了</string>
+    <string name="ime_tile_request_rejected">系统没有添加输入法磁贴，请在控制中心编辑页手动添加</string>
+    <string name="ime_tile_unavailable">当前系统不支持应用内请求添加磁贴，请在控制中心编辑页手动添加</string>
+    <string name="ime_tile_manual_steps">下拉控制中心，进入编辑磁贴，找到“输入法切换”后手动添加</string>
+    <string name="ime_widget_name">输入法切换</string>
+    <string name="ime_widget_description">点按后打开系统输入法选择器</string>
+    <string name="widget_request_sent">已向桌面发出添加小组件请求</string>
+    <string name="widget_request_rejected">桌面没有接受小组件请求，请长按桌面手动添加</string>
+    <string name="permission_granted">麦克风权限已授予</string>
+    <string name="permission_missing">需要麦克风权限才能语音输入</string>
+    <string name="model_ready">流式中英、整句纠错与英文标点模型已安装</string>
+    <string name="model_missing">语音模型未安装：请在 设置 → 语音识别 中下载，或使用完整版安装包</string>
+</resources>

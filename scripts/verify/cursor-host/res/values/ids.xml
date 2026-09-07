@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <item name="probe_title" type="id" />
+    <item name="probe_instructions" type="id" />
+    <item name="probe_editor" type="id" />
+    <item name="probe_text" type="id" />
+    <item name="probe_selection" type="id" />
+    <item name="probe_input_type" type="id" />
+    <item name="probe_counters" type="id" />
+    <item name="probe_reset" type="id" />
+    <item name="probe_middle" type="id" />
+    <item name="probe_show_ime" type="id" />
+</resources>

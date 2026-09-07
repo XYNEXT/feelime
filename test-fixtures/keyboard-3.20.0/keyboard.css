@@ -1,0 +1,1434 @@
+/* Felime keyboard styles.
+ * M4 (WeChat-aligned): 44px keys, 5px h-gap / 9px v-gap, 271px height budget
+ * (12 pad + 30 bar + 14 gap + 4x44 + 3x9 + 12 pad) inside the 272dp IME view.
+ * Colors are measured from the reference IME (see docs/design/keyboard.md).
+ * Pixel-gated hard-coded colors that must NOT be re-themed:
+ *   .kb-mod.active/.locked background #103a24 (device_verify shift-green),
+ *   .kp-item.sel text #07180e, voice overlay reds. */
+/* Theme tokens: dark by default, light via system scheme or manual override
+ * (html.theme-light / html.theme-dark). */
+:root {
+    color-scheme: dark;
+    --bg: #202020;
+    --key: #5f5f5f;
+    --special: #414141;
+    --pressed: #6e6e6e;
+    --text: #e8e8e8;
+    --muted: #b0b0b0;
+    --accent: #23c890;
+    --danger: #ff6b6b;
+    --recording: #ff4d4d;
+    --panel: #2a2a2a;
+    --pill: #3d3d3d;
+    --logo-bg: #4d4d4d;
+    --icon: #989898;
+    --card-bg: #2b2b31;
+    --card-text: #e8e8e8;
+    --card-sub: #a2a2ac;
+    --scrim: #000000b8;
+}
+
+html.theme-light {
+    color-scheme: light;
+    --bg: #e2e3e8;
+    --key: #fcfcfc;
+    --special: #b7bbc4;
+    --pressed: #eceef2;
+    --text: #181818;
+    /* 批次 22 #0.2: the old #b0b0b0 sat at ~2.1:1 on the light surfaces -
+     * quick-settings text was effectively invisible. #5c616b keeps the
+     * secondary tone and clears 4.5:1 on every surface muted text actually
+     * sits on (6.1 on --key, 5.7 on --panel, 4.9 on --bg; --special surfaces
+     * carry --text, not muted - review batch22 P2-5). */
+    --muted: #5c616b;
+    --accent: #23c890;
+    --danger: #d93025;
+    --recording: #e5484d;
+    --panel: #f4f5f7;
+    --pill: #ffffff;
+    --logo-bg: #fcfcfc;
+    --icon: #787878;
+    --card-bg: #f7f7fa;
+    --card-text: #1c1c24;
+    --card-sub: #6a6a78;
+    --scrim: #ffffffb0;
+    --mod-active-bg: #d7f0e4;
+}
+
+html.theme-dark {
+    color-scheme: dark;
+}
+
+@media (prefers-color-scheme: light) {
+    html:not(.theme-light):not(.theme-dark) {
+        color-scheme: light;
+        --bg: #e2e3e8;
+        --key: #fcfcfc;
+        --special: #b7bbc4;
+        --pressed: #eceef2;
+        --text: #181818;
+        --muted: #5c616b; /* 批次 22 #0.2: see html.theme-light */
+        --accent: #23c890;
+        --danger: #d93025;
+        --recording: #e5484d;
+        --panel: #f4f5f7;
+        --pill: #ffffff;
+        --logo-bg: #fcfcfc;
+        --icon: #787878;
+        --card-bg: #f7f7fa;
+        --card-text: #1c1c24;
+        --card-sub: #6a6a78;
+        --scrim: #ffffffb0;
+        --mod-active-bg: #d7f0e4;
+    }
+}
+
+* { box-sizing: border-box; }
+/* 批次 21 #9: the IME window is TALLER than the keyboard (the native float
+ * band above it); html/body stay transparent so the app shows through the
+ * band - only #softKeyboard paints the keyboard background. */
+html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: transparent; }
+body {
+    font-family: system-ui, -apple-system, "Noto Sans", "Noto Sans CJK SC", sans-serif;
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-tap-highlight-color: transparent;
+}
+button { font: inherit; }
+
+/* Height budget (batch 16): 14 + 2 + 40(bar) + 10(gap) + 4*44 + 3*5 + 15 =
+ * 272 (272dp view). Batch 16 #2: the bar grows to 40px (bigger touch
+ * targets) and the row gap drops 8 -> 5 (a third tighter) to pay for it;
+ * the total height never changes. Batch 16 #8: the key height itself is
+ * tunable through --kb-row-h (quick settings), clamped by applyHeight(). */
+#softKeyboard {
+    /* 批次 21 #9: pinned to the BOTTOM of the (taller) IME view; the band
+     * above (--band, native-driven) is transparent and shows the app. */
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: calc(100% - var(--band, 0px));
+    padding: 14px 4px 15px;
+    background: var(--bg);
+    /* clip, not hidden: a focused editor-strip input auto-SCROLLS a
+       hidden-overflow container (programmatic scroll), shoving every
+       absolutely-positioned layer (voice card, preedit) off the keyboard
+       top - caught by the batch-21 device suite. */
+    overflow: hidden;
+    overflow: clip;
+    display: flex;
+    flex-direction: column;
+}
+/* Landscape (batch 16 #8): the native side caps the IME view at a third of
+ * the screen, so every chrome row compresses and the rows live on the
+ * applyHeight() budget. */
+/* 批次 20 #6d: --safe-bottom (native gesture-nav inset, CSS px) lifts the
+ * rows above the gesture strip; the keyboard background fills the gap. */
+body.landscape #softKeyboard { padding: 4px 4px calc(4px + var(--safe-bottom, 0px)); }
+/* 批次 21 #10: the landscape bar grew (26 -> 40) and moved DOWN (margin-top
+ * 2 -> 14) so the pinyin preedit line (0-14px) no longer overlaps the
+ * candidates; applyHeight() charges 78 for the landscape chrome now. */
+body.landscape #candidateBar { height: 40px; margin-top: 14px; margin-bottom: 4px; }
+body.landscape #candidateBar .tool,
+body.landscape #settingsPageBar .tool { width: 30px; height: 30px; }
+body.landscape #candidates { min-height: 40px; }
+body.landscape .candidate { height: 40px; line-height: 40px; font-size: 16px; }
+body.landscape .kb-row { gap: 4px; margin-bottom: 3px; }
+body.landscape #symCatBar { margin-top: 3px; gap: 4px; }
+
+/* Composing preedit floats over the top padding; the keyboard height never
+ * changes between idle and composing (reference IME behaviour). */
+/* Batch 14 (#2): the candidate bar moved down (margin-top), so the pinyin
+ * line no longer overlaps it. */
+#preeditLine {
+    display: none;
+    position: absolute;
+    top: 0;
+    left: 8px;
+    height: 14px;
+    line-height: 14px;
+    max-width: calc(100% - 16px);
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    /* Batch 4: raw pinyin must be legible at a glance (review note b). */
+    font-size: 13px;
+    color: var(--text);
+    z-index: 5;
+}
+body.composing #preeditLine { display: block; }
+
+/* ===== Candidate / tool bar ===== */
+#candidateBar {
+    flex: none;
+    /* Batch 16 #2: 40px - bigger pills and a wider candidate strip. */
+    height: 40px;
+    display: flex;
+    align-items: center;
+    /* Batch 15 (#6): wider tool spacing - 5px caused mis-taps. */
+    gap: 8px;
+    /* Batch 14 (#2): ride lower, clear of the pinyin line above. */
+    margin-top: 2px;
+    margin-bottom: 10px;
+}
+#candidateBar .tool {
+    flex: none;
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    /* Measured toolbar button (not the logo disc): --pill #3d3d3d/#ffffff. */
+    background: var(--pill);
+    color: var(--icon);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+#candidateBar .tool:active, #candidateBar .tool.active-touch { background: var(--pressed); }
+/* Batch 15 (#11): settings sub-page chrome rides the toolbar - back +
+ * title on the left, close on the right, all in .tool pill styling; the
+ * regular tools (logo, gear, clipboard, favorites, mic, hide, strip) hide
+ * while a sub-page is up. */
+#settingsPageBar {
+    display: none;
+    flex: 1;
+    min-width: 0;
+    align-items: center;
+    gap: 8px;
+}
+#settingsPageBar .tool { flex: none; width: 32px; height: 32px; }
+#settingsPageBar .page-title {
+    flex: 1;
+    min-width: 0;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+body.settings-page #settingsPageBar { display: flex; }
+body.settings-page #candidates,
+body.settings-page #setupButton,
+body.settings-page #fullSetupButton,
+body.settings-page #ctrlTool,
+body.settings-page #imeSwitchButton,
+body.settings-page #clipboardButton,
+body.settings-page #favoritesButton,
+body.settings-page #mic,
+body.settings-page #hide,
+body.settings-page .compose-tool { display: none; }
+/* [hidden] must win even against the settings-page swap (lint R2). */
+#setupButton[hidden], #fullSetupButton[hidden], #clipboardButton[hidden],
+#favoritesButton[hidden], #hide[hidden], #settingsPageBar[hidden],
+#ctrlTool[hidden], #imeSwitchButton[hidden] {
+    display: none !important;
+}
+/* Author display:flex beats the UA [hidden] rule - compose controls and the
+ * M4 toolbar swap never actually hid without this (review: P1). */
+#candidateBar .tool[hidden] { display: none; }
+/* Batch 8: the clipboard/favorites panel replaces the toolbar row entirely. */
+#candidateBar[hidden] { display: none; }
+#modeButton {
+    width: auto;
+    min-width: 30px;
+    padding: 0 7px;
+    font-weight: 700;
+    font-size: 12px;
+    color: var(--text);
+    background: var(--special);
+}
+#modeButton:active, #modeButton.active-touch { background: var(--pressed); }
+#candidates {
+    min-width: 0;
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    white-space: nowrap;
+    scrollbar-width: none;
+    min-height: 40px;
+    padding: 0 2px;
+}
+#candidates::-webkit-scrollbar { display: none; }
+.candidate {
+    flex: none;
+    height: 34px;
+    padding: 0 8px;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--text);
+    font-size: 17px;
+    line-height: 34px;
+}
+.candidate:active, .candidate.active-touch { background: var(--pressed); }
+/* First candidate: accent text on a pill (both themes, reference behaviour). */
+.candidate.first { color: var(--accent); background: var(--pill); }
+
+#mic.listening { background: #3c1a1a; box-shadow: inset 0 0 0 1.5px var(--recording); color: var(--recording); animation: pulse 1.3s ease-in-out infinite; }
+#mic.loading { opacity: .55; color: var(--accent); }
+#mic.stopping { opacity: .55; }
+#mic.error { color: var(--danger); }
+#mic[disabled] { opacity: .35; }
+@keyframes pulse { 50% { box-shadow: inset 0 0 0 1.5px var(--recording), 0 0 12px #ff4d4d88; } }
+
+/* ===== Key layers ===== */
+/* Batch 16 #2: the row gap drops to 5px (a third tighter) - the freed
+ * height funds the taller candidate bar. */
+.kb-row { display: flex; gap: 5px; margin-bottom: 5px; }
+.kb-row:last-child { margin-bottom: 0; }
+.kb-row.kb-indent { padding: 0 4.9%; }
+/* Batch 16 #8: key height is the tunable variable (default 44). */
+.kb-key, .sym-tab {
+    flex: 1;
+    min-width: 0;
+    height: var(--kb-row-h, 44px);
+    padding: 0;
+    border: 0;
+    border-radius: 5px;
+    background: var(--key);
+    color: var(--text);
+    font-size: 13px;
+    font-weight: 550;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    touch-action: none;
+}
+.kb-key:active, .kb-key.active-touch, .sym-tab:active, .sym-tab.active-touch { background: var(--pressed); }
+.kb-key.kb-letter { flex-direction: column; gap: 2px; }
+/* Batch 16 #8: glyphs scale with the row height (dragging the keyboard
+ * shorter shrinks the font too - nothing overflows the key face). */
+.kb-main { font-size: min(22px, calc(var(--kb-row-h, 44px) * 0.5)); line-height: 1; font-weight: 400; }
+.kb-alt { color: var(--muted); font-size: 9px; line-height: 1; font-weight: 400; }
+.kb-special { background: var(--special); font-size: min(15px, calc(var(--kb-row-h, 44px) * 0.34)); font-weight: 500; }
+.kb-mod.active, .kb-mod.locked { color: var(--accent); background: var(--mod-active-bg, #103a24); box-shadow: inset 0 0 0 1px var(--accent); }
+.kb-wide-1_4 { flex: 1.4; }
+.kb-wide-2_1 { flex: 2.1; }
+.kb-wide-2_25 { flex: 2.25; }
+.kb-wide-1_15 { flex: 1.15; }
+.kb-wide-4 { flex: 4.15; }
+/* Batch 10 (WeChat reference): symbol row 4 = ABC | sliding categories |
+ * enter. The strip fades at both edges and the next tab peeks in, so the
+ * row reads as scrollable. */
+/* Batch 16: margin 9 -> 5 - the taller candidate bar consumed the slack and
+ * the four symbol rows must stay inside the same 272px budget. */
+#symCatBar { display: flex; gap: 5px; margin-top: 5px; }
+#symCatBar [data-action="letters"] { flex: 1.35; font-size: 13px; }
+#symEnterKey { flex: 1.35; font-size: 13px; }
+#symCats {
+    flex: 4.8;
+    display: flex;
+    gap: 5px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    -webkit-mask-image: linear-gradient(to right, transparent, #000 12px, #000 calc(100% - 12px), transparent);
+    mask-image: linear-gradient(to right, transparent, #000 12px, #000 calc(100% - 12px), transparent);
+}
+.sym-cat {
+    flex: none;
+    flex: 0 0 auto;
+    min-width: 52px;
+    /* Batch 16 #5: every key on the symbol layer shares the row height -
+     * categories, ABC and enter all track --kb-row-h (was a fixed 44 that
+     * could disagree with the compressed editing rows). */
+    height: var(--kb-row-h, 44px);
+    padding: 0 10px;
+    border: 0;
+    border-radius: 5px;
+    background: var(--special);
+    /* Reference IME keeps category labels readable on both themes; the old
+     * muted tone washed out on the light palette. */
+    color: var(--text);
+    font-size: 13px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    /* pan-x: category taps have no touch handlers, and `none` here would
+     * intersect with the scroll container and kill the strip's horizontal
+     * drag (review batch5 P1). */
+    touch-action: pan-x;
+}
+/* Batch 8: the active category matches the expanded area's white pill inside
+ * a pale capsule - the old accent outline clashed with the main keyboard. */
+.sym-cat.active {
+    background: var(--key);
+    color: var(--text);
+    font-weight: 600;
+}
+.sym-cat:active, .sym-cat.active-touch { background: var(--pressed); }
+/* Batch 13 (#5): single-glyph cells read at near-main-key size - 13px on a
+ * 44px cell wasted the key face and hurt digit recognition. */
+.kb-key.sym-single { font-size: min(20px, calc(var(--kb-row-h, 44px) * 0.46)); font-weight: 400; }
+.sym-multi {
+    font-size: 11px;
+    /* Batch 15 review P3: custom-table cells can hold long strings - clip
+     * instead of wrapping the 44px cell open. */
+    white-space: nowrap;
+    overflow: hidden;
+}
+/* Batch 15: the key map's second-row indent is a bare spacer (no paint). */
+.kmap-pad { min-width: 0; }
+.sym-blank { flex: 1; min-width: 0; height: var(--kb-row-h, 44px); background: transparent; }
+/* 分词 (syllable separator) rides in the Shift slot of Chinese layouts. */
+.sep { font-size: 14px; font-weight: 500; }
+.kb-layer[hidden] { display: none; }
+.kb-layer { flex: 1; display: flex; flex-direction: column; justify-content: space-between; }
+#symGrid { flex: 1; display: flex; flex-direction: column; justify-content: space-between; }
+#symGrid .kb-row:last-child { margin-bottom: 0; }
+
+/* In-space mic glyph (batch 9, WeChat reference): the space key shows ONLY
+ * a centered mic - the mode shorthand lives on the adjacent toggle key.
+ * Batch 11 (#4): text colour at 55% - muted washed out on the light key
+ * surface and read as "missing"; the key itself is a plain key cap now. */
+#spaceKey { position: relative; }
+#spaceKey .space-mic {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    width: 18px;
+    height: 18px;
+    color: var(--text);
+    opacity: .55;
+    pointer-events: none;
+}
+#spaceKey.voice .space-mic { color: var(--recording); opacity: 1; }
+
+/* Chinese/English toggle, WeChat reference (batch 8): plain text, no accent
+ * colour or highlight - the big current-language glyph with the small target
+ * language tucked into the lower-right corner of the same key. Batch 9: the
+ * glyphs are the MODE SHORTHANDS (拼/双/En/FR/РУ/日). */
+#modeToggle { position: relative; line-height: 1; }
+#modeToggle .cn-main { font-size: min(17px, calc(var(--kb-row-h, 44px) * 0.4)); font-weight: 500; }
+#modeToggle .cn-sub {
+    position: absolute;
+    right: 4px;
+    bottom: 4px;
+    font-size: 9px;
+    font-weight: 400;
+    /* muted is near-invisible on the special key surface in the light theme
+     * (batch 10: users read it as "missing"); text colour at 55% reads on
+     * both themes. */
+    color: var(--text);
+    opacity: .55;
+}
+
+/* Batch 9: the punctuation slot's main glyph sits dead-center; the small
+ * alt preview overlays the top-left corner instead of squeezing the layout
+ * (the full-width 。glyph read as off-center inside the column flow). */
+/* position:relative keeps the absolute spans inside the button - without it
+   they resolve against the page and overlay the whole keyboard (every tap
+   then hits the punct key - caught by the batch-9 AVD suite). */
+.kb-key[data-key="."] { position: relative; }
+/* Fullwidth 。/， ink sits in the left half of the em box - shift right so
+   the GLYPH reads centered (batch 10; zh-punct class is mode-toggled).
+   Batch 12 (#5): the alt preview "，" leans the same way - give it the
+   identical optical correction. */
+.kb-key.zh-punct .kb-main { transform: translateX(.3em); }
+.kb-key.zh-punct .kb-alt { transform: translateX(.3em); }
+.kb-key[data-key="."] .kb-main {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: min(22px, calc(var(--kb-row-h, 44px) * 0.5));
+}
+/* Batch 13 (#3): center the alt preview across the key width - the old
+ * left-anchored preview read as off-center even after the .3em shift
+ * (a 9px glyph barely moves under an em-relative transform). */
+.kb-key[data-key="."] .kb-alt {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 4px;
+    text-align: center;
+}
+
+/* ===== Clipboard / favorites panel ===== */
+#panelLayer {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+#panelLayer[hidden] { display: none; }
+.panel-head {
+    flex: none;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 2px 0 8px;
+}
+.panel-head .tool {
+    flex: none;
+    width: 30px;
+    height: 30px;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    background: var(--logo-bg);
+    color: var(--icon);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+/* Batch 9: the clipboard/favorites tabs live in one pale capsule (the
+ * expanded area's tab container); the ACTIVE tab is the white pill. The
+ * inactive tabs are transparent with muted text so the selection reads
+ * instantly in both themes - the old grey-pills pair was unreadable. */
+.panel-tabs {
+    flex: none;
+    display: flex;
+    background: var(--pressed);
+    border-radius: 16px;
+    padding: 2px;
+}
+.panel-tab, .panel-action {
+    height: 26px;
+    padding: 0 14px;
+    border: 0;
+    border-radius: 13px;
+    background: transparent;
+    color: var(--muted);
+    font-size: 13px;
+}
+.panel-tab.active {
+    background: var(--key);
+    color: var(--text);
+    font-weight: 600;
+}
+.panel-action { margin-left: auto; color: var(--text); height: 30px; }
+#panelList {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    border-radius: 10px;
+    background: var(--panel);
+    padding: 4px;
+}
+.panel-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    min-height: 44px;
+    padding: 8px 10px;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--text);
+    font-size: 14px;
+    text-align: left;
+}
+.panel-item:active { background: var(--pressed); }
+.panel-item.disabled { color: var(--muted); }
+.panel-text {
+    flex: 1;
+    min-width: 0;
+    /* Two-line clamp per the reference panel (design §3.5). */
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    overflow: hidden;
+    word-break: break-all;
+}
+.panel-remove {
+    flex: none;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--muted);
+    font-size: 16px;
+}
+#panelEmpty {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--muted);
+    font-size: 13px;
+    text-align: center;
+    padding: 0 24px;
+}
+#panelEmpty[hidden] { display: none; }
+
+/* ===== Control-key layer (batch 16 #7, reworked batch 17/18) ===== */
+/* Replaces the candidate bar slot. Batch 18 round 2: use the WHOLE slot
+ * PLUS the 11px preedit padding the ctrl view collapses (63px total),
+ * minus 3px of breathing room top and bottom - the keys grow to 27px
+ * while the keyboard rows below keep their full height. 8-column grid +
+ * the main keyboard's key language stay. */
+#ctrlLayer {
+    flex: none;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    height: 57px;
+    margin-top: 3px;
+    margin-bottom: 3px;
+}
+#ctrlLayer[hidden] { display: none; }
+/* Batch 18 round 2: the 14px top padding exists for the composing preedit
+ * line, which the ctrl view never shows - collapse it there (kept OUT of
+ * applyHeight's chrome so the keyboard rows below keep their height) and
+ * hand the space to the control keys. */
+body.ctrl-view #softKeyboard { padding-top: 3px; }
+/* Landscape mirrors its slot (批次 21 #10: the bar slot grew to 14 + 40 +
+ * 4, so the two ctrl rows take real keys again: 3 + 58 + 3 with 27px rows -
+ * they were an unusable 13px). */
+body.landscape #ctrlLayer { height: 58px; margin-top: 3px; margin-bottom: 3px; gap: 2px; }
+#ctrlLayer .ctrl-row {
+    display: grid;
+    grid-template-columns: repeat(8, 1fr);
+    gap: 2px;
+    margin-bottom: 0;
+    height: 27px;
+}
+body.landscape #ctrlLayer .ctrl-row { gap: 2px; height: 27px; }
+#ctrlLayer .ctrl-key {
+    height: 100%;
+    /* 批次 19 #2/#3: the rows borrow the MAIN keyboard's key language -
+       letter-key face and the same pressed feedback (declared right below;
+       the .ctrl-close overrides keep its bare no-face look). */
+    background: var(--key);
+    color: var(--text);
+    font-size: 14px;
+    font-weight: 550;
+    border-radius: 4px;
+    letter-spacing: 0;
+    padding: 0;
+}
+#ctrlLayer .ctrl-key:active, #ctrlLayer .ctrl-key.active-touch { background: var(--pressed); }
+body.landscape #ctrlLayer .ctrl-key { font-size: 11px; border-radius: 3px; }
+#ctrlLayer .ctrl-key[data-ctrl="ArrowUp"], #ctrlLayer .ctrl-key[data-ctrl="ArrowDown"],
+#ctrlLayer .ctrl-key[data-ctrl="ArrowLeft"], #ctrlLayer .ctrl-key[data-ctrl="ArrowRight"],
+#ctrlLayer .ctrl-key[data-ctrl="sticky-meta"] {
+    font-size: 16px;
+}
+body.landscape #ctrlLayer .ctrl-key[data-ctrl="ArrowUp"],
+body.landscape #ctrlLayer .ctrl-key[data-ctrl="ArrowDown"],
+body.landscape #ctrlLayer .ctrl-key[data-ctrl="ArrowLeft"],
+body.landscape #ctrlLayer .ctrl-key[data-ctrl="ArrowRight"],
+body.landscape #ctrlLayer .ctrl-key[data-ctrl="sticky-meta"] { font-size: 11px; }
+/* The close affordance keeps its grid cell (columns stay aligned) but has
+ * no key face - a bare X, muted, brightening on touch. */
+#ctrlLayer .ctrl-close {
+    background: transparent;
+    color: var(--muted);
+}
+#ctrlLayer .ctrl-close:active, #ctrlLayer .ctrl-close.active-touch { background: transparent; color: var(--text); }
+#ctrlLayer .ctrl-close svg { width: 14px; height: 14px; }
+body.landscape #ctrlLayer .ctrl-close svg { width: 12px; height: 12px; }
+/* Sticky modifiers light up like the shift key (same green, same inset).
+ * Only the armed `.active` state - `.active-touch` is the PRESS class and
+ * must keep the grey pressed face (批次 19 #3), matching how the main
+ * keyboard's shift behaves (armed = green, held = pressed grey). */
+#ctrlLayer .ctrl-key.active {
+    color: var(--accent);
+    background: var(--mod-active-bg, #103a24);
+    box-shadow: inset 0 0 0 1px var(--accent);
+}
+#ctrlLayer .ctrl-close.active {
+    background: transparent;
+    box-shadow: none;
+}
+
+/* The combo grid (long-press Ctrl/Alt/Win, or the Comb key): a card that
+ * borrows the main keyboard's key language - special-key faces, the green
+ * active inset on press, modifier names as small muted text above the big
+ * key glyph. */
+#comboPopup {
+    display: none;
+    position: fixed;
+    z-index: 34;
+    pointer-events: auto;
+    padding: 6px;
+    border-radius: 14px;
+    background: var(--panel);
+    border: 1px solid rgba(128, 128, 140, .22);
+    box-shadow: 0 12px 32px #000a;
+}
+/* 批次 19 #1: the close X is its own floating badge centred on the card's
+ * top-right CORNER point (offset = half its size) - it takes no room from
+ * the grid, unlike the old top strip that padded the whole card. */
+#comboClose {
+    position: absolute;
+    top: -14px;
+    right: -14px;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border: 1px solid rgba(128, 128, 140, .30);
+    border-radius: 50%;
+    background: var(--special);
+    color: var(--text);
+    font-size: 17px;
+    line-height: 1;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, .45);
+}
+#comboClose:active, #comboClose.active-touch { background: var(--pressed); color: var(--text); }
+/* fixed + shrink-to-fit collapses 1fr tracks to 0 - fixed cell widths.
+ * The cells live in #comboPopupInner - the GRID goes there, not on the
+ * fixed-positioned wrapper (else all nine cells stack in one column). */
+#comboPopup.open { display: block; }
+#comboPopupInner {
+    display: none;
+}
+#comboPopup.open #comboPopupInner {
+    display: grid;
+    /* 批次 22 #0.3: --combo-cell (set at open time) shrinks the grid into
+     * short (landscape) keyboards; 58px is the portrait design size. */
+    grid-template-columns: repeat(3, var(--combo-cell, 58px));
+    gap: 6px;
+}
+.combo-cell {
+    width: var(--combo-cell, 58px);
+    height: var(--combo-cell, 58px);
+    border: 0;
+    border-radius: 8px;
+    /* 批次 20 #4: the grid borrows the main keyboard's LETTER-key face
+     * (--key), not the special grey - it reads as the same palette as the
+     * keyboard behind it and follows light/dark through the tokens. */
+    background: var(--key);
+    color: var(--text);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    text-align: center;
+    line-height: 1.2;
+}
+.combo-cell .combo-mod { color: var(--text); opacity: .6; font-size: 9.5px; font-weight: 500; }
+.combo-cell .combo-main { font-size: 14px; font-weight: 550; }
+.combo-cell:active, .combo-cell.active-touch {
+    background: var(--pressed);
+    box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+/* ===== Keyboard height adjust (batch 16 #8, reworked batch 18) ===== */
+/* One card pinned to the keyboard's TOP edge (it moves with the top edge
+ * while dragging - the IME cannot paint above its own window). The drag
+ * strip and the value/cancel/save all live IN the card, so nothing
+ * overlays the keys or the strip any more; the card owns its own 36px of
+ * layout (body.height-editing pushes the bar down) instead of covering. */
+#heightHandle.height-handle {
+    position: absolute;
+    top: 3px;
+    left: 4px;
+    right: 4px;
+    height: 34px;
+    z-index: 38;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 0 8px 0 14px;
+    border-radius: 10px;
+    background: var(--panel);
+    box-shadow: 0 4px 14px rgba(0, 0, 0, .35);
+    cursor: ns-resize;
+    touch-action: none;
+}
+#heightHandle[hidden] { display: none; }
+#heightHandle.height-handle i {
+    flex: none;
+    width: 52px;
+    height: 4px;
+    border-radius: 2px;
+    background: var(--pressed);
+    box-shadow: 0 0 0 1px var(--pill);
+}
+#heightHint {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    color: var(--text);
+    font-size: 12px;
+    white-space: nowrap;
+    /* Taps on the strip must start drags (only buttons take theirs). */
+    pointer-events: none;
+}
+#heightHint.dragging { color: var(--accent); }
+/* Big enough to tap reliably while dragging (batch 16 user feedback). */
+#heightHint button {
+    pointer-events: auto;
+    border: 0;
+    border-radius: 8px;
+    background: var(--pill);
+    color: var(--text);
+    font-size: 12.5px;
+    padding: 7px 13px;
+}
+#heightHint #heightSave { background: var(--accent); color: #07180e; font-weight: 600; }
+/* The card owns its slice of layout: the bar drops below it while editing
+ * (batch 18 - the old overlay covered the first key row). */
+body.height-editing #candidateBar { margin-top: 39px; }
+
+/* ===== Mode menu ===== */
+/* Batch 9: opened by LONG-PRESSING the space-adjacent toggle key. 批次 22
+ * #0.4: anchor-driven - toggleModeMenu hugs the toggle's top edge (window
+ * coordinates, so it uses the band above the keyboard when there is one
+ * and stays clear of the key rows); only a short band (landscape) drops it
+ * to window-top + scroll. The static bottom/right below is just the
+ * no-JS/preview fallback. */
+#modeMenu {
+    display: none;
+    /* Batch 12 (#3): single column - six keyboards read top-to-bottom. */
+    grid-template-columns: 1fr;
+    position: fixed;
+    bottom: 62px;
+    right: 4px;
+    width: max-content;
+    min-width: 180px;
+    max-width: 70%;
+    overflow-y: auto;
+    z-index: 30;
+    padding: 4px;
+    border-radius: 12px;
+    background: var(--panel);
+    box-shadow: 0 -10px 28px #000a;
+}
+#modeMenu.open { display: grid; }
+/* Batch 16 (#6): compact rows (32px, was 42 - five items exceeded the
+ * keyboard height), shorthand FIRST then the full title, left aligned with
+ * no trailing blank (padding stays so it doesn't read cramped). */
+#modeMenu button {
+    display: flex;
+    justify-content: flex-start;
+    align-items: center;
+    gap: 9px;
+    min-height: 32px;
+    padding: 0 10px;
+    border: 0;
+    border-radius: 7px;
+    background: transparent;
+    color: var(--text);
+    font-size: 12.5px;
+    text-align: left;
+}
+#modeMenu button.current { color: var(--accent); font-weight: 700; }
+#modeMenu button.preparing { color: var(--muted); }
+#modeMenu button .prep {
+    min-width: 22px;
+    text-align: center;
+    font-size: 10.5px;
+    color: var(--muted);
+}
+
+/* ===== Voice overlay: recording ONLY, high contrast vs background ===== */
+#voiceOverlay { display: none; }
+#voiceOverlay.open { display: block; }
+#voiceScrim {
+    position: absolute;
+    inset: 0;
+    z-index: 39;
+    background: var(--scrim);
+}
+#voiceCard {
+    position: absolute;
+    left: 50%;
+    top: 42%;
+    transform: translate(-50%, -50%);
+    z-index: 40;
+    width: 230px;
+    padding: 16px 16px 14px;
+    border-radius: 14px;
+    background: var(--card-bg);
+    color: var(--card-text);
+    /* Batch 9: theme-aware card on a themed scrim - the deep shadow keeps
+     * it reading as a floating layer in BOTH colour modes. 批次 21 #11:
+     * max-height keeps the card inside short (landscape) keyboards. */
+    box-shadow: 0 22px 54px #00000066, 0 4px 14px #00000038;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 9px;
+    max-height: calc(100% - 12px);
+}
+/* 批次 21 #11: the recording dot became a half-height mic icon (20px) - the
+ * pulse animates the icon itself (colour pulse via opacity), both themes. */
+#voiceCard .vc-mic {
+    width: 20px;
+    height: 20px;
+    color: var(--recording);
+    animation: vcPulse 1.2s ease-in-out infinite;
+}
+#voiceCard .vc-mic svg { display: block; width: 100%; height: 100%; }
+@keyframes vcPulse { 50% { opacity: .55; transform: scale(1.15); } }
+/* 批次 21 #11: landscape keyboards are short (~170-200px) - compact the
+ * card and center it so nothing clips. */
+body.landscape #voiceCard {
+    top: 50%;
+    width: 200px;
+    padding: 10px 12px 9px;
+    gap: 5px;
+}
+#voiceStatus { font-size: 13px; font-weight: 650; color: var(--card-text); min-height: 17px; text-align: center; }
+#partialText {
+    font-size: 14px;
+    font-weight: 550;
+    color: var(--accent);
+    min-height: 18px;
+    max-width: 200px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    text-align: center;
+}
+#levelBar {
+    width: 100%;
+    height: 6px;
+    border-radius: 3px;
+    background: var(--pressed);
+    overflow: hidden;
+}
+#levelBar i {
+    display: block;
+    width: 100%;
+    height: 100%;
+    background: #ff4d4d;
+    transform-origin: left center;
+    transform: scaleX(0);
+    transition: transform 80ms linear;
+}
+#voiceHint { font-size: 11px; color: var(--card-sub); }
+
+/* ===== Long-press popup ===== */
+/* Batch 6: candidates flow in a wrap grid up to three columns (the reference 3x3) and
+ * the inner layer shrinks/fades when the finger drags away to cancel. */
+#keyPopup {
+    display: none;
+    position: fixed;
+    z-index: 30;
+    pointer-events: none;
+}
+#keyPopup.open { display: flex; }
+#keyPopupInner {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 4px;
+    max-width: 153px; /* 3 x 47px cells + 2 x 4px gaps */
+    transform-origin: 50% 50%;
+    will-change: transform, opacity;
+}
+.kp-item {
+    width: 47px;
+    height: 45px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--panel);
+    color: var(--text);
+    box-shadow: 0 3px 12px #000a;
+}
+.kp-item.sel { color: #07180e; background: var(--accent); }
+
+/* Batch 12 (#7): flick feedback is a viscous direction blob (WAAPI-driven
+ * transforms live in showFlick) - never a character preview, the character
+ * actually lands. */
+#flickBlob {
+    display: none;
+    position: fixed;
+    z-index: 31;
+    border-radius: 50%;
+    /* top-lit droplet: brighter where it "sticks" to the key surface
+     * (fixed rgba - accent #23c890 - color-mix is too new for old WebViews) */
+    background: radial-gradient(circle at 50% 68%,
+        rgba(35, 200, 144, 0.55) 0%,
+        rgba(35, 200, 144, 0.18) 55%,
+        transparent 78%);
+    pointer-events: none;
+}
+#flickBlob.run { display: block; }
+
+#toast {
+    display: none;
+    position: absolute;
+    left: 50%;
+    top: 44px;
+    transform: translateX(-50%);
+    z-index: 40;
+    max-width: 90%;
+    padding: 7px 11px;
+    border-radius: 7px;
+    background: #3c2530;
+    color: #ffd8dc;
+    font-size: 11px;
+    white-space: nowrap;
+}
+#toast.open { display: block; }
+
+
+/* Batch 14 (#4): while the phrase editor strip shows, the key area
+ * compresses so strip + candidate bar + keyboard share the 272px budget. */
+body.editing .kb-key { height: calc(var(--kb-row-h, 44px) * 0.82); }
+body.editing .kb-key[data-key="."] .kb-main { font-size: 18px; }
+body.editing #panelEditor {
+    flex: none;
+    padding: 0 0 4px;
+}
+body.editing .phrase-input { font-size: 13px; padding: 6px 9px; }
+body.editing .phrase-add, body.editing .phrase-cancel { padding: 6px 10px; }
+
+/* ===== Expanded candidate area (batch 4, reworked batch 6) ===== */
+/* The whole keyboard becomes the candidate surface. Batch 6 follows the
+ * WeChat reference: a 词频/单字 filter tab row, an optional parse-variant
+ * column (double pinyin) and a vertically scrolling candidate grid whose
+ * type sizes reuse the main candidate/key language. */
+#expandLayer {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    background: var(--bg);
+    /* Above the tool layers; below voiceOverlay(39)/voiceCard(40). */
+    z-index: 35;
+}
+#expandLayer[hidden] { display: none; }
+body.expanded #preeditLine { display: none; }
+.expand-head {
+    flex: none;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 7px 10px 5px;
+}
+/* WeChat reference: the tabs live inside one pale rounded capsule and the
+ * active tab is a white pill inside it. */
+.expand-tabs {
+    flex: none;
+    display: flex;
+    background: var(--pressed);
+    border-radius: 16px;
+    padding: 2px;
+}
+.expand-tab {
+    flex: none;
+    border: 0;
+    border-radius: 14px;
+    background: transparent;
+    color: var(--muted);
+    font-size: 14px;
+    padding: 5px 14px;
+}
+.expand-tab.active {
+    background: var(--key);
+    color: var(--text);
+    font-weight: 600;
+}
+#expandPreedit {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    text-align: right;
+    font-size: 14px;
+    color: var(--muted);
+}
+/* WeChat reference: the collapse control is a bare chevron - no pill, no
+ * border (batch 8). The .tool pill styling is overridden, not relied on. */
+#expandCollapse {
+    /* border:0 matters: the UA <button> outset border is exactly the
+     * "half light / half dark ring" seen on the expanded area (batch 10). */
+    border: 0;
+    background: transparent;
+    color: var(--muted);
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+}
+#expandCollapse:active, #expandCollapse.active-touch {
+    background: var(--pressed);
+    color: var(--text);
+}
+.expand-body {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+}
+/* Parse-variant column (double pinyin): one exact parse per row, small grey
+ * keys with a row rule, the active row shaded (WeChat reference). */
+#expandVariants {
+    flex: none;
+    width: 72px;
+    overflow-y: auto;
+    overflow-x: hidden;
+    touch-action: pan-y;
+    border-right: 1px solid var(--pressed);
+    display: flex;
+    flex-direction: column;
+}
+#expandVariants[hidden] { display: none; }
+.expand-variant {
+    flex: none;
+    border: 0;
+    border-bottom: 1px solid var(--pressed);
+    background: transparent;
+    color: var(--muted);
+    font-size: 13px;
+    padding: 0 4px;
+    height: 44px;
+    white-space: nowrap;
+}
+.expand-variant.current {
+    background: var(--pressed);
+    color: var(--text);
+    font-weight: 600;
+}
+/* Batch 12 (#4): candidates flow as width-to-content chips in a wrapping
+ * row - a 12-character word must be READABLE (the fixed 5-column grid
+ * ellipsised everything past two glyphs). Denser type and padding show
+ * more candidates per screen. */
+#expandGrid {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-wrap: wrap;
+    align-content: flex-start;
+    align-items: flex-start;
+    overflow-y: auto;
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-y;
+}
+.expand-candidate {
+    flex: none;
+    max-width: 252px; /* 12 glyphs at 18px + padding, per the input cap */
+    border: 0;
+    background: transparent;
+    color: var(--text);
+    font-size: 18px;
+    line-height: 1;
+    padding: 0 10px;
+    height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    touch-action: pan-y;
+}
+.expand-candidate.first { color: var(--accent); font-weight: 600; }
+.expand-candidate:active, .expand-candidate.active-touch { background: var(--pressed); }
+.expand-empty {
+    flex: none;
+    width: 100%;
+    color: var(--muted);
+    font-size: 14px;
+    text-align: center;
+    padding: 18px 0;
+}
+/* Batch 9: while a variant switch replays, the grid still shows the PREVIOUS
+ * parse's candidates (ids invalid for the new one) - dim it and refuse taps
+ * so a fast tap cannot get lost. */
+#expandGrid.reloading { opacity: .5; pointer-events: none; }
+
+/* ===== Quick settings panel (batch 9; batch 11 sub-pages) =====
+ * Batch 14 (#6b): an in-flow replacement of the KEY AREA (same mechanism as
+ * the panel layer) - no floating card, the toolbar above stays put. */
+#settingsPanel {
+    flex: 1;
+    display: none;
+    flex-direction: column;
+    min-height: 0;
+    padding: 2px 4px 0;
+    background: var(--bg);
+    overflow-y: auto;
+}
+#settingsPanel.open { display: flex; }
+#settingsPanel[hidden] { display: none; }
+/* Batch 12 #6 / batch 15: 自然码 key map drawn as an actual key layout.
+ * Batch 16 (#4): no more shift/⌫ placeholder cells - every row is centered
+ * on its own (flex), keys keep one uniform width, so the shorter third row
+ * reads as a proper centered row instead of a padded one. Batch 16 (#6): V's
+ * two short finals share one line ("ui ü"). */
+#schemaMap { margin: 4px 0 2px; font-size: 11px; color: var(--text); }
+#schemaMap .map-notes { margin-bottom: 8px; }
+#schemaMap .map-line { margin-bottom: 4px; color: var(--muted); font-size: 11px; }
+#schemaMap .kmap-row {
+    display: flex;
+    justify-content: center;
+    gap: 4px;
+    margin-bottom: 4px;
+}
+.kmap-key {
+    flex: none;
+    width: 9.2%;
+    min-width: 0;
+    background: var(--key);
+    border-radius: 5px;
+    padding: 3px 0;
+    text-align: center;
+    line-height: 1.25;
+}
+.kmap-key b { display: block; font-size: 12px; font-weight: 600; color: var(--text); }
+.kmap-key span { display: block; font-size: 8px; color: var(--muted); white-space: nowrap; }
+.kmap-key i { font-style: normal; font-size: 8px; color: var(--accent); }
+/* Batch 15 (#7): the custom table's per-row preview. */
+.custom-editor .set-row { align-items: center; }
+.custom-preview {
+    flex: 1;
+    min-width: 0;
+    color: var(--muted);
+    font-size: 12px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+/* 批次 21 #7: the JSON editor's action buttons row. */
+.custom-actions { display: flex; gap: 6px; margin-top: 8px; }
+.custom-actions .set-nav { flex: none; }
+/* 批次 21 #7: the custom tab renders as three horizontally scrollable
+ * strips (unlimited keys per row, drag to pan) with a fixed backspace
+ * column on the right. */
+.sym-custom { flex: 1; min-height: 0; display: flex; gap: 5px; }
+.sym-custom-rows {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+}
+.sym-custom-row {
+    flex: 1;
+    display: flex;
+    gap: 5px;
+    margin-bottom: 5px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    touch-action: pan-x;
+    scrollbar-width: none;
+}
+.sym-custom-row::-webkit-scrollbar { display: none; }
+.sym-custom-row:last-child { margin-bottom: 0; }
+.sym-custom-key {
+    flex: none;
+    width: auto;
+    min-width: 44px;
+    max-width: 96px;
+    padding: 0 10px;
+    font-size: 15px;
+    white-space: nowrap;
+    overflow: hidden;
+    /* 批次 21 #7 (review P1-2): keys inherit .kb-key's none gesture policy,
+     * which kills the row's horizontal pan whenever the finger starts ON a
+     * key - only the 5px gaps would scroll. Same lesson as .sym-cat. */
+    touch-action: pan-x;
+}
+.sym-custom-bs { flex: none; width: 44px; display: flex; }
+.sym-custom-bs .kb-key { width: 100%; height: 100%; }
+/* The shared strip's textarea form (custom-JSON editing). */
+.phrase-area {
+    height: auto;
+    min-height: 58px;
+    resize: none;
+    font-size: 12px;
+    line-height: 1.4;
+    padding: 6px 9px;
+}
+/* Batch 13 (#6), batch 14 (#4): the phrase editor strip sits above the
+ * candidate bar (which stays selectable mid-edit) with the regular
+ * keyboard below - body.editing compresses the key height to make room.
+ * Replaces the old in-list add row (unusable: the list covered the very
+ * keyboard that types into it). */
+#panelEditor {
+    flex: none;
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    padding: 4px 2px 8px;
+}
+#panelEditor[hidden] { display: none; }
+.phrase-input {
+    flex: 1;
+    min-width: 0;
+    border: 0;
+    border-radius: 8px;
+    background: var(--key);
+    color: var(--text);
+    font-size: 14px;
+    /* review batch14 P2: line-height:normal tracks the font metrics, so the
+     * strip's height (and the 272px total) drifts per device - pin it. */
+    line-height: 1.2;
+    padding: 9px 10px;
+}
+.phrase-input::placeholder { color: var(--muted); }
+.phrase-add {
+    flex: none;
+    border: 0;
+    border-radius: 8px;
+    background: var(--accent);
+    color: #07180e;
+    font-size: 13px;
+    font-weight: 600;
+    padding: 9px 12px;
+}
+.phrase-cancel {
+    flex: none;
+    border: 0;
+    border-radius: 8px;
+    background: var(--special);
+    color: var(--text);
+    font-size: 13px;
+    padding: 9px 12px;
+}
+/* Batch 13 (#7): compact row trigger for the long-press menu. */
+.panel-more {
+    flex: none;
+    width: 28px;
+    height: 28px;
+    border: 0;
+    border-radius: 50%;
+    background: transparent;
+    color: var(--muted);
+    font-size: 16px;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.panel-more:active, .panel-more.active-touch { background: var(--pressed); color: var(--text); }
+.panel-item.dragging { background: var(--pressed); opacity: .9; }
+/* Row action menu (long press / ⋯) - same language as #modeMenu. */
+#itemMenu {
+    display: none;
+    position: fixed;
+    z-index: 33;
+    min-width: 96px;
+    padding: 4px;
+    border-radius: 12px;
+    background: var(--panel);
+    box-shadow: 0 8px 26px #000c;
+}
+#itemMenu.open { display: block; }
+#itemMenu button {
+    display: block;
+    width: 100%;
+    min-height: 40px;
+    padding: 0 14px;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--text);
+    font-size: 14px;
+    text-align: left;
+}
+#itemMenu button:active { background: var(--pressed); }
+#itemMenu button.danger { color: var(--danger); }
+/* 批次 19 #8 review: the "head-only" hint must not read as an action. */
+#itemMenu button:disabled { color: var(--muted); }
+/* 批次 19 #8: the delete-confirmation card (long-press a candidate ->
+ * 删除自造词). A small centred modal over the key area, comboPopup styling. */
+#confirmCard {
+    position: fixed;
+    left: 50%;
+    /* 批次 21 #9: the viewport grew by the float band - anchor the modal
+     * to the keyboard's top area instead of 34% of the whole window. */
+    top: calc(var(--band, 0px) + 48px);
+    transform: translateX(-50%);
+    z-index: 36;
+    width: min(320px, calc(100% - 32px));
+    padding: 16px 14px 12px;
+    border-radius: 14px;
+    background: var(--panel);
+    border: 1px solid rgba(128, 128, 140, .22);
+    box-shadow: 0 12px 32px #000a;
+}
+#confirmCard[hidden] { display: none; }
+#confirmText { font-size: 14px; line-height: 1.5; color: var(--text); }
+.confirm-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 14px;
+}
+.confirm-actions button {
+    min-height: 36px;
+    padding: 0 16px;
+    border: 0;
+    border-radius: 8px;
+    background: var(--special);
+    color: var(--text);
+    font-size: 14px;
+    font-weight: 550;
+}
+.confirm-actions button:active, .confirm-actions button.active-touch { background: var(--pressed); }
+.confirm-actions button.danger { background: var(--danger); color: #fff; }
+/* Batch 10: quick-switch pair editor (drag order + two ticks). */
+#pairEditor { margin: 6px 4px 2px; }
+#pairEditor .pair-hint { font-size: 11px; color: var(--muted); margin-bottom: 6px; }
+#pairEditor { position: relative; }
+.pair-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    height: 34px;
+    border-radius: 8px;
+    padding: 0 6px;
+    background: transparent;
+}
+.pair-row.dragging { background: var(--pressed); opacity: .9; }
+.pair-drag { color: var(--muted); font-size: 15px; padding: 6px 4px; touch-action: none; }
+.pair-name { flex: 1; font-size: 13px; color: var(--text); text-align: left; }
+.pair-tick {
+    width: 24px;
+    height: 24px;
+    border: 1px solid var(--muted);
+    border-radius: 50%;
+    background: transparent;
+    color: var(--text);
+    font-size: 14px;
+    line-height: 1;
+}
+.pair-tick.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+#settingsPanel .set-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    min-height: 40px;
+}
+#settingsPanel .set-label {
+    flex: none;
+    color: var(--muted);
+    font-size: 12px;
+}
+#settingsPanel .set-opts {
+    display: flex;
+    gap: 4px;
+    background: var(--pressed);
+    border-radius: 14px;
+    padding: 2px;
+}
+#settingsPanel .set-opt {
+    border: 0;
+    border-radius: 12px;
+    background: transparent;
+    color: var(--muted);
+    font-size: 12px;
+    padding: 4px 10px;
+    white-space: nowrap;
+}
+#settingsPanel .set-opt.active {
+    background: var(--key);
+    color: var(--text);
+    font-weight: 600;
+}
+#settingsPanel .set-opt[disabled] { opacity: .45; }

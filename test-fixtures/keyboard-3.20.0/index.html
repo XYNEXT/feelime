@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+    <title>Feelime Keyboard</title>
+    <link rel="stylesheet" href="keyboard.css">
+</head>
+<body>
+<main id="softKeyboard" aria-label="Feelime HTML keyboard">
+    <div id="preeditLine" aria-live="polite"></div>
+
+    <!-- Batch 13 (#6), batch 14 (#4): editor strip ABOVE the candidate bar
+         (which stays selectable mid-edit), regular keyboard below. -->
+    <section id="panelEditor" hidden>
+        <input id="panelEditorInput" class="phrase-input" maxlength="200"
+               placeholder="输入常用内容（最多 200 字）" aria-label="常用语内容">
+        <!-- 批次 21 #7: the custom-JSON editor shares the strip as a
+             multi-line textarea (system paste works on real inputs). -->
+        <textarea id="panelEditorArea" class="phrase-input phrase-area" rows="3" hidden
+                  placeholder="粘贴定制 JSON" aria-label="定制键盘 JSON"></textarea>
+        <button id="panelEditorCancel" class="phrase-cancel" aria-label="取消">取消</button>
+        <button id="panelEditorSave" class="phrase-add" aria-label="保存">保存</button>
+    </section>
+    <section id="candidateBar">
+        <!-- Batch 15 (#4): the app's own F logo marks the keyboard menu;
+             the gear moved to the full-settings entry. -->
+        <button id="setupButton" data-role="setup" class="tool" aria-label="键盘设置">
+            <!-- Batch 15.1: the refreshed F logo (docs/branding/felime-logo.svg,
+                 same path as app/src/main/res/drawable/ic_launcher.xml). -->
+            <svg viewBox="0 0 48 48" width="16" height="16" fill="currentColor" aria-hidden="true">
+                <path d="M12.5 8.5h24l-1.8 6.2H19.3v7.2h13.3l-1.8 6.2H19.3v11.4h-6.8z"/>
+                <rect x="31" y="31" width="4.5" height="8.5" rx="1"/>
+            </svg>
+        </button>
+        <!-- Batch 16 #7: the control-key entry - the toolbar swaps for two
+             rows of control keys (Esc/Ctrl/Alt/arrows/...) while it shows. -->
+        <button id="ctrlTool" data-role="ctrl-tool" class="tool" aria-label="控制键">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
+                 stroke-width="1.8" aria-hidden="true">
+                <rect x="3" y="4" width="18" height="16" rx="2"/>
+                <path d="M7 9l4 3-4 3M13 15h4"/>
+            </svg>
+        </button>
+        <!-- Batch 16 #1: opens the SYSTEM input method picker (all IMEs). -->
+        <button id="imeSwitchButton" data-role="ime-switch" class="tool" aria-label="切换输入法">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
+                 stroke-width="1.6" aria-hidden="true">
+                <circle cx="12" cy="12" r="9"/>
+                <path d="M3 12h18M12 3c3 3.5 3 14 0 18M12 3c-3 3.5-3 14 0 18"/>
+            </svg>
+        </button>
+        <!-- Batch 11 (#9): full settings moved off the panel into the toolbar;
+             only visible while the quick panel is open. Batch 15 (#5): a gear
+             glyph - the toolbar's own entry is the app logo now, so the gear
+             no longer reads as a duplicate. The ‹ › pager buttons are gone
+             (batch 15 #6): the bar holds the whole pool and auto-fetches. -->
+        <button id="fullSetupButton" class="tool" aria-label="打开完整设置" hidden>
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true">
+                <path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 0 0 .12-.61l-1.92-3.32a.488.488 0 0 0-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.484.484 0 0 0-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58a.49.49 0 0 0-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/>
+            </svg>
+        </button>
+        <div id="candidates"></div>
+        <button id="clipboardButton" data-role="clipboard" class="tool" aria-label="剪贴板">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true">
+                <path d="M19 2h-4.18C14.4.84 13.3 0 12 0c-1.3 0-2.4.84-2.82 2H5c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-7 0c.55 0 1 .45 1 1s-.45 1-1 1-1-.45-1-1 .45-1 1-1zm7 18H5V4h2v3h10V4h2v16z"/>
+            </svg>
+        </button>
+        <button id="favoritesButton" data-role="favorites" class="tool" aria-label="常用语">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true">
+                <path d="M12 17.27 18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/>
+            </svg>
+        </button>
+        <button id="composeClear" class="tool compose-tool" aria-label="清除输入" hidden>
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true">
+                <path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
+            </svg>
+        </button>
+        <button id="composeExpand" class="tool compose-tool" aria-label="展开候选" hidden>
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true">
+                <path d="M7.41 8.59 12 13.17l4.59-4.58L18 10l-6 6-6-6z"/>
+            </svg>
+        </button>
+        <button id="mic" class="tool" aria-label="开始语音输入">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true">
+                <path d="M12 14a3 3 0 0 0 3-3V5a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3z"/>
+                <path d="M19 12a7 7 0 0 1-14 0H3a9 9 0 0 0 8 8.94V23h2v-2.06A9 9 0 0 0 21 12h-2z"/>
+            </svg>
+        </button>
+        <button id="hide" class="tool" aria-label="收起键盘">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true">
+                <path d="M16.59 8.59 12 13.17 7.41 8.59 6 10l6 6 6-6z"/>
+            </svg>
+        </button>
+        <!-- Batch 15 (#11): settings sub-page chrome rides the toolbar -
+             left: back + title, right: close. Regular tools hide meanwhile. -->
+        <div id="settingsPageBar" hidden></div>
+    </section>
+
+    <section id="expandLayer" hidden>
+        <div class="expand-head">
+            <div class="expand-tabs" role="tablist">
+                <button class="expand-tab active" data-expand-tab="freq">词频</button>
+                <button class="expand-tab" data-expand-tab="single">单字</button>
+            </div>
+            <div id="expandPreedit" aria-live="polite"></div>
+            <button id="expandCollapse" class="tool" aria-label="收起候选">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true">
+                    <path d="M7.41 15.41 12 10.83l4.59 4.58L18 14l-6-6-6 6z"/>
+                </svg>
+            </button>
+        </div>
+        <div class="expand-body">
+            <div id="expandVariants"></div>
+            <div id="expandGrid"></div>
+        </div>
+    </section>
+
+    <!-- Batch 16 #7: the control-key view replaces ONLY the candidate
+         bar (same 40px slot); the keyboard rows below stay untouched. -->
+    <section id="ctrlLayer" class="kb-layer" hidden>
+        <div class="kb-row ctrl-row">
+            <button class="kb-key ctrl-key" data-ctrl="Escape">Esc</button>
+            <button class="kb-key ctrl-key ctrl-mod" data-ctrl="sticky-ctrl">Ctrl</button>
+            <button class="kb-key ctrl-key" data-ctrl="Home">Home</button>
+            <button class="kb-key ctrl-key" data-ctrl="ArrowUp">↑</button>
+            <button class="kb-key ctrl-key" data-ctrl="End">End</button>
+            <button class="kb-key ctrl-key" data-ctrl="PageUp">PgUp</button>
+            <!-- 批次 21 #1/#2: Fn replaces the Comb icon - tap = sticky
+                 (twelve letter keys become F1..F12), long-press = the old
+                 Comb combo grid. -->
+            <button class="kb-key ctrl-key ctrl-mod" data-ctrl="sticky-fn" aria-label="Fn 粘滞键">Fn</button>
+            <button class="kb-key ctrl-key" data-ctrl="Del">Del</button>
+        </div>
+        <div class="kb-row ctrl-row">
+            <button class="kb-key ctrl-key" data-ctrl="Tab">Tab</button>
+            <button class="kb-key ctrl-key ctrl-mod" data-ctrl="sticky-alt">Alt</button>
+            <button class="kb-key ctrl-key" data-ctrl="ArrowLeft">←</button>
+            <button class="kb-key ctrl-key" data-ctrl="ArrowDown">↓</button>
+            <button class="kb-key ctrl-key" data-ctrl="ArrowRight">→</button>
+            <button class="kb-key ctrl-key" data-ctrl="PageDown">PgDn</button>
+            <button class="kb-key ctrl-key ctrl-mod" data-ctrl="sticky-meta" aria-label="Meta 键">&#8862;</button>
+            <button class="kb-key ctrl-key ctrl-close" data-ctrl="collapse" aria-label="收起控制键">
+                <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor"
+                     stroke-width="2.2" stroke-linecap="round" aria-hidden="true">
+                    <path d="M6 6 L18 18 M18 6 L6 18"/>
+                </svg>
+            </button>
+        </div>
+    </section>
+
+    <section id="qwertyLayer" class="kb-layer"></section>
+    <section id="symbolLayer" class="kb-layer" hidden>
+        <div id="symGrid"></div>
+        <div id="symCatBar">
+            <button class="kb-key kb-special" data-action="letters">ABC</button>
+            <div id="symCats"></div>
+            <button class="kb-key kb-special" id="symEnterKey" aria-label="换行">换行</button>
+        </div>
+    </section>
+
+    <section id="panelLayer" hidden>
+        <div class="panel-head">
+            <button id="panelClose" class="tool" aria-label="关闭面板">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true">
+                    <path d="M16.59 8.59 12 13.17 7.41 8.59 6 10l6 6 6-6z"/>
+                </svg>
+            </button>
+            <div class="panel-tabs" role="tablist">
+                <button class="panel-tab active" data-panel-tab="clipboard">剪贴板</button>
+                <button class="panel-tab" data-panel-tab="favorites">常用语</button>
+            </div>
+            <button id="panelClear" class="panel-action" aria-label="清空剪贴板">清空</button>
+            <button id="panelManage" class="panel-action" aria-label="添加常用语" hidden>＋添加</button>
+        </div>
+        <div id="panelList"></div>
+        <div id="panelEmpty" hidden></div>
+    </section>
+
+
+    <div id="modeMenu"></div>
+
+    <!-- Batch 13 (#7): long-press / ⋯ menu for a favorites row. -->
+    <div id="itemMenu"></div>
+
+    <!-- Batch 19 (#8): confirm deleting a self-made word from the user
+         lexicon (long-press a candidate -> 删除自造词). -->
+    <div id="confirmCard" hidden>
+        <div id="confirmText" aria-live="polite"></div>
+        <div class="confirm-actions">
+            <button id="confirmCancel">取消</button>
+            <button id="confirmOk" class="danger">删除</button>
+        </div>
+    </div>
+
+    <section id="settingsPanel" hidden></section>
+
+    <div id="voiceOverlay">
+        <div id="voiceScrim"></div>
+        <div id="voiceCard">
+            <!-- 批次 21 #11: the big red dot became a half-height mic icon
+                 (portrait AND landscape); only colours/pulse animate. -->
+            <div class="vc-mic">
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true">
+                    <path d="M12 14a3 3 0 0 0 3-3V5a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3z"/>
+                    <path d="M19 12a7 7 0 0 1-14 0H3a9 9 0 0 0 8 8.94V23h2v-2.06A9 9 0 0 0 21 12h-2z"/>
+                </svg>
+            </div>
+            <div id="voiceStatus">正在聆听…</div>
+            <div id="partialText" aria-live="polite"></div>
+            <div id="levelBar"><i></i></div>
+            <div id="voiceHint">说完后点击任意位置结束</div>
+        </div>
+    </div>
+
+    <div id="keyPopup"><div id="keyPopupInner"></div></div>
+    <!-- Batch 16 #7: the 3x3 combo grid (long-press Ctrl/Alt/tap Comb) - full
+         key names stacked per row, centered. -->
+    <div id="comboPopup"><button id="comboClose" aria-label="关闭组合键浮层">×</button><div id="comboPopupInner"></div></div>
+    <!-- Batch 16 #8: the keyboard-height adjust handle (drag the top edge),
+         shown only from quick settings. -->
+    <div id="heightHandle" class="height-handle" hidden>
+        <i></i>
+        <div id="heightHint">
+            <span id="heightValue"></span>
+            <button id="heightCancel">取消</button>
+            <button id="heightSave">确定</button>
+        </div>
+    </div>
+    <div id="flickBlob"></div>
+    <div id="toast" role="status"></div>
+</main>
+<script src="keyboard.js"></script>
+</body>
+</html>

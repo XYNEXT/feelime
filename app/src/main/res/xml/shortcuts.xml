@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:shortcutId="ime-picker"
+        android:enabled="true"
+        android:icon="@drawable/ic_launcher"
+        android:shortcutShortLabel="@string/shortcut_ime_short"
+        android:shortcutLongLabel="@string/shortcut_ime_long">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="com.feelime.ime"
+            android:targetClass="com.feelime.ime.ImePickerActivity" />
+    </shortcut>
+</shortcuts>

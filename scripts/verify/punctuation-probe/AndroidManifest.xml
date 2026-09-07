@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.feelime.punctuationprobe">
+
+    <application
+        android:allowBackup="false"
+        android:debuggable="true"
+        android:label="Feelime punctuation probe" />
+    <instrumentation
+        android:name=".PunctuationInstrumentation"
+        android:label="Feelime production punctuation instrumentation"
+        android:targetPackage="com.feelime.ime"
+        android:functionalTest="false" />
+</manifest>

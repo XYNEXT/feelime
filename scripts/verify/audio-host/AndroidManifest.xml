@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="org.example.feelimeaudioprobe">
+
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+
+    <application
+        android:allowBackup="false"
+        android:debuggable="true"
+        android:label="Feelime audio probe"
+        android:supportsRtl="true">
+        <service
+            android:name=".AudioPlaybackService"
+            android:exported="true"
+            android:foregroundServiceType="mediaPlayback" />
+    </application>
+</manifest>

@@ -1,0 +1,10 @@
+* text=auto
+*.bat text eol=crlf
+*.sh text eol=lf
+
+# This vocabulary is byte-authenticated by models/manifest.json.  Preserve
+# the CRLF bytes from the verified sherpa archive; text=auto would normalize
+# the checkout and make thin-download SHA-256 verification disagree with the
+# published model source.
+app/src/modelAssets/full/punctuation/bpe.vocab binary
+third_party/licenses/** whitespace=-blank-at-eof

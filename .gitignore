@@ -1,0 +1,58 @@
+# Gradle / build output
+.gradle/
+.kotlin/
+build/
+app/build/
+spikes/*/build/
+spikes/*/app/build/
+
+# Machine-local config
+local.properties
+
+# Runtime state (generated on-device by Feelime)
+user.yaml
+installation.yaml
+
+# Sherpa-onnx AAR is fetched by scripts/setup-assets.sh (see README)
+app/libs/*.aar
+
+# ASR verification fixture: a personal voice recording, NOT distributed.
+# Provide your own 16 kHz mono PCM WAV; update scripts/research/asr-baseline.json
+# if you re-baseline.
+test-fixtures/asr/*.wav
+
+# ASR gate run artifacts
+spikes/asr-baseline/results/
+
+# Third-party copyrighted reference screenshots (not redistributable)
+docs/images/*wechat*
+
+# Build artifacts and misc
+*.apk
+*.aab
+*.log
+__pycache__/
+.DS_Store
+
+# IDE
+.idea/
+*.iml
+
+# Model & engine assets: fetched/compiled by scripts/setup-assets.sh
+app/src/main/assets/asr-model/
+app/src/main/assets/final-model/
+app/src/main/assets/punctuation/
+models/dev-urls.json
+
+# Model binaries arrive via scripts/setup-assets.sh (GitHub 100MB limit).
+app/src/modelAssets/
+
+# Signing material never enters the repo (the committed round-trip test PEM
+# under app/src/test/resources/ is a deliberate, published throwaway identity).
+*.jks
+*.keystore
+
+# Keyboard hot-update packages (any output name from scripts/package-keyboard.sh);
+# deliberate fixtures under test-fixtures/ stay addable.
+feelime-keyboard*.zip
+!test-fixtures/*.zip

@@ -1,0 +1,1087 @@
+/* Feelime full settings page.
+ *
+ * The bridge remains the source of truth for settings and device state. The
+ * page owns only presentation: tokens, page routing, and this small zh/en
+ * dictionary. User text, URLs, JSON, model titles, and device names are
+ * always rendered as received. */
+"use strict";
+
+const BRIDGE = window.Native || { ready() {} };
+let token = "";
+let lastState = null;
+let uiChoice = "auto";
+let uiLocale = browserLocale();
+let pendingModelConsent = null;
+let lastModelError = null;
+
+const $ = id => document.getElementById(id);
+
+const I18N = {
+    zh: {
+        "title": "Feelime 设置",
+        "hero.tag": "离线中英混合语音输入法",
+        "hero.connecting": "连接引擎…",
+        "hero.online": "默认输入法在线",
+        "hero.notDefault": "未设为默认",
+        "status.title": "状态",
+        "ime.title": "输入法状态",
+        "ime.enabled": "在系统中启用 Feelime",
+        "ime.default": "设为默认输入法",
+        "ime.enableAction": "去启用",
+        "ime.pickAction": "去切换",
+        "ime.addShortcut": "添加桌面快捷方式",
+        "ime.addWidget": "添加桌面小组件",
+        "ime.addTile": "添加快捷设置磁贴",
+        "language.title": "界面语言",
+        "language.badge": "界面",
+        "language.label": "显示语言",
+        "language.hint": "默认跟随系统；只影响 Feelime 界面，不改变输入语言。",
+        "language.note": "输入语言仍由键盘模式决定。",
+        "language.auto": "跟随系统",
+        "language.zh": "中文",
+        "language.en": "English",
+        "nav.groups": "设置分组",
+        "nav.back": "返回首页",
+        "entry.input.title": "键盘与输入",
+        "entry.input.subtitle": "双拼 · 定制键盘",
+        "entry.voice.title": "语音识别",
+        "entry.voice.subtitle": "语音模型 · 识别设置",
+        "entry.update.title": "键盘热更新",
+        "entry.update.subtitle": "键盘前端文件更新",
+        "entry.about.title": "关于",
+        "entry.about.subtitle": "版本信息 · 组件说明",
+        "entry.test.title": "输入测试",
+        "entry.test.subtitle": "唤起键盘试一试",
+        "page.input": "键盘与输入",
+        "page.voice": "语音识别",
+        "page.update": "键盘热更新",
+        "page.about": "关于",
+        "page.test": "输入测试",
+        "input.double.title": "双拼方案",
+        "input.double.badge": "输入",
+        "input.double.description": "当前方案：自然码。自然码与全拼共用声母（zh=V、ch=I、sh=U 三个双声母除外）；韵母按自然码映射到对应按键，完整键位图见键盘快捷设置 → 双拼键位。零声母（a/e 开头）直接打全拼：啊=aa、爱=ai、安=an、恩=en、二=er。",
+        "input.custom.title": "定制键盘",
+        "input.custom.badge": "高级",
+        "input.custom.enabled": "启用定制键盘",
+        "input.custom.jsonLabel": "定制 JSON（{\"version\":1,\"rows\":[[{\"t\":\"键面\",\"tap\":\"点击输出\",\"note\":\"备注\"}]]}）",
+        "input.custom.jsonPlaceholder": "粘贴定制 JSON",
+        "input.custom.note": "保存在本机，键盘下次载入时生效。",
+        "action.saveCustom": "保存定制",
+        "action.insertTemplate": "插入模板",
+        "voice.models.title": "麦克风与语音模型",
+        "voice.models.badge": "语音",
+        "voice.backend.label": "模型来源",
+        "voice.backend.auto": "安装包优先",
+        "voice.backend.remote": "使用下载模型",
+        "voice.backend.hint": "切换后下次录音生效。选择下载模型后，请在下方补齐所需模型再录音。",
+        "voice.downloadSource.label": "模型下载源",
+        "voice.downloadSource.hfMirror": "HF / GitHub 镜像（默认）",
+        "voice.downloadSource.official": "官方源（HF / GitHub）",
+        "voice.downloadSource.custom": "自定义源",
+        "voice.downloadSource.customPlaceholder": "例如：https://example.com/huggingface",
+        "voice.downloadSource.archive": "流式模型压缩包地址",
+        "voice.downloadSource.archivePlaceholder": "例如：https://example.com/model.tar.bz2",
+        "voice.downloadSource.save": "保存下载源",
+        "voice.downloadSource.hint": "下载后会校验文件完整性；压缩包地址只用于流式模型的大文件，自定义源需同时填写仓库地址和对应的 tar.bz2 地址。",
+        "voice.mic.permission": "麦克风权限",
+        "voice.mic.hint": "语音输入必需，全程本地处理",
+        "voice.mic.action": "去授权",
+        "voice.models.note": "完整安装包已内置全部模型；精简安装包在此按需下载（断点续传，逐文件校验）。",
+        "voice.asr.title": "语音识别设置",
+        "voice.asr.badge": "识别",
+        "voice.asr.stripPeriod": "去掉句尾句号",
+        "voice.asr.stripHint": "问号、叹号保留；关闭后保留模型输出",
+        "voice.asr.hotwordsLabel": "热词（一行一个，可填中文或英文；识别优先考虑这些词）",
+        "voice.asr.hotwordsPlaceholder": "例如：\n倪妮\nGPU",
+        "action.saveAsr": "保存识别设置",
+        "update.title": "键盘热更新",
+        "update.badge": "更新",
+        "update.note": "仅替换 HTML/CSS/JS，不涉及引擎、词典与语音模型。",
+        "update.sourceLabel": "更新源地址（metainfo.json）",
+        "update.sourcePlaceholder": "https://example.com/feelime/metainfo.json",
+        "update.autoCheck": "启动时自动检查更新",
+        "update.autoCheckHint": "每天最多检查一次；清空更新源后自动检查停用",
+        "update.urlLabel": "键盘包地址（联网下载）",
+        "update.urlPlaceholder": "https://example.com/feelime-keyboard.zip",
+        "action.checkUpdate": "检查更新",
+        "action.install": "联网下载安装",
+        "action.importLocal": "从本地 ZIP 导入",
+        "action.restore": "恢复内置",
+        "update.localHint": "从本地 ZIP 导入不需要网络，仍会校验签名和兼容性。",
+        "update.unsigned": "⚠ 未签名键盘拥有 IME 权限（仅限调试构建）",
+        "about.versionTitle": "版本信息",
+        "about.badge": "信息",
+        "action.copyVersion": "复制版本信息",
+        "action.appStore": "在 Google Play 查看应用",
+        "about.copyHint": "反馈问题时直接粘贴；复制内容标记为敏感，不会进入键盘剪贴板历史。",
+        "about.offlineHint": "全程离线：语音识别与文字候选都不联网。",
+        "about.noticesTitle": "第三方许可与组件说明",
+        "about.legalBadge": "许可",
+        "about.expandNotices": "展开完整说明",
+        "test.title": "试输入一段文字",
+        "test.badge": "测试",
+        "test.placeholder": "点这里唤起 Feelime 试一试",
+        "test.note": "输入内容只留在当前编辑框中。",
+        "model.builtIn": "已随安装包提供",
+        "model.transferSize": "下载 {download}（整包包含额外文件）\n安装后占用 {installed}",
+        "model.installed": "已下载，校验通过",
+        "model.downloading": "下载中 {percent}%",
+        "model.downloadingBytes": "下载中 {percent}%（{done} / {total}）",
+        "model.broken": "文件异常，请重新下载",
+        "model.missing": "未下载（约 {size}）",
+        "model.download": "下载",
+        "model.cancel": "取消",
+        "model.remove": "删除",
+        "model.redownload": "重新下载",
+        "model.import": "导入模型文件",
+        "model.importing": "正在读取模型文件…",
+        "model.importValidating": "正在验证模型文件…",
+        "model.importInstalling": "正在安装已验证模型…",
+        "model.importFormat": "仅支持与内置清单对应的官方模型 tar.bz2 或 zip 归档。",
+        "model.title.streaming": "流式语音识别（中英）",
+        "model.title.final": "整句纠错识别",
+        "model.title.punctuation": "中英标点恢复",
+        "model.consent.title": "确认下载流量",
+        "model.consent.badge": "流量提示",
+        "model.consent.message": "模型“{name}”约 {bytes}，当前网络可能产生流量费用。是否继续？",
+        "model.consent.cancel": "取消",
+        "model.consent.confirm": "继续下载",
+        "update.sourceBuiltIn": "APK 内置",
+        "update.sourceHot": "热更新版本",
+        "update.version": "版本：{value}",
+        "update.hash": "内容校验：{value}…",
+        "update.state": "状态：{value}",
+        "update.lastError": "最近错误：{value}",
+        "update.lastSuccess": "上次成功：{value}",
+        "update.sourceStatus": "更新源：{value}",
+        "update.sourceDefault": "官方默认源",
+        "update.sourceCustom": "用户设置",
+        "update.sourceDisabled": "已停用",
+        "update.states.BUILT_IN": "内置",
+        "update.states.DOWNLOADING": "下载中",
+        "update.states.VERIFYING": "校验中",
+        "update.states.CHECKING_COMPATIBILITY": "检查兼容性",
+        "update.states.READY": "已就绪",
+        "update.states.ACTIVE": "已启用",
+        "update.states.ACTIVATING": "启用中",
+        "update.states.ROLLED_BACK": "已回退",
+        "update.states.FAILED": "失败",
+        "about.appVersion": "App 版本",
+        "about.activeKeyboard": "键盘版本（当前）",
+        "about.builtInKeyboard": "键盘版本（内置）",
+        "about.device": "手机型号",
+        "about.android": "系统版本",
+        "about.androidValue": "Android {release}（API {sdk}）",
+        "note.saved": "已保存",
+        "note.customSaved": "已保存，键盘下次载入时生效",
+        "note.copied": "已复制",
+        "custom.none": "未定制",
+        "custom.count": "已定制 {count} 个键",
+        "error.INVALID_CUSTOM_JSON": "定制 JSON 格式不正确。",
+        "error.EMPTY_SOURCE": "请先填入更新源地址（metainfo.json）。",
+        "error.EMPTY_URL": "请先填入键盘包地址。",
+        "error.INVALID_SOURCE": "更新源地址无效。",
+        "error.NO_RELEASE": "尚无可用发布。",
+        "error.NO_INSTALLABLE_ASSET": "发布中没有可安装的键盘包。",
+        "error.AMBIGUOUS_ASSET": "发布中的键盘包不唯一。",
+        "error.INVALID_ASSET_URL": "发布资产下载地址无效。",
+        "error.RATE_LIMITED": "GitHub 请求受到限流，请稍后重试。",
+        "error.NETWORK_ERROR": "网络请求失败。",
+        "error.BAD_RESPONSE": "更新源返回了无法识别的内容。",
+        "error.INTERNAL_ERROR": "更新失败，请稍后重试。",
+        "error.URL_NOT_HTTPS": "更新地址必须使用 HTTPS。",
+        "error.URL_USER_INFO": "更新地址不能包含账号或密码。",
+        "error.TIMEOUT": "网络请求超时。",
+        "error.TLS_ERROR": "安全连接失败。",
+        "error.REDIRECT_LIMIT": "重定向次数过多。",
+        "error.REDIRECT_NOT_HTTPS": "重定向地址必须使用 HTTPS。",
+        "error.DOWNLOAD_TOO_LARGE": "下载文件超过大小限制。",
+        "error.ZIP_TOO_LARGE": "键盘包超过大小限制。",
+        "error.NOT_ZIP": "键盘包格式不正确。",
+        "error.SIGNATURE_MISSING": "键盘包缺少签名。",
+        "error.SIGNATURE_BAD": "键盘包签名校验失败。",
+        "error.PAYLOAD_HASH": "键盘文件校验失败。",
+        "error.VERSION_MISMATCH": "键盘版本信息不一致。",
+        "error.COMPAT_MIN_NATIVE_API": "当前版本的 Feelime 不支持此键盘包。",
+        "error.COMPAT_CAPABILITIES": "此键盘包需要未提供的能力。",
+        "error.FRAGMENT_PIN_MISMATCH": "键盘包校验指纹不匹配。",
+        "error.IO_ERROR": "本地文件操作失败。",
+        "error.ENTRY_LIMIT": "键盘包包含过多文件。",
+        "error.DUPLICATE_ENTRY": "键盘包包含重复文件。",
+        "error.PATH_TRAVERSAL": "键盘包包含不安全路径。",
+        "error.PATH_ABSOLUTE": "键盘包包含绝对路径。",
+        "error.PATH_BACKSLASH": "键盘包路径格式不安全。",
+        "error.PATH_NUL": "键盘包路径包含无效字符。",
+        "error.SYMLINK_OR_SPECIAL": "键盘包包含不支持的特殊文件。",
+        "error.UNICODE_CONFLICT": "键盘包文件名存在冲突。",
+        "error.UNKNOWN_ENTRY": "键盘包包含未知文件。",
+        "error.ENVELOPE_MISSING": "键盘包缺少校验元数据。",
+        "error.MANIFEST_INVALID_JSON": "键盘包清单格式无效。",
+        "error.MANIFEST_UNKNOWN_KEY": "键盘包清单包含未知字段。",
+        "error.MANIFEST_MISSING_KEY": "键盘包清单缺少必要字段。",
+        "error.MANIFEST_LISTS_ENVELOPE": "键盘包清单结构无效。",
+        "error.MANIFEST_PAYLOAD_ALLOWLIST": "键盘包包含不允许的内容。",
+        "error.KEY_UNKNOWN": "键盘包签名密钥未知。",
+        "error.PAYLOAD_LENGTH": "键盘文件大小校验失败。",
+        "error.INFLATED_TOO_LARGE": "键盘包解压后超过大小限制。",
+        "error.HOTWORDS_TRUNCATED": "已保存，但有 {count} 行热词超出限制（最多 {max} 行，每行 {chars} 字）。",
+        "error.NO_NETWORK": "当前没有可用的网络连接。",
+        "error.STALE_CONFIRMATION": "下载确认已过期，请重新点击下载。",
+        "error.MODEL_DOWNLOAD_FAILED": "模型下载失败，请稍后重试。",
+        "error.MODEL_IMPORT_FAILED": "模型导入失败，请检查官方归档格式后重试。",
+        "error.MODEL_IMPORT_BUSY": "模型正在处理，请稍候。",
+        "error.MODEL_NETWORK_CHANGED": "网络已变化，下载已暂停；请重新确认后重试。",
+        "error.INVALID_MODEL_SOURCE": "自定义源需要 HTTPS 仓库地址和对应的 tar.bz2 归档地址。",
+    },
+    en: {
+        "title": "Feelime Settings",
+        "hero.tag": "Offline Chinese-English voice input",
+        "hero.connecting": "Connecting to the engine…",
+        "hero.online": "Default input method is ready",
+        "hero.notDefault": "Not the default input method",
+        "status.title": "Status",
+        "ime.title": "Input method status",
+        "ime.enabled": "Enable Feelime in system settings",
+        "ime.default": "Set as the default input method",
+        "ime.enableAction": "Enable",
+        "ime.pickAction": "Switch",
+        "ime.addShortcut": "Add home-screen shortcut",
+        "ime.addWidget": "Add home-screen widget",
+        "ime.addTile": "Add Quick Settings tile",
+        "language.title": "Interface language",
+        "language.badge": "UI",
+        "language.label": "Display language",
+        "language.hint": "Follows the system by default; this changes Feelime UI only, not input language.",
+        "language.note": "Input language is still controlled by the keyboard mode.",
+        "language.auto": "Follow system",
+        "language.zh": "中文",
+        "language.en": "English",
+        "nav.groups": "Settings sections",
+        "nav.back": "Back to home",
+        "entry.input.title": "Keyboard & input",
+        "entry.input.subtitle": "Double pinyin · Custom keyboard",
+        "entry.voice.title": "Voice recognition",
+        "entry.voice.subtitle": "Voice models · Recognition options",
+        "entry.update.title": "Keyboard updates",
+        "entry.update.subtitle": "Update keyboard HTML/CSS/JS",
+        "entry.about.title": "About",
+        "entry.about.subtitle": "Version info · Components",
+        "entry.test.title": "Input test",
+        "entry.test.subtitle": "Wake Feelime and try it",
+        "page.input": "Keyboard & input",
+        "page.voice": "Voice recognition",
+        "page.update": "Keyboard updates",
+        "page.about": "About",
+        "page.test": "Input test",
+        "input.double.title": "Double-pinyin scheme",
+        "input.double.badge": "Input",
+        "input.double.description": "Current scheme: Ziranma. It shares initials with full pinyin (except the zh=V, ch=I, and sh=U double initials); finals follow the Ziranma key map. See Quick settings → Double-pinyin keys for the full map. Zero-initial syllables (starting with a/e) use full pinyin: 啊=aa、爱=ai、安=an、恩=en、二=er。",
+        "input.custom.title": "Custom keyboard",
+        "input.custom.badge": "Advanced",
+        "input.custom.enabled": "Enable custom keyboard",
+        "input.custom.jsonLabel": "Custom JSON ({\"version\":1,\"rows\":[[{\"t\":\"key label\",\"tap\":\"output\",\"note\":\"note\"}]]})",
+        "input.custom.jsonPlaceholder": "Paste custom JSON",
+        "input.custom.note": "Saved on this device and applied the next time the keyboard loads.",
+        "action.saveCustom": "Save custom layout",
+        "action.insertTemplate": "Insert template",
+        "voice.models.title": "Microphone & voice models",
+        "voice.models.badge": "Voice",
+        "voice.backend.label": "Model source",
+        "voice.backend.auto": "Prefer app models",
+        "voice.backend.remote": "Downloaded models",
+        "voice.backend.hint": "Changes apply to the next recording. After selecting downloaded models, download any missing models below before recording.",
+        "voice.downloadSource.label": "Model download source",
+        "voice.downloadSource.hfMirror": "HF / GitHub mirrors (default)",
+        "voice.downloadSource.official": "Official sources (HF / GitHub)",
+        "voice.downloadSource.custom": "Custom source",
+        "voice.downloadSource.customPlaceholder": "For example: https://example.com/huggingface",
+        "voice.downloadSource.archive": "Streaming model archive URL",
+        "voice.downloadSource.archivePlaceholder": "For example: https://example.com/model.tar.bz2",
+        "voice.downloadSource.save": "Save download source",
+        "voice.downloadSource.hint": "Downloads are checked for integrity. The archive URL is only for the streaming model's large file; a custom source must provide both the repository URL and its matching tar.bz2 URL.",
+        "voice.mic.permission": "Microphone permission",
+        "voice.mic.hint": "Required for voice input; processing stays on this device",
+        "voice.mic.action": "Allow",
+        "voice.models.note": "The full package includes all models. Smaller packages can download models here with resume and per-file verification.",
+        "voice.asr.title": "Voice recognition options",
+        "voice.asr.badge": "Recognition",
+        "voice.asr.stripPeriod": "Remove final periods",
+        "voice.asr.stripHint": "Question and exclamation marks stay; turn off to keep model output unchanged",
+        "voice.asr.hotwordsLabel": "Hotwords (one per line; Chinese or English; recognition gives these words priority)",
+        "voice.asr.hotwordsPlaceholder": "For example:\n倪妮\nGPU",
+        "action.saveAsr": "Save recognition options",
+        "update.title": "Keyboard updates",
+        "update.badge": "Update",
+        "update.note": "Only keyboard HTML/CSS/JS are replaced. The engine, dictionaries, and voice models stay untouched.",
+        "update.sourceLabel": "Update source (metainfo.json)",
+        "update.sourcePlaceholder": "https://example.com/feelime/metainfo.json",
+        "update.autoCheck": "Check for updates when settings opens",
+        "update.autoCheckHint": "At most once a day; clearing the source disables automatic checks",
+        "update.urlLabel": "Keyboard package URL (network download)",
+        "update.urlPlaceholder": "https://example.com/feelime-keyboard.zip",
+        "action.checkUpdate": "Check for updates",
+        "action.install": "Download and install",
+        "action.importLocal": "Import local ZIP",
+        "action.restore": "Restore built-in",
+        "update.localHint": "Importing a local ZIP needs no network; its signature and compatibility are still verified.",
+        "update.unsigned": "⚠ An unsigned keyboard has IME access (debug builds only)",
+        "about.versionTitle": "Version information",
+        "about.badge": "Info",
+        "action.copyVersion": "Copy version info",
+        "action.appStore": "View app on Google Play",
+        "about.copyHint": "Paste this when reporting a problem. The copied report is marked sensitive and is kept out of keyboard clipboard history.",
+        "about.offlineHint": "Everything stays offline: voice recognition and text candidates use no network.",
+        "about.noticesTitle": "Third-party licenses & components",
+        "about.legalBadge": "Licenses",
+        "about.expandNotices": "Show full notices",
+        "test.title": "Type a test sentence",
+        "test.badge": "Test",
+        "test.placeholder": "Tap here to wake Feelime and try it",
+        "test.note": "Text stays in this editor.",
+        "model.builtIn": "Included with the app",
+        "model.transferSize": "Download {download} (archive includes extra files)\nInstalled size {installed}",
+        "model.installed": "Downloaded and verified",
+        "model.downloading": "Downloading {percent}%",
+        "model.downloadingBytes": "Downloading {percent}% ({done} / {total})",
+        "model.broken": "File is invalid; download again",
+        "model.missing": "Not downloaded (about {size})",
+        "model.download": "Download",
+        "model.cancel": "Cancel",
+        "model.remove": "Delete",
+        "model.redownload": "Download again",
+        "model.import": "Import model file",
+        "model.importing": "Reading model file…",
+        "model.importValidating": "Verifying model file…",
+        "model.importInstalling": "Installing verified model…",
+        "model.importFormat": "Only official tar.bz2 or zip archives matching the built-in model list are accepted.",
+        "model.title.streaming": "Streaming speech recognition (Chinese/English)",
+        "model.title.final": "Full-sentence correction",
+        "model.title.punctuation": "Chinese-English punctuation restoration",
+        "model.consent.title": "Confirm download",
+        "model.consent.badge": "Data notice",
+        "model.consent.message": "“{name}” is about {bytes}. Your current network may incur data charges. Continue?",
+        "model.consent.cancel": "Cancel",
+        "model.consent.confirm": "Continue download",
+        "update.sourceBuiltIn": "Built-in APK",
+        "update.sourceHot": "Hot-updated version",
+        "update.version": "Version: {value}",
+        "update.hash": "Content hash: {value}…",
+        "update.state": "Status: {value}",
+        "update.lastError": "Latest error: {value}",
+        "update.lastSuccess": "Last success: {value}",
+        "update.sourceStatus": "Update source: {value}",
+        "update.sourceDefault": "Official default",
+        "update.sourceCustom": "User configured",
+        "update.sourceDisabled": "Disabled",
+        "update.states.BUILT_IN": "Built-in",
+        "update.states.DOWNLOADING": "Downloading",
+        "update.states.VERIFYING": "Verifying",
+        "update.states.CHECKING_COMPATIBILITY": "Checking compatibility",
+        "update.states.READY": "Ready",
+        "update.states.ACTIVE": "Active",
+        "update.states.ACTIVATING": "Activating",
+        "update.states.ROLLED_BACK": "Rolled back",
+        "update.states.FAILED": "Failed",
+        "about.appVersion": "App version",
+        "about.activeKeyboard": "Keyboard version (current)",
+        "about.builtInKeyboard": "Keyboard version (built-in)",
+        "about.device": "Device",
+        "about.android": "System version",
+        "about.androidValue": "Android {release} (API {sdk})",
+        "note.saved": "Saved",
+        "note.customSaved": "Saved; applied the next time the keyboard loads",
+        "note.copied": "Copied",
+        "custom.none": "No custom keys",
+        "custom.count": "{count} custom keys",
+        "error.INVALID_CUSTOM_JSON": "The custom JSON format is invalid.",
+        "error.EMPTY_SOURCE": "Enter an update source (metainfo.json) first.",
+        "error.EMPTY_URL": "Enter a keyboard package URL first.",
+        "error.INVALID_SOURCE": "The update source URL is invalid.",
+        "error.NO_RELEASE": "No release is currently available.",
+        "error.NO_INSTALLABLE_ASSET": "The release has no installable keyboard package.",
+        "error.AMBIGUOUS_ASSET": "The release has ambiguous keyboard packages.",
+        "error.INVALID_ASSET_URL": "The release asset URL is invalid.",
+        "error.RATE_LIMITED": "GitHub rate limited the request. Try again later.",
+        "error.NETWORK_ERROR": "The network request failed.",
+        "error.BAD_RESPONSE": "The update source returned an unrecognized response.",
+        "error.INTERNAL_ERROR": "Update failed. Try again later.",
+        "error.URL_NOT_HTTPS": "The update URL must use HTTPS.",
+        "error.URL_USER_INFO": "The update URL cannot contain a username or password.",
+        "error.TIMEOUT": "The network request timed out.",
+        "error.TLS_ERROR": "The secure connection failed.",
+        "error.REDIRECT_LIMIT": "Too many redirects.",
+        "error.REDIRECT_NOT_HTTPS": "Redirect URLs must use HTTPS.",
+        "error.DOWNLOAD_TOO_LARGE": "The downloaded file is too large.",
+        "error.ZIP_TOO_LARGE": "The keyboard package is too large.",
+        "error.NOT_ZIP": "The keyboard package has an invalid format.",
+        "error.SIGNATURE_MISSING": "The keyboard package has no signature.",
+        "error.SIGNATURE_BAD": "Keyboard package signature verification failed.",
+        "error.PAYLOAD_HASH": "Keyboard file verification failed.",
+        "error.VERSION_MISMATCH": "Keyboard version information is inconsistent.",
+        "error.COMPAT_MIN_NATIVE_API": "This Feelime version does not support the package.",
+        "error.COMPAT_CAPABILITIES": "The package requires unavailable capabilities.",
+        "error.FRAGMENT_PIN_MISMATCH": "The keyboard package fingerprint does not match.",
+        "error.IO_ERROR": "A local file operation failed.",
+        "error.ENTRY_LIMIT": "The keyboard package contains too many files.",
+        "error.DUPLICATE_ENTRY": "The keyboard package contains a duplicate file.",
+        "error.PATH_TRAVERSAL": "The keyboard package contains an unsafe path.",
+        "error.PATH_ABSOLUTE": "The keyboard package contains an absolute path.",
+        "error.PATH_BACKSLASH": "The keyboard package contains an unsafe path format.",
+        "error.PATH_NUL": "The keyboard package path contains an invalid character.",
+        "error.SYMLINK_OR_SPECIAL": "The keyboard package contains an unsupported special file.",
+        "error.UNICODE_CONFLICT": "The keyboard package contains conflicting filenames.",
+        "error.UNKNOWN_ENTRY": "The keyboard package contains an unknown file.",
+        "error.ENVELOPE_MISSING": "The keyboard package is missing verification metadata.",
+        "error.MANIFEST_INVALID_JSON": "The keyboard package manifest is invalid.",
+        "error.MANIFEST_UNKNOWN_KEY": "The keyboard package manifest has an unknown field.",
+        "error.MANIFEST_MISSING_KEY": "The keyboard package manifest is missing a required field.",
+        "error.MANIFEST_LISTS_ENVELOPE": "The keyboard package manifest structure is invalid.",
+        "error.MANIFEST_PAYLOAD_ALLOWLIST": "The keyboard package contains disallowed content.",
+        "error.KEY_UNKNOWN": "The keyboard package signing key is unknown.",
+        "error.PAYLOAD_LENGTH": "Keyboard file size verification failed.",
+        "error.INFLATED_TOO_LARGE": "The unpacked keyboard package is too large.",
+        "error.HOTWORDS_TRUNCATED": "Saved, but {count} hotword lines exceeded the limit (up to {max} lines, {chars} characters each).",
+        "error.NO_NETWORK": "No network connection is available.",
+        "error.STALE_CONFIRMATION": "The download confirmation expired; tap Download again.",
+        "error.MODEL_DOWNLOAD_FAILED": "Model download failed. Try again later.",
+        "error.MODEL_IMPORT_FAILED": "Model import failed. Check that this is an official model archive and try again.",
+        "error.MODEL_IMPORT_BUSY": "The model is already being processed.",
+        "error.MODEL_NETWORK_CHANGED": "The network changed and the download paused. Confirm and try again.",
+        "error.INVALID_MODEL_SOURCE": "A custom source needs an HTTPS repository URL and its matching tar.bz2 archive URL.",
+    },
+};
+
+const PAGES = ["home", "input", "voice", "update", "about", "test"];
+const ERROR_KEYS = new Set(Object.keys(I18N.zh).filter(key => key.startsWith("error.")));
+const progressPercent = {};
+
+function browserLocale() {
+    const value = (typeof navigator !== "undefined" && navigator.language) ||
+        (window.navigator && window.navigator.language) || "zh-CN";
+    return String(value).toLowerCase().startsWith("zh") ? "zh" : "en";
+}
+
+function normalizeChoice(value) {
+    return ["auto", "zh", "en"].includes(value) ? value : "auto";
+}
+
+function normalizeLocale(value) {
+    return ["zh", "en"].includes(value) ? value : null;
+}
+
+function format(template, values = {}) {
+    return String(template).replace(/\{(\w+)\}/g, (_all, name) =>
+        values[name] === undefined ? `{${name}}` : String(values[name]));
+}
+
+function t(key, values) {
+    const dictionary = I18N[uiLocale] || I18N.zh;
+    const template = dictionary[key] ?? I18N.zh[key] ?? key;
+    return format(template, values);
+}
+
+function call(action, ...args) {
+    try {
+        if (typeof BRIDGE[action] === "function") BRIDGE[action](...args, token);
+    } catch (error) {
+        console.warn("bridge call failed", action, error);
+    }
+}
+
+function setTheme(theme) {
+    if (theme === "light" || theme === "dark") document.documentElement.className = `theme-${theme}`;
+}
+
+function applyLocale() {
+    document.documentElement.lang = uiLocale === "zh" ? "zh-CN" : "en";
+    document.title = t("title");
+    document.querySelectorAll("[data-i18n]").forEach(node => {
+        node.textContent = t(node.dataset.i18n);
+    });
+    document.querySelectorAll("[data-i18n-aria]").forEach(node => {
+        node.setAttribute("aria-label", t(node.dataset.i18nAria));
+    });
+    document.querySelectorAll("[data-i18n-placeholder]").forEach(node => {
+        node.setAttribute("placeholder", t(node.dataset.i18nPlaceholder));
+    });
+    const language = $("uiLanguage");
+    if (language) language.value = uiChoice;
+    if (pendingModelConsent) {
+        $("modelConsentMessage").textContent = t("model.consent.message", {
+            name: pendingModelConsent.name,
+            bytes: mb(pendingModelConsent.bytes),
+        });
+    }
+    if (lastModelError) setNote("modelNote", eventText(lastModelError, "error.MODEL_DOWNLOAD_FAILED"));
+}
+
+function adoptLocale(state) {
+    const choice = normalizeChoice(state && state.uiLanguage);
+    if (state && state.uiLanguage !== undefined) uiChoice = choice;
+    const resolved = normalizeLocale(state && state.uiLocale);
+    const next = resolved || (uiChoice === "auto" ? browserLocale() : uiChoice);
+    const changed = next !== uiLocale;
+    uiLocale = next;
+    if (changed || state && state.uiLanguage !== undefined) applyLocale();
+}
+
+function setUiLanguage(choice) {
+    uiChoice = normalizeChoice(choice);
+    uiLocale = uiChoice === "auto" ? browserLocale() : uiChoice;
+    applyLocale();
+    call("setUiLanguage", uiChoice);
+}
+
+function mb(bytes) {
+    return `${(Number(bytes || 0) / 1048576).toFixed(1)} MB`;
+}
+
+function modelTitle(model) {
+    const key = {
+        "streaming-zipformer-bilingual-zh-en": "model.title.streaming",
+        "paraformer-zh-small": "model.title.final",
+        "offline-punct-zh-en": "model.title.punctuation",
+        "online-punct-en": "model.title.punctuation", // Legacy model ID.
+    }[String(model && model.id || "")];
+    return key ? t(key) : String(model && (model.title || model.id) || "");
+}
+
+function activeKeyboardVersion(state) {
+    return (state.update && state.update.activeVersion) || state.keyboardVersion || "?";
+}
+
+function statusSpan(text, className) {
+    const span = document.createElement("span");
+    span.className = className || "";
+    span.textContent = text;
+    return span;
+}
+
+function setNote(id, text) {
+    const node = $(id);
+    if (node) node.textContent = text;
+}
+
+function eventText(event, fallbackKey, values) {
+    const code = String(event && (event.code || event.errorCode) || "");
+    const key = code ? `error.${code}` : "";
+    if (key && ERROR_KEYS.has(key)) {
+        const translated = t(key, values || event);
+        const detail = String(event && (event.detail || event.errorDetail) || "").trim();
+        return detail ? `${translated} ${detail}` : translated;
+    }
+    if (event && event.message) return String(event.message);
+    if (event && (event.detail || event.errorDetail)) return String(event.detail || event.errorDetail);
+    return t(fallbackKey, values);
+}
+
+/* --- event channel ----------------------------------------------------- */
+
+window.FeelimeSettings = {
+    onBridgeHello(payload) {
+        payload = payload || {};
+        token = payload.token || "";
+        if (payload.theme) setTheme(payload.theme);
+        if (payload.uiLanguage !== undefined) uiChoice = normalizeChoice(payload.uiLanguage);
+        const helloLocale = normalizeLocale(payload.uiLocale);
+        uiLocale = helloLocale || (uiChoice === "auto" ? browserLocale() : uiChoice);
+        applyLocale();
+        call("ready");
+    },
+
+    onEvent(event) {
+        if (!event || !event.type) return;
+        switch (event.type) {
+            case "state":
+                lastState = event.state || {};
+                if (lastState.theme) setTheme(lastState.theme);
+                adoptLocale(lastState);
+                render(lastState);
+                break;
+            case "modelProgress":
+                renderProgress(event);
+                break;
+            case "modelDownloadConfirmation":
+                renderModelConsent(event);
+                break;
+            case "modelDownloadError":
+                lastModelError = event;
+                if (!pendingModelConsent || pendingModelConsent.id === String(event.id || "")) hideModelConsent();
+                setNote("modelNote", eventText(event, "error.MODEL_DOWNLOAD_FAILED"));
+                break;
+            case "modelImportStatus":
+                renderImportStatus(event);
+                break;
+            case "modelSourceError":
+                setNote("modelNote", eventText(event, "error.INVALID_MODEL_SOURCE"));
+                break;
+            case "customError":
+                setNote("customNote", eventText(event, "error.INVALID_CUSTOM_JSON"));
+                break;
+            case "asrNote":
+                setNote("asrNote", eventText(event, "note.saved", {
+                    count: event.count, max: event.max || event.maxLines, chars: event.chars || event.maxChars,
+                }));
+                break;
+            case "updateError":
+                setNote("updateStatus", eventText(event, "error.INTERNAL_ERROR"));
+                break;
+            default:
+                break;
+        }
+    },
+
+    showPage,
+};
+
+/* --- pages ------------------------------------------------------------- */
+
+function showPage(name) {
+    if (!PAGES.includes(name)) return;
+    document.querySelectorAll("[data-page]").forEach(node => {
+        node.hidden = node.dataset.page !== name;
+    });
+    if (typeof window.scrollTo === "function") window.scrollTo(0, 0);
+    call("reportPage", name !== "home");
+}
+
+/* --- render ------------------------------------------------------------ */
+
+function render(state) {
+    state = state || {};
+    renderHero(state);
+    renderIme(state);
+    renderVoice(state);
+    renderAsr(state);
+    renderCustom(state);
+    renderUpdate(state);
+    renderAbout(state);
+}
+
+function renderHero(state) {
+    const host = $("heroStatus");
+    if (!host) return;
+    host.replaceChildren(statusSpan(
+        state.ime && state.ime.isDefault ? t("hero.online") : t("hero.notDefault"),
+        state.ime && state.ime.isDefault ? "ok" : "warn",
+    ));
+}
+
+function renderIme(state) {
+    const ime = state.ime || {};
+    setLed("imeEnabledRow", !!ime.enabled);
+    setLed("imeDefaultRow", !!ime.isDefault);
+    $("btnEnableIme").hidden = !!ime.enabled;
+    $("btnPickIme").hidden = !!ime.isDefault;
+}
+
+function setLed(rowId, ok) {
+    const row = $(rowId);
+    if (!row) return;
+    const led = row.querySelector("[data-led]");
+    if (led) led.className = `led ${ok ? "ok" : "warn"}`;
+}
+
+function renderVoice(state) {
+    if (document.activeElement !== $("modelBackend")) {
+        $("modelBackend").value = state.modelBackend === "remote" ? "remote" : "auto";
+    }
+    const source = state.modelDownloadSource || {};
+    if (document.activeElement !== $("modelDownloadSource")) {
+        $("modelDownloadSource").value = ["official", "custom"].includes(source.mode) ? source.mode : "hf_mirror";
+    }
+    if (document.activeElement !== $("modelDownloadCustom")) {
+        $("modelDownloadCustom").value = source.customBase || "";
+    }
+    if (document.activeElement !== $("modelDownloadArchive")) {
+        $("modelDownloadArchive").value = source.customArchiveUrl || "";
+    }
+    const customVisible = $("modelDownloadSource").value === "custom";
+    $("modelDownloadCustom").hidden = !customVisible;
+    $("modelDownloadCustomLabel").hidden = !customVisible;
+    $("modelDownloadArchive").hidden = !customVisible;
+    $("modelDownloadArchiveLabel").hidden = !customVisible;
+    const mic = state.mic || {};
+    setLed("micRow", !!mic.granted);
+    $("btnMic").hidden = !!mic.granted;
+    const host = $("modelRows");
+    const models = Array.isArray(state.models) ? state.models : [];
+    const existing = new Map([...host.querySelectorAll(".model")].map(node => [node.dataset.id, node]));
+    const current = new Set();
+    models.forEach(model => {
+        current.add(model.id);
+        let node = existing.get(model.id);
+        if (!node) {
+            node = buildModelRow(model);
+            host.append(node);
+        }
+        updateModelRow(node, model);
+    });
+    existing.forEach((node, id) => { if (!current.has(id)) node.remove(); });
+}
+
+function buildModelRow(model) {
+    const node = document.createElement("div");
+    node.className = "model";
+    node.dataset.id = model.id;
+    node.innerHTML = `
+        <div class="model-head">
+            <span class="model-name"></span>
+            <span class="model-size"></span>
+        </div>
+        <p class="model-status"></p>
+        <div class="progress" hidden><i></i></div>
+        <div class="model-actions"></div>`;
+    node.querySelector(".model-name").textContent = modelTitle(model);
+    node.querySelector(".model-size").textContent = mb(model.sizeBytes);
+    const actions = node.querySelector(".model-actions");
+    const button = (kind, className, textKey) => {
+        const buttonNode = document.createElement("button");
+        buttonNode.type = "button";
+        buttonNode.className = `btn small ${className}`.trim();
+        buttonNode.textContent = t(textKey);
+        buttonNode.setAttribute("aria-label", `${t(textKey)}: ${modelTitle(model)}`);
+        buttonNode.dataset.action = kind;
+        if (kind === "download") buttonNode.addEventListener("click", () => {
+            // A retry starts a new request. Do not let a previous failure
+            // survive the downloading state or a later locale refresh.
+            lastModelError = null;
+            setNote("modelNote", "");
+            call("downloadModel", model.id);
+        });
+        if (kind === "cancel") buttonNode.addEventListener("click", () => call("cancelModelDownload"));
+        if (kind === "remove") buttonNode.addEventListener("click", () => call("deleteModel", model.id));
+        if (kind === "import") buttonNode.addEventListener("click", () => {
+            lastModelError = null;
+            setNote("modelNote", "");
+            call("openModelDocument", model.id);
+        });
+        return buttonNode;
+    };
+    actions.append(
+        button("download", "primary", "model.download"),
+        button("cancel", "", "model.cancel"),
+        button("remove", "link", "model.remove"),
+        button("import", "", "model.import"),
+    );
+    return node;
+}
+
+function updateModelRow(node, model) {
+    const status = node.querySelector(".model-status");
+    const bar = node.querySelector(".progress");
+    const download = node.querySelector('[data-action="download"]');
+    const cancel = node.querySelector('[data-action="cancel"]');
+    const remove = node.querySelector('[data-action="remove"]');
+    const importer = node.querySelector('[data-action="import"]');
+    node.querySelector(".model-name").textContent = modelTitle(model);
+    const hasArchive = model.downloadBytes > model.sizeBytes &&
+        model.state !== "built_in" && model.state !== "installed";
+    node.querySelector(".model-size").textContent = hasArchive
+        ? t("model.transferSize", { download: mb(model.downloadBytes), installed: mb(model.sizeBytes) })
+        : mb(model.sizeBytes);
+    node.querySelectorAll("[data-action]").forEach(button => {
+        const key = {
+            download: model.state === "broken" ? "model.redownload" : "model.download",
+            cancel: "model.cancel",
+            remove: "model.remove",
+            import: "model.import",
+        }[button.dataset.action];
+        if (key) {
+            button.textContent = t(key);
+            button.setAttribute("aria-label", `${t(key)}: ${modelTitle(model)}`);
+        }
+    });
+    status.className = "model-status";
+    bar.hidden = true;
+    cancel.hidden = true;
+    remove.hidden = true;
+    importer.hidden = false;
+    download.hidden = true;
+    switch (model.state) {
+        case "built_in":
+            if (model.errorCode) {
+                status.textContent = eventText(model, "error.MODEL_DOWNLOAD_FAILED");
+                status.classList.add("bad");
+                download.textContent = t("model.redownload");
+                download.hidden = false;
+            } else {
+                status.textContent = t("model.builtIn");
+                status.classList.add("ok");
+            }
+            break;
+        case "installed":
+            if (model.errorCode) {
+                status.textContent = eventText(model, "error.MODEL_DOWNLOAD_FAILED");
+                status.classList.add("bad");
+                download.textContent = t("model.redownload");
+                download.hidden = false;
+                remove.hidden = false;
+            } else {
+                status.textContent = t("model.installed");
+                status.classList.add("ok");
+                remove.hidden = false;
+            }
+            break;
+        case "downloading":
+            status.textContent = t("model.downloading", { percent: lastPercentFor(model.id) });
+            status.classList.add("warn");
+            bar.hidden = false;
+            bar.firstElementChild.style.width = `${lastPercentFor(model.id)}%`;
+            cancel.hidden = false;
+            importer.hidden = true;
+            break;
+        case "importing":
+            status.textContent = t("model.importing");
+            status.classList.add("warn");
+            bar.hidden = false;
+            cancel.hidden = false;
+            importer.hidden = true;
+            break;
+        case "broken":
+            status.textContent = model.errorCode ?
+                eventText(model, "error.MODEL_DOWNLOAD_FAILED") : t("model.broken");
+            status.classList.add("bad");
+            download.textContent = t("model.redownload");
+            download.hidden = false;
+            break;
+        default:
+            if (model.errorCode) {
+                status.textContent = eventText(model, "error.MODEL_DOWNLOAD_FAILED");
+                status.classList.add("bad");
+                download.textContent = t("model.redownload");
+            } else {
+                status.textContent = t("model.missing", { size: mb(model.downloadBytes || model.sizeBytes) });
+                download.textContent = t("model.download");
+            }
+            download.hidden = false;
+            break;
+    }
+}
+
+function lastPercentFor(id) { return progressPercent[id] ?? 0; }
+
+function renderProgress(event) {
+    const percent = Math.max(0, Math.min(100, Number(event.percent) || 0));
+    progressPercent[event.id] = percent;
+    const node = document.querySelector(`.model[data-id="${event.id}"]`);
+    if (!node) return;
+    const bar = node.querySelector(".progress");
+    const status = node.querySelector(".model-status");
+    bar.hidden = false;
+    bar.firstElementChild.style.width = `${percent}%`;
+    status.textContent = t("model.downloadingBytes", {
+        percent, done: mb(event.doneBytes), total: mb(event.totalBytes),
+    });
+}
+
+function renderImportStatus(event) {
+    const node = document.querySelector(`.model[data-id="${event.id}"]`);
+    if (!node) return;
+    const status = node.querySelector(".model-status");
+    const labels = {
+        reading: "model.importing",
+        validating: "model.importValidating",
+        installing: "model.importInstalling",
+    };
+    status.textContent = t(labels[event.status] || "model.importing");
+    status.className = "model-status warn";
+}
+
+function renderModelConsent(event) {
+    lastModelError = null;
+    pendingModelConsent = {
+        id: String(event.id || ""),
+        name: String(event.name || event.id || ""),
+        bytes: Number(event.bytes || 0),
+    };
+    const consent = $("modelConsent");
+    consent.hidden = false;
+    $("modelConsentMessage").textContent = t("model.consent.message", {
+        name: pendingModelConsent.name,
+        bytes: mb(pendingModelConsent.bytes),
+    });
+    setNote("modelNote", "");
+}
+
+function hideModelConsent() {
+    pendingModelConsent = null;
+    const consent = $("modelConsent");
+    if (consent) consent.hidden = true;
+}
+
+function renderAsr(state) {
+    const asr = state.asr || {};
+    if (document.activeElement !== $("hotwords")) $("hotwords").value = asr.hotwords || "";
+    if (document.activeElement !== $("stripPeriod")) $("stripPeriod").checked = !!asr.stripPeriod;
+}
+
+function renderCustom(state) {
+    const custom = state.custom || {};
+    $("customSummary").textContent = customSummary(custom.summary);
+    if (document.activeElement !== $("customEnabled")) $("customEnabled").checked = !!custom.enabled;
+    if (document.activeElement !== $("customJson") && !$(`customJson`).value) {
+        $("customJson").value = custom.json || "";
+    }
+}
+
+function customSummary(summary) {
+    const raw = String(summary || "");
+    if (!raw || raw === "未定制" || raw.toLowerCase() === "no custom keys") return t("custom.none");
+    const count = raw.match(/(?:已定制\s*(\d+)|(?:custom keys?\s*)?(\d+)\s*custom keys?)/i);
+    return count ? t("custom.count", { count: count[1] || count[2] }) : raw;
+}
+
+function updateStateLabel(value) {
+    const key = `update.states.${String(value || "").toUpperCase()}`;
+    return I18N[uiLocale][key] || I18N.zh[key] || String(value || "");
+}
+
+function renderUpdate(state) {
+    const update = state.update || {};
+    if (document.activeElement !== $("updateSource")) $("updateSource").value = update.source || "";
+    if (document.activeElement !== $("updateUrl")) $("updateUrl").value = update.url || "";
+    if (document.activeElement !== $("autoUpdateCheck")) {
+        $("autoUpdateCheck").checked = !!update.autoCheck;
+    }
+    const source = update.activeSource === "built_in" ? t("update.sourceBuiltIn") : t("update.sourceHot");
+    const sourceStatus = update.sourceMode === "disabled" ? t("update.sourceDisabled") :
+        update.sourceMode === "custom" ? t("update.sourceCustom") : t("update.sourceDefault");
+    const lines = [
+        `${source}`,
+        t("update.sourceStatus", { value: sourceStatus }),
+        t("update.version", { value: update.activeVersion || "?" }),
+        update.activeContentHash ? t("update.hash", { value: update.activeContentHash.slice(0, 16) }) : "",
+        t("update.state", { value: updateStateLabel(update.state) }),
+    ].filter(Boolean);
+    const errorCode = String(update.lastErrorCode || "");
+    const errorDetail = String(update.lastErrorDetail || "");
+    if (errorCode) {
+        const translated = eventText({ code: errorCode, detail: errorDetail }, "error.INTERNAL_ERROR");
+        lines.push(t("update.lastError", { value: translated }));
+    } else if ((update.lastError || "").trim()) {
+        lines.push(t("update.lastError", { value: update.lastError.trim() }));
+    }
+    if (update.lastSuccessAt) lines.push(t("update.lastSuccess", { value: update.lastSuccessAt }));
+    $("updateStatus").textContent = lines.join("\n");
+    $("updateDanger").hidden = !(update.activeSource === "hot" && !update.activeSigned);
+}
+
+function aboutRows(state) {
+    const device = state.device || {};
+    const release = device.release || "?";
+    const sdk = device.sdkInt === undefined ? "?" : device.sdkInt;
+    return [
+        [t("about.appVersion"), `v${state.appVersion || "?"}`],
+        [t("about.activeKeyboard"), `v${activeKeyboardVersion(state)}`],
+        [t("about.builtInKeyboard"), `v${state.keyboardVersion || "?"}`],
+        [t("about.device"), `${device.manufacturer || ""} ${device.model || ""}`.trim() || "?"],
+        [t("about.android"), t("about.androidValue", { release, sdk })],
+    ];
+}
+
+function renderAbout(state) {
+    $("btnAppStore").hidden = !state.playDistribution;
+    const host = $("aboutRows");
+    host.replaceChildren();
+    aboutRows(state).forEach(([label, value]) => {
+        const row = document.createElement("div");
+        row.className = "row";
+        const name = document.createElement("span");
+        name.className = "row-label";
+        name.textContent = label;
+        const val = document.createElement("span");
+        val.className = "row-value";
+        val.textContent = value;
+        row.append(name, val);
+        host.append(row);
+    });
+    if ($("noticesText").textContent !== (state.notices || "")) {
+        $("noticesText").textContent = state.notices || "";
+    }
+}
+
+/* --- wiring ------------------------------------------------------------ */
+
+$("btnEnableIme").addEventListener("click", () => call("enableIme"));
+$("btnPickIme").addEventListener("click", () => call("pickIme"));
+$("btnAddShortcut").addEventListener("click", () => call("addImeShortcut"));
+$("btnAddWidget").addEventListener("click", () => call("addImeWidget"));
+$("btnAddTile").addEventListener("click", () => call("addImeTile"));
+$("btnMic").addEventListener("click", () => call("requestMic"));
+$("uiLanguage").addEventListener("change", event => setUiLanguage(event.target.value));
+$("modelBackend").addEventListener("change", event => call("setModelBackend", event.target.value));
+$("modelDownloadSource").addEventListener("change", event => {
+    const visible = event.target.value === "custom";
+    $("modelDownloadCustom").hidden = !visible;
+    $("modelDownloadCustomLabel").hidden = !visible;
+    $("modelDownloadArchive").hidden = !visible;
+    $("modelDownloadArchiveLabel").hidden = !visible;
+});
+$("btnSaveModelSource").addEventListener("click", () => {
+    call(
+        "setModelDownloadSource",
+        $("modelDownloadSource").value,
+        $("modelDownloadCustom").value || "",
+        $("modelDownloadArchive").value || "",
+    );
+    setNote("modelNote", t("note.saved"));
+});
+$("modelConsentCancel").addEventListener("click", () => {
+    if (!pendingModelConsent) return;
+    const id = pendingModelConsent.id;
+    hideModelConsent();
+    call("confirmModelDownload", id, false);
+});
+$("modelConsentConfirm").addEventListener("click", () => {
+    if (!pendingModelConsent) return;
+    const id = pendingModelConsent.id;
+    hideModelConsent();
+    call("confirmModelDownload", id, true);
+});
+
+$("btnSaveAsr").addEventListener("click", () => {
+    call("saveAsrSettings", $("stripPeriod").checked, $("hotwords").value);
+    setNote("asrNote", t("note.saved"));
+});
+
+$("btnSaveCustom").addEventListener("click", () => {
+    call("saveCustom", $("customJson").value || "{}", $("customEnabled").checked);
+    setNote("customNote", t("note.customSaved"));
+});
+
+$("btnCustomTemplate").addEventListener("click", () => {
+    $("customJson").value = JSON.stringify({
+        version: 1,
+        rows: [
+            [{ t: "✓", tap: "好的", note: "" }, { t: "…", tap: "等等", note: "" }],
+            [],
+            [],
+        ],
+    }, null, 2);
+});
+
+$("btnCheckUpdate").addEventListener("click", () => call("checkUpdate", $("updateSource").value));
+$("autoUpdateCheck").addEventListener("change", event => call("setAutoUpdateCheck", event.target.checked));
+$("btnInstallZip").addEventListener("click", () => call("installZip", $("updateUrl").value));
+$("btnImportZip").addEventListener("click", () => call("openKeyboardDocument"));
+$("btnRestore").addEventListener("click", () => call("restoreBuiltInKeyboard"));
+
+$("btnAppStore").addEventListener("click", () => call("openAppStore"));
+$("btnCopyAbout").addEventListener("click", () => {
+    if (!lastState) return;
+    call("copyText", aboutRows(lastState).map(([label, value]) => `${label}: ${value}`).join("\n"));
+    setNote("aboutNote", t("note.copied"));
+});
+
+document.querySelectorAll("[data-target]").forEach(entry => {
+    entry.addEventListener("click", () => showPage(entry.dataset.target));
+});
+
+document.querySelectorAll("[data-back]").forEach(back => {
+    back.addEventListener("click", () => showPage("home"));
+});
+
+/* Apply browser fallback before the first bridge hello. Native state may
+ * immediately replace it with uiLocale/uiLanguage. */
+applyLocale();

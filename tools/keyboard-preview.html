@@ -1,0 +1,801 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Feelime 键盘预览（真实键盘文件 + 空操作桥）</title>
+<!--
+  固化在仓库里的键盘预览工具（键盘外观变更 demo-first 流程
+  的落地载体，见 AGENTS.md「键盘外观变更流程」）。
+
+  它不复制任何键盘代码：启动时 fetch 真实的
+  app/src/main/assets/keyboard/{index.html, keyboard.css, keyboard.js}，
+  把 FeelimeNative 桥替换成「空操作 + 调用日志 + 假引擎」后内联加载。
+  键盘的行为、外观与真机完全同源，改键盘源文件后刷新本页即可见效。
+
+  用法：
+    cd <仓库根>
+    python3 -m http.server 8770
+    # 浏览器打开 http://<host>:8770/tools/keyboard-preview.html
+    # Chrome F12 开启设备模拟（手机模式）后可像手机一样触摸操作。
+
+  横屏 / 键盘高度调节在真机由原生侧驱动（orientation 随 bridge hello
+  下发、IME 视图高度由 FeelimeService 裁剪）；本页用「设备尺寸」按钮
+  改变 iframe 视口触发同样的 resize 路径来演示。
+-->
+<style>
+:root { color-scheme: dark; }
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: #101114; color: #e6e7ec;
+  font-family: system-ui, "Noto Sans CJK SC", sans-serif; }
+body { height: 100dvh; display: flex; flex-direction: column; overflow: hidden; }
+#toolbar {
+  flex: 0 0 auto;
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+  padding: 8px 10px; background: #1b1d22; border-bottom: 1px solid #2a2d34;
+  font-size: 12.5px;
+}
+#toolbar b { font-size: 13px; margin-right: 4px; }
+#toolbar button, #toolbar select, #toolbar a {
+  border: 1px solid #3a3e48; border-radius: 7px; background: #262932;
+  color: #e6e7ec; font-size: 12px; padding: 4px 10px; cursor: pointer; text-decoration: none;
+}
+#toolbar button.active { background: #23c890; border-color: #23c890; color: #07180e; font-weight: 600; }
+#toolbar .dim { color: #9aa0ab; }
+#stageWrap { position: relative; flex: 1 1 0; min-height: 0; overflow: hidden; display: flex;
+  justify-content: center; background:
+  repeating-conic-gradient(#14161a 0% 25%, #101114 0% 50%) 50% / 24px 24px; }
+#stage { position: relative; background: #000; overflow: hidden;
+  border-left: 1px solid #2a2d34; border-right: 1px solid #2a2d34;
+  box-shadow: 0 0 40px #000c; }
+#kb-frame { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+#logDrawer {
+  position: fixed; right: 10px; top: 55px; width: 330px; max-height: 70vh;
+  overflow-y: auto; background: #16181dd9; border: 1px solid #2a2d34;
+  border-radius: 10px; padding: 8px 10px; font-size: 11.5px; z-index: 50;
+  backdrop-filter: blur(4px); display: none;
+}
+#logDrawer.open { display: block; }
+#logDrawer h4 { margin: 0 0 6px; font-size: 12px; color: #9aa0ab; }
+#logDrawer .entry { padding: 2px 0; border-bottom: 1px dashed #24262c; word-break: break-all; }
+#logDrawer .entry b { color: #23c890; }
+#logDrawer .dim { color: #7c8290; }
+/* ---- 验收清单：勾选/描述/生成汇总 ---- */
+#checkDrawer {
+  position: fixed; left: 10px; top: 55px; width: min(420px, calc(100vw - 20px));
+  max-height: 80vh; overflow-y: auto; background: #16181deF; border: 1px solid #2a2d34;
+  border-radius: 10px; padding: 10px 12px; font-size: 12.5px; z-index: 60;
+  backdrop-filter: blur(4px); display: none;
+}
+#checkDrawer.open { display: block; }
+#checkDrawer h4 { margin: 0 0 8px; font-size: 12.5px; }
+#checkDrawer .dim { color: #9aa0ab; font-weight: 400; }
+.check-item { display: flex; align-items: flex-start; gap: 8px; padding: 3px 0; }
+.check-item button {
+  flex: none; width: 30px; height: 26px; border: 1px solid #3a3e48; border-radius: 6px;
+  background: #262932; color: #9aa0ab; font-size: 13px; cursor: pointer;
+}
+.check-item button.ok { background: #23c890; border-color: #23c890; color: #07180e; font-weight: 700; }
+.check-item button.bad { background: #7a2430; border-color: #ff6b6b; color: #ffd8dc; font-weight: 700; }
+.check-item input {
+  flex: 1; min-width: 0; border: 1px solid #3a3e48; border-radius: 6px; background: #101114;
+  color: #e6e7ec; font-size: 12.5px; padding: 5px 8px; display: none;
+}
+.check-item.bad input { display: block; }
+.check-item span.label { flex: 1; padding-top: 4px; }
+#checkGen, #checkCopy {
+  margin-top: 8px; border: 0; border-radius: 7px; background: #23c890; color: #07180e;
+  font-size: 13px; font-weight: 600; padding: 9px 16px; cursor: pointer;
+}
+#checkCopy { background: #262932; color: #e6e7ec; }
+#checkOut { margin-top: 8px; }
+#checkText {
+  width: 100%; box-sizing: border-box; background: #101114; color: #e6e7ec;
+  border: 1px solid #3a3e48; border-radius: 7px; font-size: 12px; padding: 8px;
+}
+</style>
+</head>
+<body>
+<div id="toolbar">
+  <b>Feelime 0.17.6 开发预览</b>
+  <span class="dim">设备</span>
+  <button id="modePortrait" class="active">竖屏 390×844</button>
+  <button id="modeLandscape">横屏 844×411</button>
+  <button id="modeFill">填满窗口</button>
+  <span class="dim">快捷</span>
+  <button id="actCompose">模拟输入 nihao</button>
+  <button id="actPartialPinyin">全拼 x'an 展开</button>
+  <button id="actCshi">全拼 c'shi 展开</button>
+  <button id="actCashi">完整拼音 cashi 展开</button>
+  <button id="actClear">结束输入</button>
+  <button id="actSettings">快捷设置</button>
+  <button id="actCtrl">控制键层</button>
+  <label>界面 <select id="previewLocale"><option value="zh">中文</option><option value="en">English</option></select></label>
+  <label>主题 <select id="previewTheme"><option value="auto">跟随系统</option><option value="light">浅色</option><option value="dark">深色</option></select></label>
+  <a href="settings-preview.html">完整设置预览</a>
+  <button id="actLog">桥日志</button>
+  <button id="actCheck">验收清单</button>
+  <span class="dim" id="prefetch" style="margin-left:auto">加载键盘源文件…</span>
+</div>
+<div id="stageWrap"><div id="stage"><iframe id="kb-frame"></iframe></div></div>
+<div id="logDrawer"><h4>FeelimeNative 调用日志（空操作）</h4><div id="logBody"></div></div>
+<div id="checkDrawer">
+  <h4>验收清单 <span class="dim">（没问题打 ✓；有问题打 ✗ 并写一句描述）</span></h4>
+  <div id="checkList"></div>
+  <div id="checkOut" hidden>
+    <textarea id="checkText" rows="8" readonly></textarea>
+    <button id="checkCopy">复制结果</button>
+  </div>
+  <button id="checkGen">生成验收结果</button>
+</div>
+
+<script>
+'use strict';
+// 每次打开都换 fetch 时间戳：手机浏览器对键盘文件的强缓存不再生效。
+document.documentElement.dataset.deployStamp = String(Date.now());
+const MODES = {
+    portrait: { w: 390, h: 844 },
+    // A real landscape short edge is ~411css (1080物理/2.625); 390
+    // starved the keyboard below its content floor (206 < 195+11) and the
+    // height thumb read as "below minimum" - a preview-only artifact.
+    landscape: { w: 844, h: 411 },
+};
+const frame = document.getElementById('kb-frame');
+const previewSafeBottom = Math.max(0, Math.min(96,
+    Number(new URLSearchParams(location.search).get('safeBottom')) || 0));
+const stage = document.getElementById('stage');
+const logBody = document.getElementById('logBody');
+const entries = [];
+let keyboardMode = 'pinyin'; // 假引擎当前键盘（桥 hello 下发）
+
+function log(method, detail) {
+    const div = document.createElement('div');
+    div.className = 'entry';
+    div.innerHTML = '<b>' + method + '</b> ' + (detail || '');
+    logBody.prepend(div);
+    entries.push(div);
+    while (entries.length > 120) entries.shift().remove();
+}
+
+const esc = v => String(v).replace(/&/g, '&amp;').replace(/</g, '&lt;');
+
+/* ---- 假引擎：让候选条 / composing 工具栏可以在页面上走通 ---- */
+const FAKE_CANDS = {
+    nihao: ['你好', '你号', '拟好', '妮号', '你豪', '泥嚎'],
+    ni: ['你', '妮', '拟', '逆', '腻'],
+    nih: ['你哈', '拟化'],
+    niha: ['你哈'],
+    hao: ['好', '号', '耗'],
+    a: ['啊', '阿'],
+    zh: ['这', '着'],
+    'z': ['在', '再'],
+};
+let rawInput = '';
+let revision = 0;
+let deletedHead = null; // 删除自造词后的假引擎状态
+
+
+function pushEngineState(raw, composing) {
+    revision += 1;
+    if (raw !== rawInput) deletedHead = null;
+    let candidates = composing
+        ? fakeCandidates(raw).map((text, i) => ({ id: 'c' + revision + '-' + i, text }))
+        : [];
+    if (deletedHead) candidates = candidates.filter(c => c.text !== deletedHead);
+    frame.contentWindow.Feelime.onEngineState({
+        phase: 'READY',
+        revision,
+        mode: keyboardMode,
+        composing: composing ? (raw || ' ') : '',
+        rawInput: raw,
+        candidates,
+        hasNextPage: false,
+    });
+    hostRender(composing ? raw : '');
+}
+
+/** 键盘视图高度变化后让 keyboard.js 重算行高（view resize 不触发 window
+ * resize，手动踢一下）。 */
+function pushEngineRefresh() {
+    const win = frame.contentWindow;
+    if (win && typeof win.dispatchEvent === 'function') {
+        win.dispatchEvent(new win.Event('resize'));
+    }
+}
+
+/* ---- 假引擎（双拼 / 法语）：自然码键位 → 全拼后查表；法语给音标词 ---- */
+const DOUBLE_INITIALS = { v: 'zh', i: 'ch', u: 'sh' };
+const DOUBLE_FINALS = {
+    q: ['iu'], w: ['ua', 'ia'], e: ['e'], r: ['uan', 'er'], t: ['ue', 've'],
+    y: ['ing', 'uai'], u: ['u'], i: ['i'], o: ['o', 'uo'], p: ['un'],
+    a: ['a'], s: ['ong', 'iong'], d: ['iang', 'uang'], f: ['en'], g: ['eng'],
+    h: ['ang'], j: ['an'], k: ['ao'], l: ['ai'],
+    z: ['ei'], x: ['ie'], c: ['iao'], v: ['ui', 'ü'], b: ['ou'], n: ['in'], m: ['ian'],
+};
+const PINYIN_WORDS = {
+    zhang: ['张', '章', '涨'], chang: ['长', '常', '唱'], shang: ['上', '商', '伤'],
+    zhou: ['周', '州', '粥'], chou: ['抽', '仇'], shou: ['手', '收', '首'],
+    xian: ['先', '西安', '县'], wang: ['王', '往', '网'], zhai: ['宅', '摘'],
+    chuan: ['船', '传'], shuo: ['说', '硕'], dui: ['对', '队'],
+};
+const FRENCH_WORDS = ['café', 'très', 'après', 'français', 'être', 'père', 'déjà', 'où'];
+
+function doublePinyinToPinyin(raw) {
+    // 零声母（a/e/o 开头）直接按全拼处理。
+    const keys = raw.replace(/'/g, '').replace(/ /g, '');
+    const out = [];
+    for (let i = 0; i < keys.length; i += 2) {
+        const s = keys[i];
+        const f = keys[i + 1] || '';
+        if (['a', 'e', 'o'].includes(s)) { out.push(s + f); continue; }
+        const initial = DOUBLE_INITIALS[s] || s;
+        const finals = DOUBLE_FINALS[f];
+        if (!finals) return [keys];
+        out.push(...finals.map(fin => initial + fin));
+    }
+    return [...new Set(out)];
+}
+
+function fakeCandidates(raw) {
+    // Preview data only: production candidates always come from Rime.
+    const partial = { "x'an": ['西安', '相安', '心安'], "xi'an": ['西安'],
+        "xiang'an": ['相安', '相安无事'], "xin'an": ['心安', '新安'],
+        "c'shi": ['测试', '城市', '擦拭'], "ca'shi": ['擦拭', '擦试'],
+        "cai'shi": ['才是', '菜市', '采石'], cashi: ['擦拭', '擦试'] };
+    if (keyboardMode === 'pinyin' && partial[raw]) return partial[raw].slice();
+    const key = raw.replace(/ /g, '').replace(/'/g, '');
+    const table = FAKE_CANDS[key];
+    if (table) return table.slice();
+    if (keyboardMode === 'double-pinyin') {
+        const all = [];
+        doublePinyinToPinyin(raw).forEach(py => {
+            if (PINYIN_WORDS[py]) all.push(...PINYIN_WORDS[py]);
+            else if (FAKE_CANDS[py]) all.push(...FAKE_CANDS[py]);
+        });
+        if (all.length) return [...new Set(all)];
+        return [key + '（双拼占位）'];
+    }
+    if (keyboardMode === 'french') {
+        const hits = FRENCH_WORDS.filter(w => w.normalize('NFD').startsWith(key.normalize('NFD').slice(0, 2)));
+        return hits.length ? hits : [key + '…'];
+    }
+    if (keyboardMode === 'japanese') return ['こんにちは', 'コンニチハ', key + '（占位）'];
+    if (!raw) return [];
+    return [raw + '（占位）', raw + '2', raw + '3'];
+}
+
+/* ---- 宿主编辑器：展示输入效果（预览专用） ---- */
+let hostCommitted = '';
+let voiceLevelTimer = 0;
+let voicePartial = '';
+let voiceSegments = 0;
+/* 面板演示数据（预览工具专用）：剪贴板/常用语在内存里维护，桥调用
+ * 后像真机原生一样异步回推 onClipboard/onFavorites，否则面板永远空白。 */
+let panelClip = [
+    { id: 'c1', text: 'meeting 3pm, room 402', time: Date.now() - 600e3 },
+    { id: 'c2', text: '这个需求周五前要上线', time: Date.now() - 3600e3 },
+    { id: 'c3', text: 'https://example.com/pr/123', time: Date.now() - 86400e3 },
+];
+let favSeq = 3;
+let panelFav = [
+    { id: 'f1', text: '麻烦确认一下，谢谢', code: '', time: Date.now() - 86400e3 },
+    { id: 'f2', text: '稍等，我看下', code: 'sd', time: Date.now() - 86400e3 * 2 },
+    { id: 'f3', text: '收到', code: '', time: Date.now() - 86400e3 * 3 },
+];
+function pushPanelData(callback, payload) {
+    const win = frame.contentWindow;
+    if (!win || !win.Feelime || !win.Feelime[callback]) return;
+    setTimeout(() => win.Feelime[callback](payload), 120);
+}
+function hostRender(raw) {
+    const el = frame.contentDocument && frame.contentDocument.getElementById('hostEditor');
+    if (!el) return;
+    el.innerHTML =
+        '<span class="host-done">' + esc(hostCommitted).replace(/\n/g, '<br>') + '</span>' +
+        '<span class="host-caret"></span>' +
+        '<span class="host-raw">' + esc(raw || '') + '</span>';
+    el.scrollTop = el.scrollHeight;
+}
+function hostCommit(text) { hostCommitted += text; hostRender(rawInput); }
+function hostBackspace() {
+    if (rawInput) return;
+    hostCommitted = hostCommitted.replace(/[\s\S]$/u, '');
+    hostRender('');
+}
+
+/* ---- 空操作桥：记录每一次调用，输入键喂给假引擎 ---- */
+function makeBridge() {
+    const bridgeTable = {
+        keyboardReady(version, minApi, caps) {
+            log('keyboardReady', `键盘 ${esc(version)}，能力 <code>${esc(caps)}</code>`);
+        },
+        requestState() {
+            setTimeout(pushHello, 0);
+        },
+        key(char) {
+            const viaEngine = keyboardMode.includes('pinyin');
+            log('key', esc(char) + (viaEngine ? ' <span class="dim">→ 引擎</span>' : ''));
+            if (viaEngine && /[a-z']/.test(char)) {
+                rawInput += char;
+                pushEngineState(rawInput, true);
+            } else if (!viaEngine) {
+                // 英文/法/日直通模式：引擎直接上屏（模拟原生行为）。
+                hostCommit(char);
+            }
+        },
+        setComposition(keys) {
+            log('setComposition', esc(keys));
+            // Match native Reset + per-key engine echoes. A final-only fake
+            // hid the disappearing spelling column during repeated choices.
+            rawInput = '';
+            pushEngineState('', false);
+            for (const key of keys) {
+                rawInput += key;
+                pushEngineState(rawInput, true);
+            }
+        },
+        space() {
+            log('space', '<span class="dim">空格上屏</span>');
+            hostCommit(rawInput ? '' : ' ');
+            rawInput = '';
+            pushEngineState('', false);
+        },
+        backspace() {
+            log('backspace', '');
+            if (!rawInput) hostBackspace();
+            rawInput = rawInput.slice(0, -1);
+            pushEngineState(rawInput, rawInput.length > 0);
+        },
+        enter() {
+            log('enter', '');
+            hostCommitted += '\n';
+            rawInput = '';
+            pushEngineState('', false);
+        },
+        moveCursor(delta) { log('moveCursor', (delta > 0 ? '+' : '') + delta); },
+        setKeyboardHeight(cssPx) {
+            log('setKeyboardHeight', cssPx + 'css px <span class="dim">→ 视图整体变高/变矮</span>');
+            const kb = frame.contentDocument && frame.contentDocument.getElementById('softKeyboard');
+            const landscape = frame.clientWidth > frame.clientHeight;
+            const defaultHeight = Math.min(272, Math.round(frame.clientHeight * (landscape ? 0.5 : 0.45)));
+            if (kb) kb.style.height = ((Number(cssPx) || defaultHeight) + previewSafeBottom) + 'px';
+            setTimeout(pushEngineRefresh, 0);
+        },
+        keyEvent(keyCode, metaState) {
+            const names = { 111: 'Esc', 61: 'Tab', 122: 'Home', 123: 'End',
+                92: 'PgUp', 93: 'PgDn', 19: '↑', 20: '↓', 21: '←', 22: '→',
+                112: 'Del', 56: '.', 131: 'F4' };
+            const name = /^[A-Z]$/.test(String.fromCharCode(65 + keyCode - 29))
+                ? String.fromCharCode(65 + keyCode - 29) : (names[keyCode] || '#' + keyCode);
+            const mods = [
+                (metaState & 0x1000) && 'Ctrl',
+                (metaState & 2) && 'Alt',
+                (metaState & 1) && 'Shift',
+                (metaState & 0x10000) && 'Meta',
+            ].filter(Boolean).join('+');
+            log('keyEvent', `<b>${mods ? mods + '+' : ''}${name}</b> <span class="dim">→ 宿主编辑器</span>`);
+        },
+        chooseCandidate(rev, id) {
+            log('chooseCandidate', `rev=${rev} id=${esc(id)}`);
+            const cands = fakeCandidates(rawInput);
+            hostCommit(cands[0] || '');
+            rawInput = '';
+            pushEngineState('', false);
+        },
+        deleteHighlightedCandidate() {
+            // 模拟 librime 删自造词 —— 假引擎里首个候选必删成功。
+            log('deleteHighlightedCandidate', '<span class="dim">→ 候选池重建</span>');
+            const head = fakeCandidates(rawInput)[0];
+            if (head) deletedHead = head;
+            pushEngineState(rawInput, true);
+        },
+        deleteCandidate(rev, id) {
+            // 任意候选删除（假引擎按 id 定位）。
+            log('deleteCandidate', `rev=${rev} id=${esc(id)} <span class="dim">→ 候选池重建</span>`);
+            const cands = fakeCandidates(rawInput);
+            const hit = cands.find((t, i) => 'c' + revision + '-' + i === id);
+            if (hit) deletedHead = hit;
+            pushEngineState(rawInput, true);
+        },
+        pageNext(rev) { log('pageNext', 'rev=' + rev); },
+        pagePrevious(rev) { log('pagePrevious', 'rev=' + rev); },
+        selectMode(mode) {
+            log('selectMode', esc(mode) + ' <span class="dim">→ 重推 hello（真机原生行为）</span>');
+            keyboardMode = mode;
+            rawInput = '';
+            pushEngineState('', false);
+            // 真机上 selectMode 后原生会重新 pushBridgeHello 驱动重渲染。
+            setTimeout(pushHello, 0);
+        },
+        startVoice() {
+            log('startVoice', '<span class="dim">→ 模拟录音浮层</span>');
+            voiceLevelTimer = setInterval(() => {
+                const win = frame.contentWindow;
+                if (!win || !win.Feelime) return;
+                win.Feelime.onNativeState({
+                    state: 'listening',
+                    level: 0.25 + Math.abs(Math.sin(Date.now() / 300)) * 0.7,
+                    partial: voicePartial,
+                });
+                // 每 ~2.5s 假装识别出一段。
+                if (Math.random() < 0.25) {
+                    voicePartial = '模拟识别' + (voiceSegments += 1);
+                    win.Feelime.onNativeState({ state: 'listening', level: 0.5, partial: voicePartial });
+                }
+            }, 300);
+            const win = frame.contentWindow;
+            win && win.Feelime && win.Feelime.onNativeState({ state: 'loading', level: 0 });
+            setTimeout(() => {
+                const w = frame.contentWindow;
+                w && w.Feelime && w.Feelime.onNativeState({ state: 'listening', level: 0.4, partial: voicePartial });
+            }, 400);
+        },
+        stopVoice() {
+            log('stopVoice', '');
+            if (voiceLevelTimer) { clearInterval(voiceLevelTimer); voiceLevelTimer = 0; }
+            const win = frame.contentWindow;
+            if (!win || !win.Feelime) return;
+            win.Feelime.onNativeState({ state: 'idle', level: 0 });
+            if (voicePartial) {
+                hostCommit(voicePartial);
+                voicePartial = '';
+                voiceSegments = 0;
+                hostRender(rawInput);
+            }
+        },
+        cancelVoice() {
+            log('cancelVoice', '<span class="dim">→ 丢弃本次识别</span>');
+            if (voiceLevelTimer) { clearInterval(voiceLevelTimer); voiceLevelTimer = 0; }
+            voicePartial = '';
+            voiceSegments = 0;
+            const win = frame.contentWindow;
+            if (win && win.Feelime) win.Feelime.onNativeState({ state: 'idle', level: 0, partial: '' });
+            hostRender(rawInput);
+        },
+        switchInputMethod() { log('switchInputMethod', '<span class="dim">→ 系统 IME picker</span>'); },
+        hideKeyboard() { log('hideKeyboard', ''); },
+        openSetup() { log('openSetup', ''); },
+        reloadKeyboard() { log('reloadKeyboard', ''); },
+        commitText(text) {
+            log('commitText', esc(text));
+            hostCommit(text);
+        },
+        panelFlush(session) { frame.contentWindow.Feelime.onPanelFlushed({session}); },
+        panelSelection(start, end, session) { log('panelSelection', `${start}, ${end}, ${session}`); },
+        panelInput(active) { log('panelInput', String(active)); },
+        getClipboard() {
+            log('getClipboard', '<span class="dim">→ 回推演示数据</span>');
+            pushPanelData('onClipboard', { items: panelClip });
+        },
+        clearClipboard() {
+            log('clearClipboard', '');
+            panelClip = [];
+            pushPanelData('onClipboard', { items: [] });
+        },
+        removeClipboard(id) {
+            log('removeClipboard', esc(id));
+            panelClip = panelClip.filter(i => i.id !== String(id));
+            pushPanelData('onClipboard', { items: panelClip });
+        },
+        getFavorites() {
+            log('getFavorites', '<span class="dim">→ 回推演示数据</span>');
+            pushPanelData('onFavorites', { items: panelFav });
+        },
+        favoritesAdd(text, code) {
+            log('favoritesAdd', esc(text) + ' ' + esc(code || ''));
+            panelFav.unshift({ id: 'f' + (++favSeq), text: String(text),
+                code: String(code || ''), time: Date.now() });
+            pushPanelData('onFavorites', { items: panelFav });
+        },
+        favoritesUpdate(id, text, code) {
+            log('favoritesUpdate', esc(id) + ' ' + esc(text) + ' ' + esc(code || ''));
+            const hit = panelFav.find(i => i.id === String(id));
+            if (hit) { hit.text = String(text); hit.code = String(code || ''); }
+            pushPanelData('onFavorites', { items: panelFav });
+        },
+        favoritesRemove(id) {
+            log('favoritesRemove', esc(id));
+            panelFav = panelFav.filter(i => i.id !== String(id));
+            pushPanelData('onFavorites', { items: panelFav });
+        },
+        favoritesMove(id, to) {
+            log('favoritesMove', esc(id) + ' → ' + esc(to));
+            const from = panelFav.findIndex(i => i.id === String(id));
+            if (from >= 0) {
+                const [row] = panelFav.splice(from, 1);
+                panelFav.splice(Number(to) || 0, 0, row);
+            }
+            pushPanelData('onFavorites', { items: panelFav });
+        },
+    };
+    // 未实现的方法一律记录（避免静默丢调用）。
+    return new Proxy(bridgeTable, {
+        get(target, prop) {
+            if (prop in target) return target[prop];
+            return (...args) => log(String(prop), esc(args.join(', ')));
+        },
+    });
+}
+
+function pushHello() {
+    const win = frame.contentWindow;
+    if (!win || !win.Feelime) return;
+    const landscape = frame.clientWidth > frame.clientHeight;
+    // The keyboard requires favorites-v2 (exact arg order) - a stale v1
+    // here made onBridgeHello bail and EVERYTHING hello
+    // carries (ready gate, floatBand, heightCeil) silently fell back.
+    const caps = ['candidate-revision-v1', 'clipboard-v1', 'commit-text-v1',
+        'compose-control-v1', 'unicode-compose-v1', 'cursor-repeat-v1', 'cursor-delta-v1', 'panel-compose-v1', 'favorites-v2', 'ime-control-v1',
+        'key-event-v1', 'keyboard-height-reset-v1', 'keyboard-update-status-v1', 'text-input-v1', 'voice-session-v1', 'voice-cancel-v1'];
+    win.Feelime.onBridgeHello({
+        nativeApiVersion: 1,
+        capabilities: caps,
+        uiLocale: document.getElementById('previewLocale').value,
+        theme: document.getElementById('previewTheme').value !== 'auto'
+            ? document.getElementById('previewTheme').value
+            : window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches
+            ? 'light' : 'dark',
+        orientation: landscape ? 'landscape' : 'portrait',
+        // 手势条避让（真机由原生下发 px；预览默认 0）。
+        safeBottom: previewSafeBottom,
+        // Match native floatBandPx: landscape 30%, portrait 40%, capped at 200dp.
+        floatBand: Math.min(200, Math.floor(frame.clientHeight * (landscape ? 0.3 : 0.4))),
+        // Height-card drag range, same semantics as the native clamp
+        // (portrait 45% of the frame height / landscape half) so the preview
+        // thumb starts where the device's would.
+        heightDefault: Math.min(272, Math.round(frame.clientHeight * (landscape ? 0.5 : 0.45))),
+        heightFloor: landscape ? 170 : 210,
+        heightCeil: Math.round(frame.clientHeight * (landscape ? 0.5 : 0.45)),
+        pageGenerationToken: 'tok-1',
+        mode: keyboardMode,
+        engineDataReady: { pinyin: true, 'double-pinyin': true, japanese: true,
+            french: true, russian: true },
+    });
+}
+
+/* ---- 组装 iframe 文档：真实 index.html + 内联 CSS/JS + 注入桥 ---- */
+async function fetchFirst(file) {
+    // 仓库内 http server 与 nginx share 部署两种布局都支持。
+    // cache-bust：手机浏览器会强缓存键盘文件，不带时间戳会一直跑旧版。
+    const bust = '?t=' + document.documentElement.dataset.deployStamp;
+    for (const root of ['../app/src/main/assets/keyboard/', 'kb-preview-src/']) {
+        const r = await fetch(root + file + bust, { cache: 'no-store' });
+        if (r.ok) return await r.text();
+    }
+    throw new Error('找不到 ' + file + '（需从仓库根起 http server，或部署 kb-preview-src/ 目录）');
+}
+
+async function build() {
+    const [html, css, js] = await Promise.all([
+        fetchFirst('index.html'),
+        fetchFirst('keyboard.css'),
+        fetchFirst('keyboard.js'),
+    ]);
+    const inject = `<script>window.FeelimeNative = window.parent.__FeelimePreviewBridge;<\/script>`;
+    // Replacement MUST be a function: keyboard.js contains "$'" (currency
+    // glyphs), and String.replace would expand $-sequences in a string
+    // replacement, corrupting the inlined script.
+    const patched = html
+        .replace('<link rel="stylesheet" href="keyboard.css">', () => `<style>${css}</style>`)
+        // The escaped <\/script> in the LITERAL below matters: a plain
+        // closing tag inside a string would terminate THIS page's script
+        // block at HTML parse time (self-inflicted).
+        .replace('<script src="keyboard.js"><\/script>',
+            () => `${inject}<script>${js}<\/script>`)
+        .replace('</head>', () => `<style>
+/* preview shell: 模拟原生侧的 IME 视图 —— 键盘贴底、上方是「宿主编辑器」；
+   视图总高与 FeelimeService.FixedHeightInputView 同语义（默认 272dp、
+   横屏 ≤ 屏高 1/2），拖动调节后由桥 setKeyboardHeight 改写。 */
+html, body { background: #c7c9cf; }
+#hostEditor {
+    position: absolute; left: 0; right: 0; top: 0;
+    min-height: 64px; max-height: 45%;
+    overflow-y: auto; box-sizing: border-box;
+    padding: 10px 12px 14px;
+    background: #ffffff; color: #222;
+    font: 15px/1.5 system-ui, sans-serif;
+    box-shadow: 0 1px 4px #0003;
+    word-break: break-all;
+}
+.host-raw { color: #23c890; text-decoration: underline; }
+.host-caret { display: inline-block; width: 2px; height: 1.1em;
+    background: #333; vertical-align: text-bottom; margin: 0 1px; }
+#softKeyboard { position: absolute; left: 0; right: 0; bottom: 0; }
+</style></head>`);
+    if (patched === html) throw new Error('index.html 结构变化：内联替换未命中');
+    frame.srcdoc = patched;
+    frame.addEventListener('load', () => {
+        // 宿主编辑器 DOM 注入（body 顶部）。
+        const doc = frame.contentDocument;
+        if (doc && doc.body && !doc.getElementById('hostEditor')) {
+            const host = doc.createElement('div');
+            host.id = 'hostEditor';
+            host.innerHTML = '<span style="color:#98a">（模拟宿主 app 的输入框，输入内容会落在这里）</span>';
+            doc.body.insertBefore(host, doc.body.firstChild);
+        }
+        applyDefaultKbHeight();
+        // 视图高度刚被 JS 改写（native 侧是首次 layout 就绪），行高必须
+        // 按最终高度重算一遍。
+        setTimeout(pushEngineRefresh, 30);
+        pushHello();
+        // 版本号从 VERSION 文件读（body 正则会抓到无关的 3.x.x，误导过）。
+        // 与 fetchFirst 相同的双布局回退：仓库 http server 或部署目录。
+        const prefetch = document.getElementById('prefetch');
+        (async () => {
+            for (const root of ['../app/src/main/assets/keyboard/', 'kb-preview-src/']) {
+                const r = await fetch(root + 'VERSION?v=' + Date.now(), { cache: 'no-store' });
+                if (r.ok) {
+                    prefetch.textContent = '已加载真实键盘（keyboard.js ' + (await r.text()).trim() + '）';
+                    return;
+                }
+            }
+            prefetch.textContent = '已加载真实键盘（kb-preview-src）';
+        })();
+    });
+}
+
+/* ---- 工具条 ---- */
+/** 与 FixedHeightInputView 同语义的默认视图高度；拖动调节后由桥改写。 */
+function applyDefaultKbHeight() {
+    const doc = frame.contentDocument;
+    const kb = doc && doc.getElementById('softKeyboard');
+    if (!kb) return;
+    // landscape allows half the screen (was a third).
+    const cap = Math.floor(frame.clientHeight / 2);
+    kb.style.height = (Math.min(272, cap) + previewSafeBottom) + 'px';
+}
+
+let previewMode = 'portrait';
+function fitStage() {
+    const size = MODES[previewMode];
+    stage.style.width = size ? Math.min(size.w, stage.parentElement.clientWidth) + 'px' : '100%';
+    stage.style.height = size ? Math.min(size.h, stage.parentElement.clientHeight) + 'px' : '100%';
+}
+
+function setMode(name) {
+    previewMode = name;
+    ['modePortrait', 'modeLandscape', 'modeFill'].forEach(id =>
+        document.getElementById(id).classList.toggle('active', id === 'mode' + name[0].toUpperCase() + name.slice(1)));
+    fitStage();
+    // 视口变了：默认高度（竖 ≤45%、横 ≤1/2）重算，已拖动过的高度保持。
+    setTimeout(applyDefaultKbHeight, 0);
+    setTimeout(pushEngineRefresh, 30);
+    // 真机旋转走 onConfigurationChanged → pushBridgeHello（orientation/
+    // floatBand/heightCeil 都随之换值）；预览页同步这个语义。
+    setTimeout(pushHello, 60);
+}
+document.getElementById('previewLocale').onchange = pushHello;
+document.getElementById('previewTheme').onchange = pushHello;
+document.getElementById('modePortrait').onclick = () => setMode('portrait');
+document.getElementById('modeLandscape').onclick = () => setMode('landscape');
+document.getElementById('modeFill').onclick = () => setMode('fill');
+document.getElementById('actLog').onclick = () =>
+    document.getElementById('logDrawer').classList.toggle('open');
+document.getElementById('actCompose').onclick = () => {
+    rawInput = '';
+    'nihao'.split('').forEach(ch => {
+        rawInput += ch;
+        pushEngineState(rawInput, true);
+    });
+};
+document.getElementById('actPartialPinyin').onclick = () => {
+    keyboardMode = 'pinyin';
+    pushHello();
+    rawInput = "x'an";
+    pushEngineState(rawInput, true);
+    frame.contentDocument.getElementById('composeExpand').click();
+};
+for (const [id, spelling] of [['actCshi', "c'shi"], ['actCashi', 'cashi']]) {
+    document.getElementById(id).onclick = () => {
+        keyboardMode = 'pinyin';
+        pushHello();
+        rawInput = spelling;
+        pushEngineState(rawInput, true);
+        frame.contentDocument.getElementById('composeExpand').click();
+    };
+}
+document.getElementById('actClear').onclick = () => {
+    rawInput = '';
+    pushEngineState('', false);
+};
+document.getElementById('actSettings').onclick = () => {
+    frame.contentWindow.Feelime.toggleSettingsPanel();
+};
+document.getElementById('actCtrl').onclick = () => {
+    frame.contentWindow.Feelime.toggleControlView();
+};
+
+/* ---- 验收清单：逐项确认，问题可直接用真输入法描述 ---- */
+const CHECK_ITEMS = [
+    'Fn 键：控制层第一行 Fn 替代 Comb 图标；点击点亮，Q..P/K/L 变 F1..F12',
+    'Fn 长按：弹出原组合九宫格（Ctrl+Alt+Del … Alt+F4）',
+    '浮层不遮触发键：组合浮层/长按菜单都开在键盘上方区域，触发键全程可见',
+    '再点收起：浮层开着再点触发键=只收起（Fn、Ctrl/Alt/Win、右下角切换键都是）',
+    '英文 j k l 上滑：~ " \'（半角）',
+    '候选上方扩展带：长按切换键的键盘菜单浮在候选区上方，一次展示全部',
+    '符号定制：设置 → 定制键盘 → 粘贴 JSON → 符号层「定制」页三行可横向拖动',
+    '定制长按说明：有 note 的键长按出 toast 文案',
+    '横屏工具条：拼音行与候选不重叠、工具条明显加高；控制条两行键变回正常大小',
+    '横屏 safe area：键盘底部不压系统手势条',
+    '语音界面：红圈换成麦克风图标；横屏卡片完整可见（无顶部裁切）',
+    '收起重开：切到符号层收起键盘，再弹出回到字母主界面',
+    '控制键层：只占工具条、键盘主体不动；Ctrl/Alt/Win 长按出九宫格',
+    '横屏：四行布局与竖屏一致、默认高度 ≤ 屏高 1/2',
+    '键盘高度调节：拖上沿整体变高/变矮，键与字体同步缩放',
+    '上滑/下滑：输入 alt 符号 / 大写字母',
+    '双拼 / 法语：preview 为模拟引擎，真机以 librime 为准',
+];
+function renderChecklist() {
+    const saved = JSON.parse(localStorage.getItem('feelime_preview_check') || '[]');
+    const list = document.getElementById('checkList');
+    list.replaceChildren();
+    CHECK_ITEMS.forEach((label, i) => {
+        const state = saved[i] || { v: '', note: '' };
+        const row = document.createElement('div');
+        row.className = 'check-item' + (state.v === 'bad' ? ' bad' : '');
+        const ok = document.createElement('button');
+        ok.textContent = '✓';
+        ok.className = state.v === 'ok' ? 'ok' : '';
+        const bad = document.createElement('button');
+        bad.textContent = '✗';
+        bad.className = state.v === 'bad' ? 'bad' : '';
+        const label_ = document.createElement('span');
+        label_.className = 'label';
+        label_.textContent = (i + 1) + '. ' + label;
+        const note = document.createElement('input');
+        note.placeholder = '问题描述';
+        note.value = state.note || '';
+        const persist = () => {
+            const next = JSON.parse(localStorage.getItem('feelime_preview_check') || '[]');
+            next[i] = { v: state.v, note: note.value };
+            localStorage.setItem('feelime_b21_check', JSON.stringify(next));
+        };
+        ok.onclick = () => {
+            state.v = state.v === 'ok' ? '' : 'ok';
+            persist(); renderChecklist();
+        };
+        bad.onclick = () => {
+            state.v = state.v === 'bad' ? '' : 'bad';
+            persist(); renderChecklist();
+        };
+        note.onchange = persist;
+        row.append(ok, bad, label_, note);
+        list.append(row);
+    });
+}
+document.getElementById('actCheck').onclick = () => {
+    renderChecklist();
+    document.getElementById('checkDrawer').classList.toggle('open');
+};
+document.getElementById('checkGen').onclick = () => {
+    const saved = JSON.parse(localStorage.getItem('feelime_preview_check') || '[]');
+    const lines = ['Feelime 验收结果（keyboard ' +
+        (document.getElementById('prefetch').textContent.match(/3\.[\d.]+/) || [''])[0] + '）：'];
+    CHECK_ITEMS.forEach((label, i) => {
+        const s = saved[i] || {};
+        const mark = s.v === 'ok' ? '✓' : s.v === 'bad' ? '✗' : '－';
+        lines.push(mark + ' ' + (i + 1) + '. ' + label + (s.note ? ' ｜ 问题: ' + s.note : ''));
+    });
+    const out = document.getElementById('checkOut');
+    out.hidden = false;
+    document.getElementById('checkText').value = lines.join('\n');
+};
+document.getElementById('checkCopy').onclick = () => {
+    const text = document.getElementById('checkText');
+    text.select();
+    try { document.execCommand('copy'); } catch (_) {}
+    if (navigator.clipboard) navigator.clipboard.writeText(text.value).catch(() => {});
+};
+
+new ResizeObserver(() => {
+    fitStage();
+    pushHello();
+}).observe(stage.parentElement);
+
+window.__FeelimePreviewBridge = makeBridge();
+// 手机实机打开时视口小，直接铺满；桌面默认竖屏手机尺寸。
+setMode(window.innerWidth < 520 ? 'fill' : 'portrait');
+build();
+</script>
+</body>
+</html>

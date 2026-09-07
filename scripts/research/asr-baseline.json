@@ -1,0 +1,172 @@
+{
+  "schemaVersion": 1,
+  "capturedAtUtc": "2026-09-03T11:54:27Z",
+  "sourceCommit": "df0ca9b",
+  "apk": {
+    "path": "app/build/outputs/apk/debug/app-debug.apk",
+    "sha256": "aad38f1670d5bf64940dfbd66c1b9466abb8da3e1698adedf98e371b122d9f19",
+    "installedApkSha256": "aad38f1670d5bf64940dfbd66c1b9466abb8da3e1698adedf98e371b122d9f19",
+    "signerCertificateSha256": "1838e39e3707c6381540966d240dc4675f61553b0214d3ea3b9f17f9c094f064"
+  },
+  "device": {
+    "adbSerial": "REDACTED",
+    "model": "REDACTED",
+    "androidRelease": "16",
+    "apiLevel": 36,
+    "abi": "arm64-v8a",
+    "pageSizeBytes": 4096,
+    "buildFingerprint": "REDACTED"
+  },
+  "fixture": {
+    "repositoryPath": "test-fixtures/asr/mixed-zh-en.wav",
+    "sha256": "7d93384ca14702cc584a7a33fe2fed92e89e708549161cb12ea38c916882103b",
+    "bytes": 321744,
+    "format": "PCM S16LE WAV, mono, 16000 Hz",
+    "userAuthorizedRecordedAudio": true
+  },
+  "runtime": {
+    "sherpaOnnxAarSha256": "0012d9a28f15bd6fb966b62b70a75da3990512fdccce28b83098248ce4be1698",
+    "streaming": {
+      "threads": 1,
+      "provider": "cpu",
+      "featureDim": 80,
+      "decodingMethod": "modified_beam_search",
+      "maxActivePaths": 4,
+      "modelSha256": {
+        "encoder.int8.onnx": "f559f422d970323e0c266aaa3c56cf6d1a3a4bc0c0822124727686c1e43e9447",
+        "decoder.onnx": "2e3b5ec371f8899ee6acd829fd753ba45772df57a91bdf37cde3136354e7db7d",
+        "joiner.int8.onnx": "1ed689c5ed19dbaa725d9d191bb4822b5f4855a39e1ffd28cbc1f340d25b2ee0",
+        "tokens.txt": "a8e0e4ec53810e433789b54a5c0134a7eaa2ffca595a6334d54c00da858841d3"
+      }
+    },
+    "finalPass": {
+      "threads": 2,
+      "provider": "cpu",
+      "featureDim": 80,
+      "modelSha256": {
+        "model.int8.onnx": "3ef6c19369b912f7caf3cef8e545c5ccd1a33d9d7ec792a46668dc41c4b229ec",
+        "tokens.txt": "4b2d964e18b9cf139b473003b6698fb2ed9a2a5ec55b93daa677b28f578897aa"
+      }
+    },
+    "punctuation": {
+      "threads": 1,
+      "provider": "cpu",
+      "modelSha256": {
+        "model.int8.onnx": "9d611f445fe4a46186080fe161be6059d87d72eb88d3a8cb00c1a06e83a6067e",
+        "bpe.vocab": "e118b7ad88c54db562517df49e1cffd4836d166c34fb190fd311d7f34eb238f5"
+      }
+    }
+  },
+  "finalPassComputeBaseline": {
+    "scope": "WaveReader completed -> OfflineRecognizer.decode/getResult completed; excludes model load, streaming, AudioRecord, endpointing, punctuation and InputConnection",
+    "command": "adb shell am start -n com.feelime.ime/.ModelSmokeTestActivity, read files/asr-smoke-result.txt",
+    "runsMs": [
+      129,
+      163,
+      92,
+      93,
+      98
+    ],
+    "medianMs": 98,
+    "nearestRankP95Ms": 163,
+    "allRunsText": "昨天是 monday today is 里拜 a the day after tomorrow 是星期三",
+    "medianRegressionLimitPercent": 20,
+    "p95RegressionLimitPercent": 30
+  },
+  "endToEndBaseline": {
+    "status": "complete_with_available_material",
+    "harness": "spikes/asr-baseline",
+    "command": "./scripts/research/run-asr-regression.sh --runs 5 --fixture test-fixtures/asr/mixed-zh-en.wav",
+    "measurementScope": "Deterministic 1600-sample PCM chunks through production-equivalent endpoint/reset, per-segment final-pass, exact normalizer/punctuation and listener callback boundaries in an isolated APK; excludes AudioRecord wall-clock capture and InputConnection.",
+    "rawEvidence": "spikes/asr-baseline/results/20260903T115427Z-1423271/summary.json",
+    "isolatedApkSha256": "a33cc52f0c1cbf111c3b96a8d8945b410f00ab5b3d78348d1c4628e32421f3e3",
+    "isolatedApkSignerSha256": "1838e39e3707c6381540966d240dc4675f61553b0214d3ea3b9f17f9c094f064",
+    "harnessAndScriptSha256": "65c3db4e32d999f87cbca6123fe72f03efb2f1c57a904736a6478d997183963e",
+    "mixedRuns": {
+      "modelLoadMs": [
+        2153,
+        2137,
+        2182,
+        2167,
+        2188
+      ],
+      "firstPartialFromFirstPcmMs": [
+        148,
+        148,
+        155,
+        139,
+        154
+      ],
+      "stopToFinalCallbackMs": [
+        127,
+        129,
+        135,
+        131,
+        135
+      ],
+      "stopToStoppedCallbackMs": [
+        127,
+        129,
+        135,
+        131,
+        135
+      ],
+      "firstPcmToStoppedCallbackMs": [
+        1647,
+        1679,
+        1687,
+        1681,
+        1693
+      ],
+      "medianMs": {
+        "modelLoad": 2167,
+        "firstPartial": 148,
+        "stopToFinal": 131,
+        "stopToStopped": 131,
+        "total": 1681
+      },
+      "nearestRankP95Ms": {
+        "modelLoad": 2188,
+        "firstPartial": 155,
+        "stopToFinal": 135,
+        "stopToStopped": 135,
+        "total": 1693
+      },
+      "endpointCountInAllRuns": 1,
+      "allRunsFinalSegments": [
+        "昨天是 Monday.",
+        "Day is Liba a the day after tomorrow 是星期三。"
+      ],
+      "allRunsFinalText": "昨天是 Monday.Day is Liba a the day after tomorrow 是星期三。",
+      "requiredTokensPresentInAllRuns": [
+        "monday",
+        "星期三"
+      ]
+    },
+    "remainingBlocker": null,
+    "requiredMetrics": [
+      "modelLoadMs",
+      "firstPartialFromFirstPcmMs",
+      "stopToFinalCallbackMs",
+      "stopToStoppedCallbackMs",
+      "firstPcmToStoppedCallbackMs"
+    ],
+    "runsRequired": 5,
+    "thresholds": {
+      "modelLoadMedianAndP95RegressionPercent": 20,
+      "firstPartialMedianAndP95RegressionPercent": 20,
+      "stopToFinalMedianAndP95RegressionPercent": 20,
+      "totalMedianRegressionPercent": 20,
+      "totalP95RegressionPercent": 30
+    },
+    "rerecordHistory": "2026-09-03 重录：早前基线在另一台机器上不可再现（当日三次独立五跑一致：stop/total 稳定超 +20% 门限，modelLoad 反而更快；识别正确性 15/15），故重录并保持门限不变。"
+  },
+  "englishNormalization": {
+    "status": "covered_by_existing_unit_test",
+    "test": "com.feelime.ime.EnglishTextNormalizerTest",
+    "input": "WHATS YOUR NAME",
+    "expected": "what's your name?",
+    "newRecordingRequired": false,
+    "decisionSource": "User explicitly requested continuing with currently accessible material on 2026-08-25."
+  }
+}
