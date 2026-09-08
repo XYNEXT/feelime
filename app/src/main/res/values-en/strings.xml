@@ -19,10 +19,6 @@
     <string name="ime_tile_request_rejected">The system did not add the input-method tile; add it from Quick Settings edit mode</string>
     <string name="ime_tile_unavailable">This system cannot request a tile from the app; add it from Quick Settings edit mode</string>
     <string name="ime_tile_manual_steps">Open Quick Settings edit mode and add “Switch input method”</string>
-    <string name="ime_widget_name">Switch input method</string>
-    <string name="ime_widget_description">Tap to open the system input method picker</string>
-    <string name="widget_request_sent">Widget add request sent to the launcher</string>
-    <string name="widget_request_rejected">The launcher did not accept the widget request; add it manually</string>
     <string name="permission_granted">Microphone permission granted</string>
     <string name="permission_missing">Microphone permission is required for voice input</string>
     <string name="model_ready">Streaming Chinese-English, correction, and English punctuation models are installed</string>

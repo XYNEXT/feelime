@@ -260,7 +260,7 @@ tasks.named("preBuild") { dependsOn(generateModelManifest) }
 
 android {
     namespace = "com.feelime.ime"
-    compileSdk = 35
+    compileSdk = 36
     // AGP's assetPacks set is bundle-global rather than flavor-scoped. Keep
     // the install-time pack declared unconditionally so every Play bundle
     // entry point (bundlePlay*, bundleRelease, and wrapper/CI invocations)
@@ -282,9 +282,9 @@ android {
     defaultConfig {
         applicationId = "com.feelime.ime"
         minSdk = 26
-        targetSdk = 35
-        versionCode = 31
-        versionName = "1.0.1"
+        targetSdk = 36
+        versionCode = 32
+        versionName = "1.0.2"
 
         ndk {
             abiFilters += "arm64-v8a"
