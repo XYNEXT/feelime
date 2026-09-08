@@ -61,7 +61,6 @@ class SettingsBridge(
         fun openKeyboardDocument() = Unit
         fun addImeShortcut() = Unit
         fun addImeTile() = Unit
-        fun addImeWidget() = Unit
         fun onSettingsChanged()
     }
 
@@ -589,7 +588,6 @@ class SettingsBridge(
     fun addImeTile(token: String) = guarded(token) { host.addImeTile() }
 
     @JavascriptInterface
-    fun addImeWidget(token: String) = guarded(token) { host.addImeWidget() }
 
     /** Called by SetupActivity after the local keyboard ZIP picker returns. */
     fun installKeyboardFromUri(uri: Uri) {

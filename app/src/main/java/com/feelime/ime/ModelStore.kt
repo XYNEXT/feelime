@@ -250,14 +250,14 @@ interface ModelConnection {
     fun disconnect()
 }
 
-/** Production transport: GET with an optional Range header; TLS enforced by
- * the caller skipping plain-http mirrors in release builds. Redirects are
- * followed manually (bounded) with the Range header re-applied - the HF
- * /resolve/ endpoints answer 308 to their CDN. */
+/** Production transport: GET with an optional Range header. Plain http is
+ * admitted (LAN mirrors); integrity comes from the manifest SHA-256, not the
+ * transport. Redirects are followed manually (bounded) with the Range header
+ * re-applied - the HF /resolve/ endpoints answer 308 to their CDN. */
 class HttpModelConnectionFactory(
     private val connectTimeoutMs: Int = 10_000,
     private val readTimeoutMs: Int = 30_000,
-    private val allowHttp: Boolean = false,
+    private val allowHttp: Boolean = true,
     private val openConnection: (java.net.URL) -> HttpURLConnection = {
         it.openConnection() as HttpURLConnection
     },
@@ -319,9 +319,10 @@ class HttpModelConnectionFactory(
 class ModelStore(
     private val context: Context,
     private val connectionFactory: ModelConnectionFactory? = null,
-    /** Plain http mirrors are a dev/LAN affordance (policy); the
-     * play distribution turns them off regardless of build type (§16). */
-    private val allowHttp: Boolean = BuildConfig.DEBUG && !BuildConfig.PLAY_DISTRIBUTION,
+    /** Plain http is allowed on every channel: a LAN mirror is the primary
+     * use case, and integrity never relies on the transport - every byte is
+     * checked against the embedded manifest SHA-256 before installation. */
+    private val allowHttp: Boolean = true,
 ) {
     enum class State { BUILT_IN, MISSING, DOWNLOADING, IMPORTING, INSTALLED, BROKEN }
 
@@ -382,9 +383,11 @@ class ModelStore(
         }
     }
 
-    /** Persist only syntactically valid HTTPS endpoints.  A custom source
-     * includes both the ordinary repository base and the fixed mobile
-     * tar.bz2 mirror because that archive is not present in HF repositories. */
+    /** Persist only syntactically valid http(s) endpoints.  Plain http is
+     * allowed because integrity rests on the manifest SHA-256 checks, not
+     * on transport.  A custom source includes both the ordinary repository
+     * base and the fixed mobile tar.bz2 mirror because that archive is not
+     * present in HF repositories. */
     fun setModelDownloadSource(
         source: ModelDownloadSource,
         customBase: String,
@@ -527,7 +530,7 @@ class ModelStore(
         val uri = URI(raw)
         val scheme = uri.scheme?.lowercase(Locale.ROOT)
         uri.host != null && uri.userInfo == null && uri.query == null && uri.fragment == null &&
-            scheme == "https"
+            (scheme == "https" || scheme == "http")
     }.getOrDefault(false)
 
     private fun isHost(raw: String, host: String): Boolean = runCatching {
@@ -881,7 +884,7 @@ class ModelStore(
             val scheme = uri.scheme?.lowercase(Locale.ROOT)
             val path = uri.path?.lowercase(Locale.ROOT).orEmpty()
             uri.host != null && uri.userInfo == null && uri.fragment == null &&
-                scheme == "https" && path.endsWith(".tar.bz2")
+                (scheme == "https" || scheme == "http") && path.endsWith(".tar.bz2")
         }.getOrDefault(false)
 
         fun sha256(file: File): String {

@@ -30,7 +30,6 @@ const I18N = {
         "ime.enableAction": "去启用",
         "ime.pickAction": "去切换",
         "ime.addShortcut": "添加桌面快捷方式",
-        "ime.addWidget": "添加桌面小组件",
         "ime.addTile": "添加快捷设置磁贴",
         "language.title": "界面语言",
         "language.badge": "界面",
@@ -246,7 +245,6 @@ const I18N = {
         "ime.enableAction": "Enable",
         "ime.pickAction": "Switch",
         "ime.addShortcut": "Add home-screen shortcut",
-        "ime.addWidget": "Add home-screen widget",
         "ime.addTile": "Add Quick Settings tile",
         "language.title": "Interface language",
         "language.badge": "UI",
@@ -1006,7 +1004,6 @@ function renderAbout(state) {
 $("btnEnableIme").addEventListener("click", () => call("enableIme"));
 $("btnPickIme").addEventListener("click", () => call("pickIme"));
 $("btnAddShortcut").addEventListener("click", () => call("addImeShortcut"));
-$("btnAddWidget").addEventListener("click", () => call("addImeWidget"));
 $("btnAddTile").addEventListener("click", () => call("addImeTile"));
 $("btnMic").addEventListener("click", () => call("requestMic"));
 $("uiLanguage").addEventListener("change", event => setUiLanguage(event.target.value));

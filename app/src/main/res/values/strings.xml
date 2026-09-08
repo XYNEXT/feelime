@@ -19,10 +19,6 @@
     <string name="ime_tile_request_rejected">系统没有添加输入法磁贴，请在控制中心编辑页手动添加</string>
     <string name="ime_tile_unavailable">当前系统不支持应用内请求添加磁贴，请在控制中心编辑页手动添加</string>
     <string name="ime_tile_manual_steps">下拉控制中心，进入编辑磁贴，找到“输入法切换”后手动添加</string>
-    <string name="ime_widget_name">输入法切换</string>
-    <string name="ime_widget_description">点按后打开系统输入法选择器</string>
-    <string name="widget_request_sent">已向桌面发出添加小组件请求</string>
-    <string name="widget_request_rejected">桌面没有接受小组件请求，请长按桌面手动添加</string>
     <string name="permission_granted">麦克风权限已授予</string>
     <string name="permission_missing">需要麦克风权限才能语音输入</string>
     <string name="model_ready">流式中英、整句纠错与英文标点模型已安装</string>

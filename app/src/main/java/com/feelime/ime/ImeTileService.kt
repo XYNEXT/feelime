@@ -13,6 +13,9 @@ class ImeTileService : TileService() {
         qsTile?.apply {
             state = Tile.STATE_INACTIVE
             label = getString(R.string.ime_tile_name)
+            icon = android.graphics.drawable.Icon.createWithResource(
+                applicationContext, R.drawable.ic_tile_feelime,
+            )
             updateTile()
         }
     }

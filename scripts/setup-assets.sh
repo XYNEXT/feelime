@@ -78,3 +78,8 @@ rm -f "$PUNCT_ASSET_DIR/bpe.vocab"
 echo "Feelime streaming ASR, final-pass ASR, and punctuation models are ready."
 echo "  AAR:    $LIB_DIR/$AAR_NAME"
 echo "  models: $MODELS_ROOT"
+
+# The :feelime-models PAD module resolves its assets through the in-tree
+# path (gitignored); keep it pointing at the shared tree so Play builds see
+# the same verified bytes as direct builds.
+ln -sfn "$MODELS_ROOT" "$PROJECT_DIR/app/src/modelAssets/full"

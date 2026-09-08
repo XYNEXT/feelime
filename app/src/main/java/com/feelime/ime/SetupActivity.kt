@@ -9,6 +9,9 @@ import android.content.pm.PackageManager
 import android.content.pm.ShortcutInfo
 import android.content.pm.ShortcutManager
 import android.database.ContentObserver
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Paint
 import android.graphics.drawable.Icon
 import android.net.Uri
 import android.graphics.Color
@@ -308,19 +311,6 @@ class SetupActivity : AppCompatActivity() {
 
         override fun addImeTile() = requestImeTile()
 
-        override fun addImeWidget() {
-            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
-                Toast.makeText(this@SetupActivity, R.string.shortcut_unsupported, Toast.LENGTH_SHORT).show()
-                return
-            }
-            val accepted = ImeWidgetProvider.requestPin(this@SetupActivity)
-            Toast.makeText(
-                this@SetupActivity,
-                if (accepted) R.string.widget_request_sent else R.string.widget_request_rejected,
-                Toast.LENGTH_LONG,
-            ).show()
-        }
-
         override fun onSettingsChanged() {
             // SettingsBridge invokes this from its preference listener so the
             // hello payload and the page theme/language switch together.
@@ -342,6 +332,39 @@ class SetupActivity : AppCompatActivity() {
             pushHello()
             bridge.pushState()
         }
+    }
+
+    /** Shortcut artwork: the Feelime mark on a full-bleed dark square with a
+     * green ON pip at the top-right (adaptive: the launcher crops it; the
+     * bottom-right app badge stays clear of the pip). */
+    private fun shortcutIconBitmap(context: android.content.Context): Bitmap {
+        val size = 108
+        val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bitmap)
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+        paint.color = Color.parseColor("#11121A")
+        canvas.drawRect(0f, 0f, size.toFloat(), size.toFloat(), paint)
+        val drawable = androidx.appcompat.content.res.AppCompatResources.getDrawable(
+            context, R.drawable.ic_tile_feelime,
+        )!!
+        val mark = (size * 0.5f).toInt()
+        drawable.setBounds(
+            (size * 0.08f).toInt(), (size * 0.28f).toInt(),
+            (size * 0.08f).toInt() + mark, (size * 0.28f).toInt() + mark,
+        )
+        drawable.draw(canvas)
+        val pip = size * 0.52f
+        paint.color = Color.parseColor("#09D967")
+        canvas.drawCircle(size * 0.68f, size * 0.32f, pip / 2, paint)
+        paint.color = Color.WHITE
+        paint.textSize = pip * 0.46f
+        paint.textAlign = Paint.Align.CENTER
+        canvas.drawText(
+            "ON", size * 0.68f,
+            size * 0.32f - (paint.descent() + paint.ascent()) / 2,
+            paint,
+        )
+        return bitmap
     }
 
     private fun pickerIntent(): Intent = Intent(this, ImePickerActivity::class.java).apply {
@@ -368,7 +391,7 @@ class SetupActivity : AppCompatActivity() {
         val shortcut = ShortcutInfo.Builder(this, SHORTCUT_ID)
             .setShortLabel(getString(R.string.shortcut_ime_short))
             .setLongLabel(getString(R.string.shortcut_ime_long))
-            .setIcon(Icon.createWithResource(this, R.drawable.ic_launcher))
+            .setIcon(Icon.createWithAdaptiveBitmap(shortcutIconBitmap(this)))
             .setIntent(pickerIntent())
             .build()
         val accepted = manager.requestPinShortcut(shortcut, null)
@@ -394,7 +417,7 @@ class SetupActivity : AppCompatActivity() {
         manager.requestAddTileService(
             ComponentName(this, ImeTileService::class.java),
             getString(R.string.ime_tile_name),
-            Icon.createWithResource(this, R.drawable.ic_launcher),
+            Icon.createWithResource(this, R.drawable.ic_tile_feelime),
             mainExecutor,
         ) { result ->
             val message = when (result) {

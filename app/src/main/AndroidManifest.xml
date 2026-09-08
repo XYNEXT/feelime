@@ -14,7 +14,11 @@
         android:label="@string/app_name"
         android:supportsRtl="true"
         android:theme="@style/Theme.Feelime"
-        android:usesCleartextTraffic="false">
+        android:usesCleartextTraffic="true">
+        <!-- Plain http is admitted for LAN model mirrors / custom sources;
+             every download is verified against the embedded SHA-256 manifest
+             (and keyboard updates against Ed25519), so the transport is not
+             the trust boundary. -->
 
         <activity
             android:name=".SetupActivity"
@@ -41,25 +45,13 @@
         <service
             android:name=".ImeTileService"
             android:exported="true"
-            android:icon="@drawable/ic_launcher"
+            android:icon="@drawable/ic_tile_feelime"
             android:label="@string/ime_tile_name"
             android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
             <intent-filter>
                 <action android:name="android.service.quicksettings.action.QS_TILE" />
             </intent-filter>
         </service>
-
-        <receiver
-            android:name=".ImeWidgetProvider"
-            android:exported="false"
-            android:label="@string/ime_widget_name">
-            <intent-filter>
-                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
-            </intent-filter>
-            <meta-data
-                android:name="android.appwidget.provider"
-                android:resource="@xml/ime_widget_info" />
-        </receiver>
 
         <service
             android:name=".FeelimeService"

@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The Feelime F mark on a transparent tile: quick-settings tinting keeps
+     it legible on both light and dark control-center backgrounds. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="48"
+    android:viewportHeight="48">
+    <path
+        android:fillColor="#09D967"
+        android:pathData="M12.5,8.5h24l-1.8,6.2H19.3v7.2h13.3l-1.8,6.2H19.3v11.4h-6.8z" />
+    <path
+        android:fillColor="#F5F5F7"
+        android:pathData="M31,31h4.5v8.5h-4.5z" />
+</vector>

@@ -55,7 +55,6 @@ class MockSettingsNative {
     enableIme(...a) { this._rec('enableIme', a); }
     pickIme(...a) { this._rec('pickIme', a); }
     addImeShortcut(...a) { this._rec('addImeShortcut', a); }
-    addImeWidget(...a) { this._rec('addImeWidget', a); }
     addImeTile(...a) { this._rec('addImeTile', a); }
     requestMic(...a) { this._rec('requestMic', a); }
     openAppStore(...a) { this._rec('openAppStore', a); }
@@ -218,14 +217,12 @@ test('去启用 / 去切换 / 去授权 buttons trigger the system-intent bridge
     equal(world.lastCall('requestMic').args, [world.token], 'requestMic token');
 });
 
-test('desktop shortcut, widget, and Quick Settings entry use their dedicated bridge calls', () => {
+test('desktop shortcut and Quick Settings entry use their dedicated bridge calls', () => {
     const world = new SettingsWorld();
     world.push({ ...BASE_STATE });
     world.$('btnAddShortcut').click();
-    world.$('btnAddWidget').click();
     world.$('btnAddTile').click();
     equal(world.lastCall('addImeShortcut').args, [world.token], 'shortcut token');
-    equal(world.lastCall('addImeWidget').args, [world.token], 'widget token');
     equal(world.lastCall('addImeTile').args, [world.token], 'tile token');
 });
 

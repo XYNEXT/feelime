@@ -79,8 +79,10 @@ adb install -r app/build/outputs/apk/direct/debug/app-direct-debug.apk
 **无模型 APK 的设置页下载验证**：thin/无模型 APK 在设置页走 ModelStore
 下载。当前产品的下载源由设置页「模型源」选择驱动（`hf_mirror` /
 `official` / `custom`），构建时嵌入的 `models/dev-urls.json` 镜像前缀
-**只在设备端源选择为空时生效**，且 `custom` 仅接受 https（plain http
-被策略拒绝，下载完整性由 manifest 的 SHA-256 兜底）：
+**只在设备端源选择为空时生效**。`custom` 接受 http/https（下载完整性
+由 manifest 的 SHA-256 逐文件校验兜底，transport 不是信任边界）；custom
+base 按 HuggingFace 仓库结构拼接（`base + <owner>/<repo>/resolve/main/ +
+downloadPath`），自建源需镜像该目录布局：
 
 ```bash
 # 生成本机 web 根并起 Range-aware 临时 server（设备下载器用 Range 续传，
