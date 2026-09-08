@@ -146,6 +146,12 @@ FEELIME_SIGNING_KEY=app/src/test/resources/keyboard-update-roundtrip-test-ed2551
 发布的 APK 本身跑覆盖安装（`device_upgrade_verify.py`）与首启
 （`device_firstlaunch_verify.py`）冒烟。
 
+模拟器环境注意：API 36（Android 16）google_apis x86_64 镜像在
+DevTools 合成 TouchEvent 切到符号层（`<123>`）时会触发 qemu **静默退出**
+（host 无 OOM/信号记录，100% 复现；真实 `input tap` 未测出差异前先假定
+模拟器缺陷）。这类"套件跑到某一步模拟器就没了"先换真机回归，别在
+模拟器上死磕。
+
 ## 工程约定
 
 - **版本双 bump**：发版本必须同时改 `app/build.gradle.kts`（versionCode/
