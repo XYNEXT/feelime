@@ -13,12 +13,15 @@
 # historical custom-keys test and adds the current saved pair test under a
 # separate era gate; the latter contributes one more baseline skip.
 # Keyboard 3.25.0 adds two rank checks under `since: 3.25.0`, so the
-# fixture skips two more.  The resulting evidence-backed pin is
-# 128 passed / 0 failed / 46 skipped.
+# fixture skips two more.  Keyboards 3.26.0-3.28.1 (open-source initial,
+# 1.0.3 nine-pad/quote-en/arrows/shift-combo, 1.0.4 stores mirror) add 18
+# current-era checks: three are era-compatible and stay passes on the
+# fixture, seven gate at 3.27.0 and eight at 3.28.0.  The resulting
+# evidence-backed pin is 131 passed / 0 failed / 61 skipped.
 set -eu
 
 ROOT=$(cd "$(dirname "$0")/../.." && pwd)
-PINNED='== mock-bridge suite: 128 passed, 0 failed, 46 skipped (era-gated) [keyboard 3.20.0] =='
+PINNED='== mock-bridge suite: 131 passed, 0 failed, 61 skipped (era-gated) [keyboard 3.20.0] =='
 
 OUT=$(FEELIME_KEYBOARD_SRC="$ROOT/test-fixtures/keyboard-3.20.0" \
     node "$ROOT/scripts/verify/mock_bridge_tests.js") || {

@@ -738,7 +738,7 @@ test('123 opens on 常用: digits row 1, fullwidth rows for Chinese', () => {
         'symbol inserts literally');
 });
 
-test('long-press 123 opens the nine-pad; tap keeps the symbol layer', () => {
+test('long-press 123 opens the nine-pad; tap keeps the symbol layer', {since: '3.27.0'}, () => {
     const world = fresh();
     const key123 = [...world.document.querySelectorAll('.kb-special')].find(
         el => el.textContent === '123',
@@ -755,7 +755,7 @@ test('long-press 123 opens the nine-pad; tap keeps the symbol layer', () => {
     assert(world.$('symbolLayer').hidden, 'symbol layer hidden');
 });
 
-test('nine-pad commits literally; fn column rides the native bridges', () => {
+test('nine-pad commits literally; fn column rides the native bridges', {since: '3.27.0'}, () => {
     const world = fresh({ mode: 'pinyin' });
     const key123 = [...world.document.querySelectorAll('.kb-special')].find(
         el => el.textContent === '123',
@@ -785,7 +785,7 @@ test('nine-pad commits literally; fn column rides the native bridges', () => {
     assert(!world.$('qwertyLayer').hidden, 'back returns to letters');
 });
 
-test('emoji sub-view commits and remembers; 123 tab returns', () => {
+test('emoji sub-view commits and remembers; 123 tab returns', {since: '3.27.0'}, () => {
     const world = fresh();
     const key123 = [...world.document.querySelectorAll('.kb-special')].find(
         el => el.textContent === '123',
@@ -824,7 +824,7 @@ test('emoji sub-view commits and remembers; 123 tab returns', () => {
         'emoji view reset after leaving the pad');
 });
 
-test('panel borrows and restores the nine-pad', () => {
+test('panel borrows and restores the nine-pad', {since: '3.27.0'}, () => {
     const world = fresh();
     const key123 = [...world.document.querySelectorAll('.kb-special')].find(
         el => el.textContent === '123',
@@ -840,7 +840,7 @@ test('panel borrows and restores the nine-pad', () => {
     assert(world.$('panelLayer').hidden, 'panel closed');
 });
 
-test('rotation keeps the pinned 常用 variant; mode switch resets it', () => {
+test('rotation keeps the pinned 常用 variant; mode switch resets it', {since: '3.27.0'}, () => {
     const world = fresh({ mode: 'pinyin' });
     world.tap([...world.document.querySelectorAll('.kb-special')].find(
         el => el.textContent === '123',
@@ -860,7 +860,7 @@ test('rotation keeps the pinned 常用 variant; mode switch resets it', () => {
         '，。、；：？！～（）', 'grid follows the new default');
 });
 
-test('panel editor card preserves the nine-pad return layer', () => {
+test('panel editor card preserves the nine-pad return layer', {since: '3.27.0'}, () => {
     const world = fresh();
     const key123 = [...world.document.querySelectorAll('.kb-special')].find(
         el => el.textContent === '123',
@@ -878,7 +878,7 @@ test('panel editor card preserves the nine-pad return layer', () => {
     assert(!world.$('numPadLayer').hidden, 'back to the nine-pad, not letters');
 });
 
-test('nine-pad enter label follows composition; locale re-renders the pad', () => {
+test('nine-pad enter label follows composition; locale re-renders the pad', {since: '3.27.0'}, () => {
     const world = fresh();
     world.engineState({ mode: 'direct', composing: true, rawInput: 'ni', revision: 2, candidates: [] });
     const key123 = [...world.document.querySelectorAll('.kb-special')].find(
@@ -897,7 +897,7 @@ test('nine-pad enter label follows composition; locale re-renders the pad', () =
         'emoji', 'emoji entry label stays language-neutral');
 });
 
-test('方向 category commits directional text and a real tab', () => {
+test('方向 category commits directional text and a real tab', {since: '3.28.0'}, () => {
     const world = fresh();
     world.tap([...world.document.querySelectorAll('.kb-special')].find(
         el => el.textContent === '123',
@@ -924,7 +924,7 @@ test('方向 category commits directional text and a real tab', () => {
         'tab cell commits a real tab character');
 });
 
-test('quote tab toggles zh/en; en side supplies ascii brackets', () => {
+test('quote tab toggles zh/en; en side supplies ascii brackets', {since: '3.28.0'}, () => {
     const world = fresh();
     world.tap([...world.document.querySelectorAll('.kb-special')].find(
         el => el.textContent === '123',
@@ -952,7 +952,7 @@ test('quote tab toggles zh/en; en side supplies ascii brackets', () => {
         'common tab unaffected by the quote pin');
 });
 
-test('second tap on the active 常用 tab flips the zh/en table', () => {
+test('second tap on the active 常用 tab flips the zh/en table', {since: '3.28.0'}, () => {
     const world = fresh({ mode: 'pinyin' });
     const key123 = [...world.document.querySelectorAll('.kb-special')].find(
         el => el.textContent === '123',
@@ -1000,7 +1000,7 @@ test('I1b symbol-grid digits insert literally in Chinese modes', () => {
     equal(world.native.of('key').length, 0, 'no engine key() traffic from symbol grid');
 });
 
-test('symbol category strip lists all batches with stable keys', () => {
+test('symbol category strip lists all batches with stable keys', {since: '3.28.0'}, () => {
     const world = fresh();
     const key123 = [...world.document.querySelectorAll('.kb-special')].find(
         el => el.textContent === '123',
@@ -2474,7 +2474,7 @@ test('theme preference survives a reload', () => {
 
 // ------------------------------------------------- userdata stores mirror
 
-test('stores mirror: hello pushes localStorage settings to native; onStoresRestored applies them', () => {
+test('stores mirror: hello pushes localStorage settings to native; onStoresRestored applies them', {since: '3.28.0'}, () => {
     const world = new KeyboardWorld().build();
     world.storage.set('feelime_theme', 'dark');
     world.storage.set('feelime_scrub_speed', '5');
@@ -2494,7 +2494,7 @@ test('stores mirror: hello pushes localStorage settings to native; onStoresResto
     equal(world.storage.get('feelime_theme'), 'light', 'restored theme is persisted');
 });
 
-test('stores rev: a newer native mirror (settings import) wins the next hello', () => {
+test('stores rev: a newer native mirror (settings import) wins the next hello', {since: '3.28.0'}, () => {
     const world = new KeyboardWorld().build();
     world.storage.set('feelime_theme', 'dark');
     world.storage.set('feelime_scrub_speed', '3');
@@ -2516,7 +2516,7 @@ test('stores rev: a newer native mirror (settings import) wins the next hello', 
         'light', 'the follow-up push carries the restored values, not the stale ones');
 });
 
-test('stores restore is authoritative: keys absent from the backup are removed locally', () => {
+test('stores restore is authoritative: keys absent from the backup are removed locally', {since: '3.28.0'}, () => {
     const world = new KeyboardWorld().build();
     world.storage.set('feelime_theme', 'dark');
     world.storage.set('feelime_scrub_speed', '5');
@@ -3011,7 +3011,7 @@ test('sticky modifiers arm the next key into a combo', () => {
     equal(phys[1].args[1], 0x10000, 'META_META');
 });
 
-test('armed qwerty shift joins control keys and sticky modifiers', () => {
+test('armed qwerty shift joins control keys and sticky modifiers', {since: '3.27.0'}, () => {
     const world = fresh();
     world.tap(world.$('ctrlTool'));
     const shift = world.document.querySelector('.shift');
