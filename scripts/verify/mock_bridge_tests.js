@@ -643,6 +643,225 @@ test('123 opens on 常用: digits row 1, fullwidth rows for Chinese', () => {
         'symbol inserts literally');
 });
 
+test('long-press 123 opens the nine-pad; tap keeps the symbol layer', () => {
+    const world = fresh();
+    const key123 = [...world.document.querySelectorAll('.kb-special')].find(
+        el => el.textContent === '123',
+    );
+    world.tap(key123);
+    assert(!world.$('symbolLayer').hidden, 'tap opens the symbol layer');
+    world.tap(world.document.querySelector('[data-action="letters"]'));
+    assert(world.$('symbolLayer').hidden, 'ABC returns to letters');
+    world.touchDown(key123);
+    world.clock.advance(360);
+    world.touchUp(key123);
+    assert(!world.$('numPadLayer').hidden, 'long-press opens the nine-pad');
+    assert(world.$('qwertyLayer').hidden, 'letters hidden');
+    assert(world.$('symbolLayer').hidden, 'symbol layer hidden');
+});
+
+test('nine-pad commits literally; fn column rides the native bridges', () => {
+    const world = fresh({ mode: 'pinyin' });
+    const key123 = [...world.document.querySelectorAll('.kb-special')].find(
+        el => el.textContent === '123',
+    );
+    world.touchDown(key123);
+    world.clock.advance(360);
+    world.touchUp(key123);
+    const layer = world.$('numPadLayer');
+    const key = label => [...layer.querySelectorAll('.kb-key')]
+        .find(el => el.textContent === label);
+    world.tap(key('5'));
+    equal(world.native.of('commitText').slice(-1)[0].args[0], '5',
+        'digit commits literally');
+    equal(world.native.of('key').length, 0, 'engine never sees nine-pad digits');
+    world.tap(key('.'));
+    equal(world.native.of('commitText').slice(-1)[0].args[0], '.',
+        'dot stays a literal dot in pinyin');
+    world.tap([...layer.querySelectorAll('.num-sym-key')].find(el => el.textContent === '@'));
+    equal(world.native.of('commitText').slice(-1)[0].args[0], '@', 'strip commits literally');
+    world.tap(layer.querySelector('[data-role="backspace"]'));
+    equal(world.native.of('backspace').length, 1, 'backspace rides the bridge');
+    world.tap(key('空格'));
+    equal(world.native.of('space').length, 1, 'space rides the bridge');
+    world.tap(key('换行'));
+    equal(world.native.of('enter').length, 1, 'enter rides the bridge');
+    world.tap(layer.querySelector('.num-back'));
+    assert(!world.$('qwertyLayer').hidden, 'back returns to letters');
+});
+
+test('emoji sub-view commits and remembers; 123 tab returns', () => {
+    const world = fresh();
+    const key123 = [...world.document.querySelectorAll('.kb-special')].find(
+        el => el.textContent === '123',
+    );
+    world.touchDown(key123);
+    world.clock.advance(360);
+    world.touchUp(key123);
+    const layer = world.$('numPadLayer');
+    const emojiKey = () => layer.querySelector('[data-role="emoji"]');
+    world.tap(emojiKey());
+    const pages = layer.querySelector('.emoji-pages');
+    assert(pages, 'emoji pages rendered');
+    let tabs = [...layer.querySelectorAll('.emoji-cats .sym-cat')];
+    equal(tabs[0].textContent, '123', 'digits tab leads');
+    equal(tabs.length, 8, '123 + seven categories before the first pick');
+    const first = pages.querySelector('.emoji-key');
+    world.tap(first);
+    equal(world.native.of('commitText').slice(-1)[0].args[0], first.textContent,
+        'emoji commits literally');
+    world.tap(tabs[0]);
+    assert(!layer.querySelector('.emoji-pages'), 'digits return in place');
+    world.tap(emojiKey());
+    tabs = [...layer.querySelectorAll('.emoji-cats .sym-cat')];
+    equal(tabs.length, 9, '常用 appears after the first pick');
+    equal(tabs[1].textContent, '常用', '常用 follows the digits tab');
+    equal(tabs[1].classList.contains('active'), true,
+        'the leading category tab matches the page being shown');
+    equal(tabs[2].classList.contains('active'), false, 'later tabs stay dark');
+    // Leaving the pad ends the emoji session.
+    world.tap(tabs[0]);
+    world.tap(layer.querySelector('.num-back'));
+    world.touchDown(key123);
+    world.clock.advance(360);
+    world.touchUp(key123);
+    assert(!world.$('numPadLayer').querySelector('.emoji-pages'),
+        'emoji view reset after leaving the pad');
+});
+
+test('panel borrows and restores the nine-pad', () => {
+    const world = fresh();
+    const key123 = [...world.document.querySelectorAll('.kb-special')].find(
+        el => el.textContent === '123',
+    );
+    world.touchDown(key123);
+    world.clock.advance(360);
+    world.touchUp(key123);
+    world.tap(world.document.querySelector('[data-panel-tab="clipboard"]'));
+    assert(!world.$('panelLayer').hidden, 'panel opens from the nine-pad');
+    assert(world.$('numPadLayer').hidden, 'pad hidden under the panel');
+    world.tap(world.$('panelClose'));
+    assert(!world.$('numPadLayer').hidden, 'pad restored after the panel');
+    assert(world.$('panelLayer').hidden, 'panel closed');
+});
+
+test('rotation keeps the pinned 常用 variant; mode switch resets it', () => {
+    const world = fresh({ mode: 'pinyin' });
+    world.tap([...world.document.querySelectorAll('.kb-special')].find(
+        el => el.textContent === '123',
+    ));
+    const tab = () => world.document.querySelector('[data-sym-cat="common"]');
+    world.tap(tab());
+    equal(tab().querySelector('.cat-sub').textContent, 'En', 'pinned en');
+    // Rotation re-renders the SAME mode: pin, badge and grid must agree.
+    world.hello({ orientation: 'landscape', mode: 'pinyin' });
+    equal(tab().querySelector('.cat-sub').textContent, 'En', 'badge survives rotation');
+    equal([...world.$('symGrid').children[1].children].map(k => k.textContent).join(''),
+        '-/:;()&@+=', 'grid still matches the badge');
+    // A REAL mode switch resets to the new mode's default, live.
+    world.hello({ orientation: 'landscape', mode: 'double-pinyin' });
+    equal(tab().querySelector('.cat-sub').textContent, '中', 'mode switch resets the pin');
+    equal([...world.$('symGrid').children[1].children].map(k => k.textContent).join(''),
+        '，。、；：？！～（）', 'grid follows the new default');
+});
+
+test('panel editor card preserves the nine-pad return layer', () => {
+    const world = fresh();
+    const key123 = [...world.document.querySelectorAll('.kb-special')].find(
+        el => el.textContent === '123',
+    );
+    world.touchDown(key123);
+    world.clock.advance(360);
+    world.touchUp(key123);
+    world.tap(world.document.querySelector('[data-panel-tab="clipboard"]'));
+    world.tap(world.document.getElementById('panelManage'));
+    assert(!world.$('phraseCard').hidden, 'card open');
+    assert(!world.$('qwertyLayer').hidden, 'letters under the card');
+    world.tap(world.document.getElementById('phraseCardCancel'));
+    assert(!world.$('panelLayer').hidden, 'panel list restored');
+    world.tap(world.$('panelClose'));
+    assert(!world.$('numPadLayer').hidden, 'back to the nine-pad, not letters');
+});
+
+test('nine-pad enter label follows composition; locale re-renders the pad', () => {
+    const world = fresh();
+    world.engineState({ mode: 'direct', composing: true, rawInput: 'ni', revision: 2, candidates: [] });
+    const key123 = [...world.document.querySelectorAll('.kb-special')].find(
+        el => el.textContent === '123',
+    );
+    world.touchDown(key123);
+    world.clock.advance(360);
+    world.touchUp(key123);
+    equal(world.$('numEnterKey').textContent, '确定', 'enter reads 确定 while composing');
+    world.engineState({ mode: 'direct', composing: false, rawInput: '', revision: 3, candidates: [] });
+    world.hello({ uiLocale: 'en' });
+    equal(world.$('numEnterKey').textContent, 'Enter', 'locale switch re-renders the pad');
+    assert([...world.$('numPadLayer').querySelectorAll('.kb-key')]
+        .find(el => el.textContent === 'Space'), 'space label translated');
+    equal(world.document.querySelector('[data-role="emoji"]').getAttribute('aria-label'),
+        'emoji', 'emoji entry label stays language-neutral');
+});
+
+test('方向 category fires host key events with repeat, not text', () => {
+    const world = fresh();
+    world.tap([...world.document.querySelectorAll('.kb-special')].find(
+        el => el.textContent === '123',
+    ));
+    world.tap([...world.document.querySelectorAll('[data-sym-cat]')].find(
+        el => el.dataset.symCat === 'arrows',
+    ));
+    const left = [...world.$('symGrid').querySelectorAll('.kb-key')].find(
+        el => el.textContent === '←',
+    );
+    assert(left, 'arrow cell rendered');
+    equal(left.dataset.lp, 'repeat', 'arrows repeat while held');
+    world.tap(left);
+    const ev = world.native.of('keyEvent');
+    equal(ev.length, 1, 'one key event');
+    equal(ev[0].args[0], 21, 'KEYCODE_DPAD_LEFT');
+    equal(ev[0].args[1], 0, 'no meta -> single-event channel');
+    equal(world.native.of('commitText').length, 0, 'nothing committed');
+    equal(world.native.of('key').length, 0, 'no engine traffic');
+    equal(world.native.of('keyEventPhysical').length, 0, 'meta-less combo stays single-event');
+    // The 10-column rhythm holds and row 3 ends with the backspace key.
+    equal([...world.$('symGrid').children].map(r => r.children.length).join(','),
+        '10,10,10', 'every arrows row spans the uniform 10 columns');
+    equal(world.$('symGrid').children[2].children[9].dataset.role, 'backspace',
+        'row 3 ends with backspace');
+});
+
+test('second tap on the active 常用 tab flips the zh/en table', () => {
+    const world = fresh({ mode: 'pinyin' });
+    const key123 = [...world.document.querySelectorAll('.kb-special')].find(
+        el => el.textContent === '123',
+    );
+    world.tap(key123);
+    const commonTab = world.document.querySelector('[data-sym-cat="common"]');
+    const rows = () => [...world.$('symGrid').children[1].children].map(k => k.textContent).join('');
+    equal(commonTab.querySelector('.cat-sub').textContent, '中', 'badge follows the mode');
+    equal(rows(), '，。、；：？！～（）', 'mode default is the zh table');
+    world.tap(commonTab);
+    equal(commonTab.querySelector('.cat-sub').textContent, 'En', 'badge flips');
+    equal(rows(), '-/:;()&@+=', 'grid re-renders from the en table');
+    equal(world.$('symGrid').children[0].children[0].textContent, '1', 'digits still lead row 1');
+    world.tap(commonTab);
+    equal(commonTab.querySelector('.cat-sub').textContent, '中', 'toggles back');
+    equal(rows(), '，。、；：？！～（）', 'zh table restored');
+    // A mode switch ends the pin - the table follows the mode again.
+    world.tap(commonTab); // pin en
+    world.engineState({ mode: 'direct', revision: 2, composing: false, candidates: [] });
+    world.tap([...world.document.querySelectorAll('.kb-special')].find(
+        el => el.textContent === '123',
+    ));
+    const tab = world.document.querySelector('[data-sym-cat="common"]');
+    equal(tab.querySelector('.cat-sub').textContent, 'En', 'direct keeps the en default');
+    equal(
+        [...world.$('symGrid').children[1].children].map(k => k.textContent).join(''),
+        '-/:;()&@+=',
+        'en rows without a stale pin',
+    );
+});
+
 test('I1b symbol-grid digits insert literally in Chinese modes', () => {
     // Regression: sendText routed through key(); in pinyin mode the engine
     // consumes digits as candidate selectors, so nothing ever landed.
@@ -668,13 +887,13 @@ test('symbol category strip lists all batches with stable keys', () => {
     const cats = [...world.document.querySelectorAll('[data-sym-cat]')];
     equal(
         cats.map(c => c.dataset.symCat).join(','),
-        'common,recent,quote,money,math,num,pinyin,hira,kata,greek',
+        'common,recent,quote,money,math,arrows,num,pinyin,hira,kata,greek',
         'category keys frozen',
     );
     equal(
         cats.map(c => c.textContent).join(','),
-        '常用,最近,引号,货币,数学,序号,拼音,平假名,片假名,希腊',
-        'labels aligned with the category list',
+        '常用En,最近,引号,货币,数学,方向,序号,拼音,平假名,片假名,希腊',
+        'labels aligned with the category list (常用 carries the 中/En badge)',
     );
     // Japanese kana and Greek are newer symbol-layer additions.
     const keyText = () => [...world.$('symGrid').querySelectorAll('.kb-key')]
@@ -2600,6 +2819,43 @@ test('sticky modifiers arm the next key into a combo', () => {
     equal(phys.length, 2, 'second physical combo (ArrowLeft rode it too)');
     equal(phys[1].args[0], 61, 'KEYCODE_TAB');
     equal(phys[1].args[1], 0x10000, 'META_META');
+});
+
+test('armed qwerty shift joins control keys and sticky modifiers', () => {
+    const world = fresh();
+    world.tap(world.$('ctrlTool'));
+    const shift = world.document.querySelector('.shift');
+    world.tap(shift);
+    assert(shift.classList.contains('active'), 'shift armed');
+    // shift + Tab = Shift+Tab on the physical channel (design §11).
+    world.tap(world.document.querySelector('[data-ctrl="Tab"]'));
+    const ev = world.native.of('keyEventPhysical');
+    equal(ev.length, 1, 'shift+tab rides the physical channel');
+    equal(ev[0].args[0], 61, 'KEYCODE_TAB');
+    equal(ev[0].args[1], 1, 'META_SHIFT');
+    assert(!shift.classList.contains('active'), 'combo consumed the armed shift');
+    // Order independent: Ctrl sticky armed first, shift second.
+    world.tap(world.document.querySelector('[data-ctrl="sticky-ctrl"]'));
+    world.tap(shift);
+    world.tap(world.key('c'));
+    const evs = world.native.of('keyEventPhysical');
+    equal(evs.length, 2, 'letter combo sent');
+    equal(evs[1].args[0], 31, 'KEYCODE_C');
+    equal(evs[1].args[1], 0x1001, 'META_CTRL|META_SHIFT');
+    assert(!shift.classList.contains('active'), 'shift consumed again');
+    assert(!world.document.querySelector('[data-ctrl="sticky-ctrl"]').classList.contains('active'),
+        'ctrl sticky cleared with it');
+});
+
+test('armed shift alone never opens the combo channel', () => {
+    const world = fresh();
+    world.tap(world.$('ctrlTool'));
+    const shift = world.document.querySelector('.shift');
+    world.tap(shift);
+    world.tap(world.key('h'));
+    equal(world.native.of('key').slice(-1)[0].args[0], 'H', 'uppercase text, not a key event');
+    equal(world.native.of('keyEventPhysical').length, 0, 'no physical combo');
+    assert(!shift.classList.contains('active'), 'still one-shot uppercase');
 });
 
 test('Fn sticky turns twelve letters into F-keys; long-press opens the comb grid', () => {

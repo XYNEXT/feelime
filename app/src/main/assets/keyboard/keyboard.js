@@ -34,6 +34,15 @@
         "确定": "Confirm",
         "换行": "Enter",
         "空格": "Space",
+        "符号": "Sym",
+        "返回主键盘": "Back to keyboard",
+        "表情": "Symbols",
+        "笑脸": "Smileys",
+        "手势": "Gestures",
+        "动物": "Animals",
+        "食物": "Food",
+        "活动": "Activity",
+        "物品": "Objects",
         "出现空的 [] 记号": "Empty [] key token",
         "「{0}」无法解析": "Cannot parse “{0}”",
         "「{0}」缺少键名": "“{0}” is missing a key name",
@@ -187,7 +196,7 @@
         });
     }
 
-    const KEYBOARD_VERSION = '3.26.0';
+    const KEYBOARD_VERSION = '3.27.0';
     const MIN_NATIVE_API = 1;
     const REQUIRED_CAPABILITIES = [
         'candidate-revision-v1',
@@ -293,6 +302,8 @@
         caps: 'M12 3l7 7h-4v6H9v-6H5zM7 19h10v2H7z',
         backspace: 'M22 3H7c-.69 0-1.23.35-1.59.88L0 12l5.41 8.11c.36.53.9.89 1.59.89h15c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-4.59 12.59L16 17l-2.5-2.5L11 17l-1.41-1.41L12.09 13 9.59 10.5 11 9.1l2.5 2.5L16 9.1l1.41 1.41L14.91 13z',
         mic: 'M12 14a3 3 0 0 0 3-3V5a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3z M19 12a7 7 0 0 1-14 0H3a9 9 0 0 0 8 8.94V23h2v-2.06A9 9 0 0 0 21 12h-2z',
+        arrowLeft: 'M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z',
+        smiley: 'M15.5 11c.83 0 1.5-.67 1.5-1.5S16.33 8 15.5 8 14 8.67 14 9.5s.67 1.5 1.5 1.5zm-7 0c.83 0 1.5-.67 1.5-1.5S9.33 8 8.5 8 7 8.67 7 9.5 7.67 11 8.5 11zm3.5 6.5c2.33 0 4.31-1.46 5.11-3.5H6.89c.8 2.04 2.78 3.5 5.11 3.5zM11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8z',
     };
     const SVG_NS = 'http://www.w3.org/2000/svg';
     const ICONS = {};
@@ -330,6 +341,51 @@
         ['-', '/', ':', ';', '(', ')', '&', '@', '+', '='],
         ['.', ',', '?', '!', '"', "'", '*', '#', '%'],
     ];
+    // The nine-pad's left strip - symbols that pair well with digits
+    // (phone numbers, prices, units, simple math). Literal commits.
+    const NUM_PAD_SYMBOLS = ['@', '%', '-', '+', '/', '*', '(', ')',
+        '#', '$', '&', '_', '=', '~', '^', ':', ';'];
+
+    // The emoji picker's curated offline set - seven categories of
+    // daily-use glyphs (~350 total, a few KB inline). VS16/ZWJ sequences
+    // are committed verbatim via commitText.
+    const EMOJI_CATEGORIES = [
+        { id: 'smiley', label: '笑脸', emojis: (
+            '😀 😃 😄 😁 😆 😅 🤣 😂 🙂 🙃 😉 😊 😇 🥰 😍 🤩 ' +
+            '😘 😗 😚 😙 🥲 😋 😛 😜 🤪 😝 🤑 🤗 🤭 🤫 🤔 🫡 ' +
+            '🤐 🤨 😐 😑 😶 😏 😒 🙄 😬 😮‍💨 🤥 😌 😔 😪 🤤 😴 ' +
+            '😷 🤒 🤕 🤢 🤮 🥵 🥶 😵 🤯 🤠 🥳 🥸 😎 🤓 🧐 😕 😟').split(' ') },
+        { id: 'hand', label: '手势', emojis: (
+            '👋 🤚 🖐️ ✋ 🖖 👌 🤌 🤏 ✌️ 🤞 🫰 🤟 🤘 🤙 👈 👉 ' +
+            '👆 👇 ☝️ 👍 👎 ✊ 👊 🤛 🤜 👏 🙌 👐 🤲 🤝 🙏 ✍️ ' +
+            '💅 🤳 💪 🦾 🦵 🦶 👂 👃 🧠 🫀 👶 🧒 👦 👧 👱 👨 ' +
+            '👩 🧓 👴 👵 🙍 🙎 🙅 🙆 💁 🙋 🤦 🤷 🙇 🧘 🛀 🛌').split(' ') },
+        { id: 'animal', label: '动物', emojis: (
+            '🐶 🐱 🐭 🐹 🐰 🦊 🐻 🐼 🐨 🐯 🦁 🐮 🐷 🐸 🐵 🙈 ' +
+            '🙉 🙊 🐔 🐧 🐦 🐤 🦆 🦅 🦉 🦇 🐺 🐗 🐴 🦄 🐝 🐛 ' +
+            '🦋 🐌 🐞 🐜 🪰 🦂 🐢 🐍 🦎 🐙 🦑 🦐 🦀 🐡 🐠 🐟 ' +
+            '🐬 🐳 🐋 🦈 🐊 🐅 🐆 🦓 🦍 🐘 🦏 🐪 🦒 🐃 🐄 🐎 🐖').split(' ') },
+        { id: 'food', label: '食物', emojis: (
+            '🍏 🍎 🍐 🍊 🍋 🍌 🍉 🍇 🍓 🫐 🍒 🍑 🥭 🍍 🥥 🥝 ' +
+            '🍅 🥑 🥦 🥬 🥒 🌽 🥕 🧄 🧅 🥔 🍠 🥐 🍞 🥖 🥨 🧀 ' +
+            '🥚 🍳 🥞 🧇 🥓 🍔 🍟 🍕 🌭 🥪 🌮 🌯 🥗 🍝 🍜 🍲 ' +
+            '🍣 🍱 🍤 🍙 🍚 🍘 🍥 🍦 🍩 🍪 🎂 🍰 🧁 🍫 🍬 🍭 🍵').split(' ') },
+        { id: 'activity', label: '活动', emojis: (
+            '⚽ 🏀 🏈 ⚾ 🥎 🎾 🏐 🏉 🥏 🎱 🏸 🏒 🥍 🏑 🥅 ' +
+            '⛳ 🏹 🎣 🥊 🥋 🎽 🛹 🛼 🏆 🥇 🥈 🥉 🏅 🎖️ 🎯 🎪 ' +
+            '🎭 🎨 🎬 🎤 🎧 🎸 🎹 🥁 🎺 🎲 ♟️ 🧩 🎮 🕹️ 🎳 🎿 ' +
+            '⛸️ 🥌 🏋️ 🤼 🤸 ⛹️ 🤺 🤾 🏌️ 🏇 🧗 🏄 🚴 🚵 🏓 🤽').split(' ') },
+        { id: 'object', label: '物品', emojis: (
+            '⌚ 📱 💻 ⌨️ 🖥️ 🖨️ 🖱️ 💾 💿 📀 📷 📸 📹 🎥 📞 ☎️ ' +
+            '📟 📠 📺 📻 🎙️ ⏰ 🕰️ ⌛ 💡 🔦 🕯️ 🧯 💸 💵 💰 💳 ' +
+            '💎 ⚖️ 🧰 🔧 🔨 ⚙️ 🧲 🔫 💣 🔪 🛡️ 🔮 💉 💊 🩹 🩺 ' +
+            '🚪 🪑 🛏️ 🚽 🚿 🛁 🧴 🧹 🧺 🔑 🗝️ 📦 📫 📝 ✏️ 📌 📎').split(' ') },
+        { id: 'symbol', label: '表情', emojis: (
+            '❤️ 🧡 💛 💚 💙 💜 🖤 🤍 🤎 💔 ❣️ 💕 💞 💓 💗 💖 ' +
+            '💘 💝 💟 ☮️ ✝️ ☪️ 🕉️ ☸️ ✡️ 🔯 🕎 ☯️ ☦️ 🛐 ⛎ ♈ ' +
+            '♉ ♊ ♋ ♌ ♍ ♎ ♏ ♐ ♑ ♒ ♓ 🆔 ⚛️ ✅ ❌ ❓ ❗ ' +
+            '💯 🔞 🚭 ♻️ ⚜️ 🔱 📛 🔰 ⭕ 🉑 🈶 🈚 🈸 🈺 🈷️ 🔥').split(' ') },
+    ];
     const SYMBOL_CATEGORIES = [
         { id: 'common', label: '常用', rows: null }, // filled per keyboard mode
         // The user's own table, between 常用 and 最近; hidden
@@ -360,6 +416,10 @@
                 ['′', '″', '‰', '⊕', '⊗', '⊙', '∵', '∴', '⊥'],
             ],
         },
+        // The 方向 category fires HOST key events, not text - it has no
+        // rows of its own and is rendered by the arrows branch of
+        // renderSymbols (design §2.4).
+        { id: 'arrows', label: '方向', rows: null },
         {
             id: 'num', label: '序号',
             rows: [
@@ -577,6 +637,21 @@
             this.lastEngineState = null;
             this.lastRawInput = '';
             this.symbolCat = 'common';
+            // 常用 tab variant: null follows the input mode; a second
+            // tap on the active 常用 tab pins 'zh'/'en' until the mode
+            // changes (design §2.4).
+            this.commonVariant = null;
+            // Which key-area layer is visible (letters/symbols/numpad) -
+            // panels and settings borrow the area and restore this.
+            this.keyLayer = 'letters';
+            // The nine-pad's emoji sub-view (toggled by the smiley key).
+            this.emojiView = false;
+            // The 常用 pin lives per MODE; this is the mode it was reset
+            // for (rotation re-renders the same mode and must not reset).
+            this.renderedMode = null;
+            // The key layer the key area showed before a panel editor card
+            // borrowed it for letters - openPanel must re-capture THIS.
+            this.panelEditorKeyLayer = null;
             this.panelTab = 'clipboard';
             this.panelOpen = false;
             // Control-key layer state - the toolbar swap, the
@@ -919,18 +994,24 @@
                 Object.keys(this.sticky).some(name => this.sticky[name]);
             if (stickyArmed) {
                 const mods = Object.keys(this.sticky).filter(name => this.sticky[name]);
+                // The qwerty shift's armed state joins as the SHIFT meta
+                // bit (design §11): Ctrl sticky + shift + letter = Ctrl
+                // +Shift+C, Fn + shift = Shift+F-key. It is appended AFTER
+                // the guard below - shift alone must never open the combo
+                // path, letters keep the one-shot uppercase fallthrough.
+                const shiftMod = this.shift ? ['Shift'] : [];
                 // An armed Fn turns the twelve mapped keys into
                 // F-keys (Q -> F1 ... L -> F12); the combo clears every
                 // sticky bit, Fn included.
                 const fnLabel = this.sticky.Fn ? FN_KEYS[key] : null;
                 if (fnLabel) {
-                    this.sendCombo([...mods.filter(name => name !== 'Fn'), fnLabel]);
+                    this.sendCombo([...mods.filter(name => name !== 'Fn'), ...shiftMod, fnLabel]);
                     return;
                 }
                 // Plain modifiers + letter keeps the old combo path; Fn alone
                 // leaves the tap to fall through and type the letter.
                 if (/^[a-z]$/i.test(key) && mods.some(name => name !== 'Fn')) {
-                    this.sendCombo([...mods.filter(name => name !== 'Fn'), key.toUpperCase()]);
+                    this.sendCombo([...mods.filter(name => name !== 'Fn'), ...shiftMod, key.toUpperCase()]);
                     return;
                 }
             }
@@ -1032,6 +1113,20 @@
             // layouts have no shift key to undo them with).
             this.shift = false;
             this.caps = false;
+            // The 常用 variant follows the MODE, not the render: rotation
+            // re-renders through applyOrientation and must keep a pinned
+            // variant, or the grid, its badge and the recent-fill
+            // disagree (design §2.4, review P2).
+            if (this.renderedMode !== this.mode) {
+                this.renderedMode = this.mode;
+                this.commonVariant = null;
+                // A mode switch can land while the symbol layer is open -
+                // the grid and its badge must follow the new default.
+                if (!document.getElementById('symbolLayer').hidden) {
+                    this.renderSymbolCats();
+                    this.renderSymbols();
+                }
+            }
             this.renderLetters(config.layout);
             this.closeModeMenu();
             this.closeSettingsPanel();
@@ -1069,7 +1164,7 @@
             // [123] [punct] [space(+mic)] [中/英] [enter]; long-press the
             // toggle for the system IME picker (the old globe slot).
             const bottom = this.row();
-            bottom.append(this.specialKey('symbols', '123', () => this.showSymbols(), 'kb-wide-2_1 kb-special'));
+            bottom.append(this.specialKey('symbols', '123', () => this.showSymbols(), 'kb-wide-2_1 kb-special', 'numpad'));
             bottom.append(this.letterKey('.'));
             bottom.append(this.spaceKey());
             bottom.append(this.cnEnKey());
@@ -1285,6 +1380,12 @@
                     holdTimer = setTimeout(() => {
                         longFired = true;
                         this.toggleModeMenu();
+                    }, 350);
+                } else if (button.dataset.lp === 'numpad') {
+                    // Long-press 123 opens the nine-pad; the plain tap
+                    // still opens the symbol layer (fired on touchend).
+                    holdTimer = setTimeout(() => {
+                        if (!this.swiping) { longFired = true; this.showNumpad(); }
                     }, 350);
                 }
             }, { passive: false });
@@ -1699,21 +1800,47 @@
                 symEnter.textContent = label;
                 symEnter.setAttribute('aria-label', label);
             }
+            // So does the nine-pad's action column.
+            const numEnter = document.getElementById('numEnterKey');
+            if (numEnter) {
+                numEnter.textContent = label;
+                numEnter.setAttribute('aria-label', label);
+            }
         }
 
         /* ===== symbol layer ===== */
+
+        /** The key-area layers are mutually exclusive; this field owns
+         * which one is visible. Full-width borrowers (panel, quick
+         * settings, editors) hide every layer via hideKeyLayers and hand
+         * the remembered one back with showKeyLayer - no call site juggles
+         * the individual hidden flags any more. */
+        showKeyLayer(name) {
+            this.keyLayer = name;
+            // The emoji sub-view belongs to a nine-pad session.
+            if (name !== 'numpad') this.emojiView = false;
+            this.hideKeyLayers();
+            document.getElementById(
+                name === 'symbols' ? 'symbolLayer'
+                    : name === 'numpad' ? 'numPadLayer' : 'qwertyLayer',
+            ).hidden = false;
+        }
+
+        hideKeyLayers() {
+            document.getElementById('qwertyLayer').hidden = true;
+            document.getElementById('symbolLayer').hidden = true;
+            document.getElementById('numPadLayer').hidden = true;
+        }
 
         showSymbols() {
             this.symbolCat = 'common';
             this.renderSymbolCats();
             this.renderSymbols();
-            document.getElementById('qwertyLayer').hidden = true;
-            document.getElementById('symbolLayer').hidden = false;
+            this.showKeyLayer('symbols');
         }
 
         showLetters() {
-            document.getElementById('symbolLayer').hidden = true;
-            document.getElementById('qwertyLayer').hidden = false;
+            this.showKeyLayer('letters');
         }
 
         /** The IME re-showing always lands on the main view -
@@ -1748,6 +1875,188 @@
             localStorage.setItem('feelime_symbol_recent', JSON.stringify(values));
         }
 
+        /* ===== 九宫格数字键盘（长按 123）与 emoji 选择器 ===== */
+
+        showNumpad() {
+            this.renderNumpad();
+            this.showKeyLayer('numpad');
+        }
+
+        /** The nine-pad (long-press 123): a 4×5 grid - the left column is
+         * the number-symbol strip (vertical scroll, literal commits) over
+         * the back key, then digits, '.', the action column and the emoji
+         * sub-view. EVERY glyph commits literally via sendSymbol - the
+         * Chinese engine never sees these digits as candidate selectors,
+         * and '.' stays a decimal point in every mode (design §2.6). */
+        renderNumpad() {
+            const layer = document.getElementById('numPadLayer');
+            layer.replaceChildren();
+            const grid = document.createElement('div');
+            grid.className = 'num-grid';
+
+            // Left column rows 1-3: the symbol strip. Plain clicks, NO
+            // bindTouch - its preventDefault would kill the vertical
+            // scroll (same lesson as the sym-cat strip).
+            const syms = document.createElement('div');
+            syms.className = 'num-syms';
+            NUM_PAD_SYMBOLS.forEach(value => {
+                const button = document.createElement('button');
+                button.className = 'num-sym-key';
+                button.textContent = value;
+                button.addEventListener('click', () => this.sendSymbol(value));
+                syms.append(button);
+            });
+            grid.append(syms);
+
+            // Left column row 4: back to the letters keyboard (green).
+            // specialKey over a raw button: the back key is NOT inside a
+            // scroller, so it joins the bindTouch chain (active-touch +
+            // unified cancel, review P2).
+            const back = this.specialKey('numpad-back', ICONS.arrowLeft,
+                () => this.showLetters(), 'num-back');
+            back.setAttribute('aria-label', t("返回主键盘"));
+            grid.append(back);
+
+            if (this.emojiView) {
+                grid.append(this.renderEmojiArea());
+            } else {
+                // Grid auto-placement fills c2-c5 row by row after the
+                // two placed left-column items. Appended EXACTLY row by
+                // row: 1-3/⌫, 4-6/空格, 7-9/emoji, 符号/0/./换行 - one
+                // missing cell shifts the whole grid (caught on the demo
+                // screenshot: the 0 was dropped and 4 slid into the
+                // action column).
+                const push = cell => grid.append(cell);
+                const digit = value => this.functionKey(value,
+                    () => this.sendSymbol(value), 'num-digit');
+                push(digit('1'));
+                push(digit('2'));
+                push(digit('3'));
+                push(this.specialKey('backspace', ICONS.backspace,
+                    () => this.call(() => Native.backspace(this.token)),
+                    'num-fn kb-special', 'repeat'));
+                push(digit('4'));
+                push(digit('5'));
+                push(digit('6'));
+                push(this.functionKey(t("空格"),
+                    () => this.call(() => Native.space(this.token)),
+                    'num-fn kb-special'));
+                push(digit('7'));
+                push(digit('8'));
+                push(digit('9'));
+                // bindTouch'd like every non-scroller key (review P2);
+                // the aria-label stays language-neutral, "表情" names the
+                // symbol CATEGORY, not this entry.
+                const emojiKey = this.specialKey('emoji', ICONS.smiley,
+                    () => this.toggleEmojiView(), 'num-fn kb-special');
+                emojiKey.setAttribute('aria-label', 'emoji');
+                push(emojiKey);
+                push(this.functionKey(t("符号"), () => this.showSymbols(), 'num-fn kb-special'));
+                push(digit('0'));
+                push(digit('.'));
+                const enter = this.functionKey(t("换行"),
+                    () => this.call(() => Native.enter(this.token)),
+                    'num-fn kb-special', 'repeat');
+                enter.id = 'numEnterKey';
+                push(enter);
+            }
+            layer.append(grid);
+            // The pad can open mid-composition (and back from emoji):
+            // the enter key must read 确定 then, not a stale 换行.
+            this.updateEnterLabel();
+        }
+
+        /** The emoji sub-view replaces the digit area (cols 2-5): a
+         * horizontally snapping page scroller over the category strip.
+         * Pages pair with the strip through a shared index (design §2.6). */
+        renderEmojiArea() {
+            const area = document.createElement('div');
+            area.className = 'emoji-area';
+            const recents = this.emojiRecents();
+            // recent 常用 leads when it has content (mirrors the 定制 tab).
+            const categories = (recents.length
+                ? [{ id: 'recent', label: '常用', emojis: recents }, ...EMOJI_CATEGORIES]
+                : EMOJI_CATEGORIES);
+            const pages = document.createElement('div');
+            pages.className = 'emoji-pages';
+            const pageCats = [];
+            const firstPage = {};
+            categories.forEach(category => {
+                firstPage[category.id] = pageCats.length;
+                for (let i = 0; i < category.emojis.length; i += 24) {
+                    pageCats.push(category.id);
+                    const page = document.createElement('div');
+                    page.className = 'emoji-page';
+                    // Plain clicks - bindTouch's preventDefault would kill
+                    // the page swipe starting on a key.
+                    category.emojis.slice(i, i + 24).forEach(emoji => {
+                        const button = document.createElement('button');
+                        button.className = 'emoji-key';
+                        button.textContent = emoji;
+                        button.addEventListener('click', () => {
+                            this.sendSymbol(emoji);
+                            this.rememberEmoji(emoji);
+                        });
+                        page.append(button);
+                    });
+                    pages.append(page);
+                }
+            });
+            const strip = document.createElement('div');
+            strip.className = 'emoji-cats';
+            // The leading 123 tab returns to the digit pad - the smiley
+            // key it replaced lives in that view (symbol layer's ABC
+            // grammar).
+            const digitsTab = document.createElement('button');
+            digitsTab.className = 'sym-cat';
+            digitsTab.textContent = '123';
+            digitsTab.addEventListener('click', () => this.toggleEmojiView());
+            strip.append(digitsTab);
+            const tabs = [];
+            categories.forEach((category, index) => {
+                const tab = document.createElement('button');
+                tab.className = 'sym-cat' + (index === 0 ? ' active' : '');
+                tab.textContent = t(category.label);
+                tab.addEventListener('click', () => {
+                    const left = firstPage[category.id] * (pages.clientWidth || 0);
+                    if (typeof pages.scrollTo === 'function') {
+                        pages.scrollTo({ left, behavior: 'smooth' });
+                    } else {
+                        pages.scrollLeft = left;
+                    }
+                });
+                tabs.push(tab);
+                strip.append(tab);
+            });
+            // Swiping the pages keeps the strip in sync (per-page index).
+            pages.addEventListener('scroll', () => {
+                const width = pages.clientWidth;
+                if (!width) return;
+                const catId = pageCats[Math.round(pages.scrollLeft / width)] || pageCats[0];
+                tabs.forEach((tab, index) => tab.classList.toggle('active', categories[index].id === catId));
+            });
+            area.append(pages, strip);
+            return area;
+        }
+
+        toggleEmojiView() {
+            this.emojiView = !this.emojiView;
+            this.renderNumpad();
+        }
+
+        emojiRecents() {
+            try {
+                const parsed = JSON.parse(localStorage.getItem('feelime_emoji_recent') || '[]');
+                if (Array.isArray(parsed)) return parsed.filter(item => typeof item === 'string');
+            } catch (_) { /* unset */ }
+            return [];
+        }
+
+        rememberEmoji(emoji) {
+            const values = [emoji, ...this.emojiRecents().filter(item => item !== emoji)].slice(0, 16);
+            localStorage.setItem('feelime_emoji_recent', JSON.stringify(values));
+        }
+
         renderSymbolCats() {
             const strip = document.getElementById('symCats');
             strip.replaceChildren();
@@ -1758,7 +2067,27 @@
                 button.className = 'sym-cat' + (category.id === this.symbolCat ? ' active' : '');
                 button.textContent = t(category.label);
                 button.dataset.symCat = category.id;
+                // The 常用 tab borrows the mode toggle's dual-label
+                // grammar: a small 中/En badge names the table it shows.
+                if (category.id === 'common') {
+                    button.classList.add('sym-cat-variant');
+                    const badge = document.createElement('span');
+                    badge.className = 'cat-sub';
+                    badge.textContent = this.commonVariantNow() === 'zh' ? '中' : 'En';
+                    button.append(badge);
+                }
                 button.addEventListener('click', () => {
+                    // Second tap on the ACTIVE 常用 tab flips the zh/en
+                    // table in place - the badge is updated, not the strip
+                    // rebuilt (scroll position survives), and the grid
+                    // re-renders from the other row set.
+                    if (category.id === 'common' && this.symbolCat === 'common') {
+                        this.commonVariant = this.commonVariantNow() === 'zh' ? 'en' : 'zh';
+                        const badge = button.querySelector('.cat-sub');
+                        if (badge) badge.textContent = this.commonVariantNow() === 'zh' ? '中' : 'En';
+                        this.renderSymbols();
+                        return;
+                    }
                     this.symbolCat = category.id;
                     document.querySelectorAll('[data-sym-cat]').forEach(el => (
                         el.classList.toggle('active', el.dataset.symCat === category.id)));
@@ -1772,8 +2101,15 @@
             });
         }
 
+        /** The 常用 table on screen: the pinned variant (second tap on
+         * the active 常用 tab flips it) or the input mode's default. */
+        commonVariantNow() {
+            if (this.commonVariant) return this.commonVariant;
+            return this.isChineseMode() ? 'zh' : 'en';
+        }
+
         commonRows() {
-            return this.isChineseMode() ? ZH_COMMON_ROWS : EN_COMMON_ROWS;
+            return this.commonVariantNow() === 'zh' ? ZH_COMMON_ROWS : EN_COMMON_ROWS;
         }
 
         /** The user's custom symbol table - exactly 3 rows of
@@ -1993,6 +2329,45 @@
                     'kb-special', 'repeat'));
                 wrap.append(rowsBox, bsCol);
                 grid.append(wrap);
+                return;
+            }
+            if (this.symbolCat === 'arrows') {
+                // The 方向 category sends host key events (design §2.4):
+                // cells pair a display glyph with a CTRL_KEY_CODES label,
+                // every cell repeats while held (navigation wants 1..n
+                // steps), and nothing lands in the recent list. Rows pad
+                // to the 10-column rhythm with blanks like every category.
+                const arrowsRows = [
+                    [['←', 'ArrowLeft'], ['↑', 'ArrowUp'],
+                        ['↓', 'ArrowDown'], ['→', 'ArrowRight']],
+                    [['Home', 'Home'], ['End', 'End'],
+                        ['PgUp', 'PageUp'], ['PgDn', 'PageDown']],
+                    [['Tab', 'Tab'], ['Esc', 'Escape'], ['Del', 'Del'],
+                        [t("空格"), 'Space'], [t("换行"), 'Enter']],
+                ];
+                arrowsRows.forEach((cells, index) => {
+                    const row = this.row();
+                    cells.forEach(([glyph, label]) => {
+                        row.append(this.functionKey(glyph,
+                            () => this.sendCombo([label]),
+                            glyph.length > 1 ? 'sym-multi' : 'sym-single',
+                            'repeat'));
+                    });
+                    // Rows 1-2 carry 10 cells, row 3 keeps its last slot
+                    // for the backspace key - mixed 9/10 rows stretched
+                    // the arrow keys wider than the rest (review P2).
+                    const target = index === arrowsRows.length - 1 ? 9 : 10;
+                    while (row.children.length < target) {
+                        const blank = document.createElement('span');
+                        blank.className = 'sym-blank';
+                        row.append(blank);
+                    }
+                    grid.append(row);
+                });
+                grid.children[grid.children.length - 1].append(
+                    this.specialKey('backspace', ICONS.backspace,
+                        () => this.call(() => Native.backspace(this.token)),
+                        'kb-special', 'repeat'));
                 return;
             }
             const values = this.symbolCategoryValues();
@@ -2216,7 +2591,10 @@
                 return;
             }
             // A plain control key: fires with the armed modifiers at once.
+            // The qwerty shift's armed state rides along too - shift + Tab,
+            // shift + arrows (selection), shift + Del (design §11).
             const mods = Object.keys(this.sticky).filter(key => this.sticky[key]);
+            if (this.shift) mods.push('Shift');
             this.sendCombo([...mods, action]);
         }
 
@@ -2241,6 +2619,9 @@
                 : Native.keyEvent(keyCode, meta, this.token));
             this.sticky = { Ctrl: false, Alt: false, Meta: false, Fn: false };
             this.renderCtrlSticky();
+            // An armed qwerty shift rode along as the SHIFT meta bit
+            // (design §11) - the combo consumes it like every sticky bit.
+            if (this.shift) { this.shift = false; this.updateLabels(); }
         }
 
         keyCodeFor(label) {
@@ -2720,10 +3101,8 @@
             if (full) full.hidden = false;
             // The panel REPLACES the key area (no overlay) -
             // remember which key layer to restore on close.
-            this.settingsReturnLayer =
-                document.getElementById('symbolLayer').hidden ? 'letters' : 'symbols';
-            document.getElementById('symbolLayer').hidden = true;
-            document.getElementById('qwertyLayer').hidden = true;
+            this.settingsReturnLayer = this.keyLayer;
+            this.hideKeyLayers();
         }
 
         closeSettingsPanel() {
@@ -2742,9 +3121,7 @@
             // stranded an empty key area after a settings round-trip inside
             // the phrase editor (the editor coexists with the qwerty layer
             // since ).
-            const toSymbols = this.settingsReturnLayer === 'symbols';
-            document.getElementById('symbolLayer').hidden = !toSymbols;
-            document.getElementById('qwertyLayer').hidden = toSymbols;
+            this.showKeyLayer(this.settingsReturnLayer || 'letters');
             // The panel borrowed the bar from the ctrl view -
             // bring the rows back if the switch is still on.
             this.maybeResumeCtrlView();
@@ -2999,8 +3376,7 @@
             area.placeholder = t("粘贴定制 JSON");
             this.editorMode = 'custom-json';
             this.closeSettingsPanel();
-            document.getElementById('symbolLayer').hidden = true;
-            document.getElementById('qwertyLayer').hidden = false;
+            this.showKeyLayer('letters');
             document.body.classList.add('editing');
             editor.hidden = false;
             area.focus();
@@ -3767,7 +4143,7 @@
             this.panelOpen = true;
             // Remember the layer to restore on close (panel can open from the
             // symbol layer too).
-            this.panelReturnLayer = document.getElementById('symbolLayer').hidden ? 'letters' : 'symbols';
+            this.panelReturnLayer = this.keyLayer;
             this.closeModeMenu();
             // The control view never coexists with the panel.
             // Borrow, don't switch off - closing the panel
@@ -3786,8 +4162,7 @@
             // The panel REPLACES the toolbar row instead of adding
             // another line to the keyboard - its own head carries the tabs.
             document.getElementById('candidateBar').hidden = true;
-            document.getElementById('qwertyLayer').hidden = true;
-            document.getElementById('symbolLayer').hidden = true;
+            this.hideKeyLayers();
             document.getElementById('panelLayer').hidden = false;
             document.querySelectorAll('[data-panel-tab]').forEach(button => {
                 button.classList.toggle('active', button.dataset.panelTab === this.panelTab);
@@ -3804,9 +4179,7 @@
             this.panelOpen = false;
             document.getElementById('panelLayer').hidden = true;
             document.getElementById('candidateBar').hidden = false;
-            const toSymbols = this.panelReturnLayer === 'symbols';
-            document.getElementById('symbolLayer').hidden = !toSymbols;
-            document.getElementById('qwertyLayer').hidden = toSymbols;
+            this.showKeyLayer(this.panelReturnLayer || 'letters');
             // The panel only borrowed the bar from the ctrl
             // view - hand the rows back if the switch is still on.
             this.maybeResumeCtrlView();
@@ -4074,8 +4447,12 @@
             // The keyboard STAYS visible under the card -
             // picking a candidate mid-edit is the whole point.
             document.getElementById('candidateBar').hidden = false;
-            document.getElementById('symbolLayer').hidden = true;
-            document.getElementById('qwertyLayer').hidden = false;
+            // The card borrows the key area for letters; remember what the
+            // PANEL was restoring - closePanelEditor hands it back before
+            // openPanel re-captures, or a nine-pad return layer would be
+            // lost to 'letters' (review P2).
+            this.panelEditorKeyLayer = this.keyLayer;
+            this.showKeyLayer('letters');
             // body.editing keeps the native redirect armed across blurs
             // (review finding) - the card flow keeps that semantics.
             document.body.classList.add('editing');
@@ -4127,6 +4504,10 @@
                 this.toggleSettingsPanel('custom');
                 return;
             }
+            // Hand the borrowed key area back to the panel's session
+            // before openPanel re-captures the return layer.
+            this.keyLayer = this.panelEditorKeyLayer || this.keyLayer;
+            this.panelEditorKeyLayer = null;
             this.openPanel('favorites');
         }
 
@@ -4466,6 +4847,9 @@
                 this.renderLetters((MODES[this.mode] || MODES.direct).layout);
                 this.renderSymbolCats();
                 this.updateLabels();
+                // The nine-pad (and its emoji sub-view) prints t()-labels -
+                // re-render or 空格/换行 mix languages mid-session (review P2).
+                if (this.keyLayer === 'numpad') this.renderNumpad();
                 if (document.getElementById('settingsPanel').classList.contains('open')) this.renderSettingsPanel();
                 if (this.panelOpen) this.renderPanel();
                 if (this.expanded) this.renderExpanded();
@@ -4736,6 +5120,7 @@
         toggleSettingsPanel: () => keyboard.toggleSettingsPanel(),
         closeSettingsPanel: () => keyboard.closeSettingsPanel(),
         toggleControlView: () => keyboard.setControlView(!keyboard.ctrlView),
+        showNumpad: () => keyboard.showNumpad(),
         clearEditor: () => keyboard.clearEditorBridge(),
         // The native re-show path lands the keyboard on its
         // main view.

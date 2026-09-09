@@ -63,6 +63,7 @@ adb install -r app/build/outputs/apk/direct/debug/app-direct-debug.apk
 | `FEELIME_ANDROID_DIR` | 共享 AAR 位置（默认 `~/.config/feelime/android`） |
 | `FEELIME_ADB_SERIAL` | 门禁默认测试设备 |
 | `FEELIME_ASR_FIXTURE` | ASR 门禁录音（16 kHz wav，自备、不入库） |
+| `FEELIME_PREVIEW_ROOT` / `_URL` | demo 预览发布目录 / 访问链接前缀（`tools/deploy-preview.sh`，见外观变更流程） |
 | `FEELIME_BUILDER_SSH` / `_DIR` / `_SDK` | 远端构建机（JVM 套件） |
 | `FEELIME_DEBUG_KEYSTORE` / `_STORE_PASSWORD` / `_KEY_ALIAS` / `_KEY_PASSWORD` | 调试签名（缺省用 Android 默认 debug.keystore） |
 | `FEELIME_RELEASE_KEYSTORE` / `_STORE_PASSWORD` / `_KEY_ALIAS` / `_KEY_PASSWORD` | 发布签名（正式私钥离线保存） |
@@ -198,9 +199,16 @@ DevTools 合成 TouchEvent 切到符号层（`<123>`）时会触发 qemu **静�
    该页 fetch 真实的 index.html/keyboard.css/keyboard.js，注入空操作桥
    （调用日志 + 假引擎），键盘行为与真机同源；不做手写模拟键盘。
 2. 预览方式：`python3 -m http.server <port>`（仓库根）后打开
-   `/tools/keyboard-preview.html`，或部署到任意静态目录：
-   `./tools/deploy-preview.sh`。Chrome F12 设备模拟（手机模式）下可像
-   手机一样触摸操作；页面按钮可切竖屏/横屏、模拟输入、开快捷设置与
-   控制键层。
+   `/tools/keyboard-preview.html`，或发布到静态目录：
+   `./tools/deploy-preview.sh`。交付给人看时必须发布并附访问链接——
+   目录取 `FEELIME_PREVIEW_ROOT`（落 `<root>/preview-<键盘版本>/`，版本
+   取自 assets/keyboard/VERSION），链接前缀取 `FEELIME_PREVIEW_URL`
+   （两个键都在 `~/.config/feelime/env.sh`，本机路径/域名不入库；都没配
+   时落到 `~/tmp/feelime-preview`）。demo 截图（深浅 × 横竖）放进同一
+   预览目录。发布后要在**部署出来的 URL** 上验证（禁用缓存的全新会话或
+   确认服务端对预览路径发 `Cache-Control: no-cache`）——本地看过、线上
+   是旧缓存，等于没交付。Chrome F12 设备模拟（手机模式）下可像
+   手机一样触摸操作；页面按钮可切竖屏/横屏、模拟输入、开快捷设置、
+   控制键层与九宫格。
 3. 外观确认后才进入功能收尾（测试套件、设备回归、发布）；视觉验收看
    截图（深浅两主题、横竖两方向），DOM 断言不能代替视觉核对。

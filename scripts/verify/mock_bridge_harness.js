@@ -135,7 +135,21 @@ class FakeElement {
         return (this.children || []).find(child => child.nodeType === 1) || null;
     }
 
+    /** The textContent setter replaced every child with one text
+     * string; the real DOM keeps that string as a child TEXT NODE, so a
+     * later append must materialize it before adding more children (the
+     * 常用 tab's badge span is exactly this: label + appended child). */
+    _materializeTextCache() {
+        if (this._textContent === undefined) return;
+        const textNode = new FakeElement('#text');
+        textNode.nodeType = 3;
+        textNode.textContent = this._textContent;
+        textNode.parentNode = this;
+        this.children = [textNode];
+        this._textContent = undefined;
+    }
     append(...nodes) {
+        this._materializeTextCache();
         nodes.forEach(node => {
             if (node === null || node === undefined) return;
             // Real DOM appends raw strings as text nodes (settings.js
@@ -151,6 +165,10 @@ class FakeElement {
             node.parentNode = this;
             this.children.push(node);
         });
+        // Real textContent always reflects the subtree - appended
+        // children must invalidate the setter's cache (the 常用 tab's
+        // badge is a child span a plain textContent setter would hide).
+        this._textContent = undefined;
     }
     cloneNode(_deep = false) {
         const copy = new FakeElement(this.tagName.toLowerCase());
@@ -167,10 +185,12 @@ class FakeElement {
     }
     insertBefore(node, ref) {
         if (node === null || node === undefined) return node;
+        this._materializeTextCache();
         node.parentNode = this;
         const idx = ref ? this.children.indexOf(ref) : -1;
         if (idx < 0) this.children.push(node);
         else this.children.splice(idx, 0, node);
+        this._textContent = undefined;
         return node;
     }
     remove() {
@@ -178,6 +198,7 @@ class FakeElement {
             const siblings = this.parentNode.children;
             const i = siblings.indexOf(this);
             if (i >= 0) siblings.splice(i, 1);
+            this.parentNode._materializeTextCache();
             this.parentNode = null;
         }
     }
@@ -187,12 +208,14 @@ class FakeElement {
     }
     replaceChildren(...nodes) {
         this.children = [];
+        this._textContent = undefined;
         this.append(...nodes);
     }
     remove() {
         if (!this.parentNode) return;
         const index = this.parentNode.children.indexOf(this);
         if (index >= 0) this.parentNode.children.splice(index, 1);
+        this.parentNode._materializeTextCache();
         this.parentNode = null;
     }
     setAttribute(name, value) {
