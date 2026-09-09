@@ -203,7 +203,7 @@
         });
     }
 
-    const KEYBOARD_VERSION = '3.28.0';
+    const KEYBOARD_VERSION = '3.28.1';
     const MIN_NATIVE_API = 1;
     const REQUIRED_CAPABILITIES = [
         'candidate-revision-v1',
@@ -4878,8 +4878,19 @@
          * 白名单外的键一律忽略；主题当场生效，语言变化重走一次渲染。 */
         onStoresRestored(stores) {
             let localeChanged = false;
+            let quickPairRemoved = false;
             try {
                 const incoming = stores || {};
+                // 恢复是覆盖语义（userdata.md §1.1 空即空状态）：备份里没有的
+                // 白名单键要从本机删掉，否则本页随后的「先拉后推」会把陈旧值
+                // 推回镜像，导出方的空状态/缺省键就被恢复方旧值翻了案。
+                for (const key of STORE_BACKUP_KEYS) {
+                    if (Object.prototype.hasOwnProperty.call(incoming, key)) continue;
+                    if (localStorage.getItem(key) === null) continue;
+                    if (key === 'feelime_ui_locale') localeChanged = true;
+                    if (key === 'feelime_quick_pair') quickPairRemoved = true;
+                    localStorage.removeItem(key);
+                }
                 for (const key of Object.keys(incoming)) {
                     if (!STORE_BACKUP_KEYS.includes(key)) continue;
                     if (key === 'feelime_ui_locale' && incoming[key] !== uiLocale) {
@@ -4894,6 +4905,7 @@
                 const speed = parseInt(localStorage.getItem('feelime_scrub_speed') || '3', 10);
                 if (speed >= 1 && speed <= 5) this.scrubSpeed = speed;
             } catch (_) { /* keep current */ }
+            if (quickPairRemoved) this.quickPair = ['pinyin', 'direct'];
             try {
                 const pair = JSON.parse(localStorage.getItem('feelime_quick_pair') || 'null');
                 if (Array.isArray(pair) && pair.length === 2 &&

@@ -90,6 +90,9 @@
   （只可能因为设置页导入让 rev 跳号）→ 先把恢复值落地
   （`Feelime.onStoresRestored`：写 localStorage、applyTheme、刷新
   scrubSpeed/quickPair 等构造期缓存、语言变化重走渲染）再继续握手。
+  恢复是**权威覆盖**：备份里没有的白名单键要从本机 localStorage 删除
+  （quick_pair 等运行时缓存回默认），否则页面随后的「先拉后推」会把
+  陈旧值推回镜像，导出方的空状态/缺省键就被恢复方旧值翻了案。
   「先拉后推」保证导入与修改两个方向都收敛，页面不在时也不丢恢复值。
 - 白名单：`feelime_theme`、`feelime_ui_locale`、`feelime_scrub_speed`、
   `feelime_quick_pair`、`feelime_menu_modes`、`feelime_mode_order`。

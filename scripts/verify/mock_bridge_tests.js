@@ -2516,6 +2516,30 @@ test('stores rev: a newer native mirror (settings import) wins the next hello', 
         'light', 'the follow-up push carries the restored values, not the stale ones');
 });
 
+test('stores restore is authoritative: keys absent from the backup are removed locally', () => {
+    const world = new KeyboardWorld().build();
+    world.storage.set('feelime_theme', 'dark');
+    world.storage.set('feelime_scrub_speed', '5');
+    world.storage.set('feelime_quick_pair', JSON.stringify(['direct', 'double']));
+    world.hello();
+    // 导入的备份只带 theme（scrub/quick_pair 是导出方没有的键）。
+    world.native.storesRev = 9;
+    world.native.storesPayload = JSON.stringify({
+        rev: 9,
+        values: { feelime_theme: 'light' },
+    });
+    world.hello();
+    equal(world.storage.get('feelime_theme'), 'light', 'restored value lands');
+    equal(world.storage.get('feelime_scrub_speed'), undefined,
+        'key absent from the backup is removed (overwrite semantics)');
+    equal(world.storage.get('feelime_quick_pair'), undefined,
+        'quick-pair absent from the backup is removed too');
+    // 「先拉后推」不得把删除的键从旧 localStorage 复活回镜像。
+    const followUp = JSON.parse(world.native.of('pushStores').slice(-1)[0].args[0]);
+    equal(followUp.feelime_scrub_speed, undefined, 'push does not resurrect removed keys');
+    equal(followUp.feelime_quick_pair, undefined, 'push does not resurrect quick-pair');
+});
+
 // ------------------------------------------------- candidate compose controls
 
 test('candidate bar shows × and ˅ only while composing; × calls clearComposing and restores', () => {
