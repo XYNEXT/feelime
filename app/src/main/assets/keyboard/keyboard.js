@@ -605,8 +605,12 @@
             const mirror = JSON.parse(Native.getStores(token) || '{}');
             const remoteRev = parseInt(mirror.rev || 0, 10) || 0;
             const localRev = parseInt(localStorage.getItem('feelime_stores_rev') || '0', 10) || 0;
-            if (remoteRev > localRev && mirror.values) {
-                keyboard.onStoresRestored(mirror.values);
+            // 只有真正的键值对象才表达恢复语义：数组/字符串等异常载荷
+            // 不能当成「空备份」触发全量删除（native 正常产出 JSONObject）。
+            const values = mirror.values;
+            const valid = values !== null && typeof values === 'object' && !Array.isArray(values);
+            if (remoteRev > localRev && valid) {
+                keyboard.onStoresRestored(values);
                 localStorage.setItem('feelime_stores_rev', String(remoteRev));
             }
         } catch (_) { /* old native or bad payload */ }
@@ -4878,6 +4882,7 @@
          * 白名单外的键一律忽略；主题当场生效，语言变化重走一次渲染。 */
         onStoresRestored(stores) {
             let localeChanged = false;
+            let localeRemoved = false;
             let quickPairRemoved = false;
             try {
                 const incoming = stores || {};
@@ -4887,7 +4892,7 @@
                 for (const key of STORE_BACKUP_KEYS) {
                     if (Object.prototype.hasOwnProperty.call(incoming, key)) continue;
                     if (localStorage.getItem(key) === null) continue;
-                    if (key === 'feelime_ui_locale') localeChanged = true;
+                    if (key === 'feelime_ui_locale') { localeChanged = true; localeRemoved = true; }
                     if (key === 'feelime_quick_pair') quickPairRemoved = true;
                     localStorage.removeItem(key);
                 }
@@ -4913,7 +4918,8 @@
             } catch (_) { /* keep current */ }
             this.updateToggleLabels();
             if (localeChanged) {
-                uiLocale = String((stores || {})['feelime_ui_locale'] || uiLocale);
+                // 备份缺席语言键 = 导出方用默认语言（zh），不能沿用本机旧值。
+                uiLocale = String((stores || {})['feelime_ui_locale'] || (localeRemoved ? 'zh' : uiLocale));
                 translateStaticUi();
                 this.renderLetters((MODES[this.mode] || MODES.direct).layout);
                 this.renderSymbolCats();
@@ -4953,7 +4959,8 @@
                 uiLocale = payload.uiLocale;
                 try { localStorage.setItem('feelime_ui_locale', uiLocale); } catch (_) {}
                 translateStaticUi();
-                pushStores();
+                // 这里不许 pushStores：hello 尾部统一「先拉后推」，提前推会把
+                // 本地陈旧值写回镜像并抬高 rev，设置页刚导入的恢复值就丢了。
             }
             this.token = payload.pageGenerationToken;
             this.engineReady = payload.engineDataReady || {};

@@ -91,8 +91,12 @@
   （`Feelime.onStoresRestored`：写 localStorage、applyTheme、刷新
   scrubSpeed/quickPair 等构造期缓存、语言变化重走渲染）再继续握手。
   恢复是**权威覆盖**：备份里没有的白名单键要从本机 localStorage 删除
-  （quick_pair 等运行时缓存回默认），否则页面随后的「先拉后推」会把
-  陈旧值推回镜像，导出方的空状态/缺省键就被恢复方旧值翻了案。
+  （quick_pair 等运行时缓存回默认；语言键缺席即回默认 zh），否则页面
+  随后的「先拉后推」会把陈旧值推回镜像，导出方的空状态/缺省键就被
+  恢复方旧值翻了案。语言切换分支也不得在 hello 里提前 push——hello
+  尾部统一「先拉后推」，提前推会让陈旧值写回镜像并抬高 rev，把刚导入
+  的恢复值顶掉。拉取只接受真正的键值对象（数组/字符串等异常载荷不算
+  「空备份」，不触发删除；native 正常产出 JSONObject）。
   「先拉后推」保证导入与修改两个方向都收敛，页面不在时也不丢恢复值。
 - 白名单：`feelime_theme`、`feelime_ui_locale`、`feelime_scrub_speed`、
   `feelime_quick_pair`、`feelime_menu_modes`、`feelime_mode_order`。
@@ -158,9 +162,11 @@ startVoice 无权限分支改为拉起它；Activity 调 requestPermissions(RECO
   - 设置页本地导入与 URL 下载安装共用 `installWithConsent`：
     SIGNATURE_BAD 时 bridge 暂存 zip 字节 + id（pending/confirm 状态机），
     pushUpdateError 带 confirmable+confirmId；设置页确认 →
-    `confirmKeyboardInstall(id)`、取消 → `dismissKeyboardInstall(id)`；
-    任何新的导入尝试/失败都作废旧 pending。URL 带 `#sha256=` 钉扎时
-    钉扎随包暂存、确认重装时重放（验签先于钉扎检查，否则确认通道
-    会绕过钉扎）。
+    `confirmKeyboardInstall(id)`、取消 → `dismissKeyboardInstall(id)`。
+    pending 的 bytes/id/sha256= 钉扎三者**一体发布、一体取走**
+    （bridge binder 线程与安装 worker 并发，拆散字段会绑错包或丢钉扎）；
+    接受新导入请求与任何失败都作废旧 pending，旧 id 的确认/取消只拒绝
+    自身、不清掉更新的请求。URL 带 `#sha256=` 钉扎时钉扎随包暂存、
+    确认重装时重放（验签先于钉扎检查，否则确认通道会绕过钉扎）。
   - inbox 推送（scripts/push-keyboard.sh）：installFromInbox 遇
     SIGNATURE_BAD 弹 AlertDialog，确认后重装。

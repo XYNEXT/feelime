@@ -658,9 +658,15 @@ class MockNative {
         this._record('getFavorites', [token]);
     }
     // userdata 备份的 localStorage 设置级镜像（docs/design/userdata.md §1.4）。
+    // 与原生 ImeBridge.pushStores 一致：合并进镜像并抬高 rev，下次拉取可见。
     pushStores(json, token) {
         this._record('pushStores', [json, token]);
         this.storesRev = (this.storesRev || 0) + 1;
+        let pushed = {};
+        try { pushed = JSON.parse(json || '{}'); } catch (_) {}
+        const base = this.storesPayload ? JSON.parse(this.storesPayload) : null;
+        const values = Object.assign({}, (base && base.values) || {}, pushed);
+        this.storesPayload = JSON.stringify({ rev: this.storesRev, values });
         return String(this.storesRev);
     }
     getStores(token) {

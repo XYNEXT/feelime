@@ -131,4 +131,21 @@ class SignatureConfirmImportTest {
         }
         assertEquals(KeyboardSource.BUILT_IN, store.resolve().source)
     }
+
+    /** URL 带 #sha256= 钉扎时，确认重装必须重放钉扎：验签先于钉扎检查，
+     * 不重放会让钉扎不匹配的包借确认通道绕过钉扎（userdata.md §3）。 */
+    @Test
+    fun confirmInstallStillHonorsTheFragmentPin() {
+        val zip = foreignSignedZip()
+        val sha = KeyboardPackageVerifier.sha256Hex(zip)
+        val correct = newStore().install(zip, fragmentPin = sha, confirmBadSignature = true)
+        assertTrue(correct is KeyboardStore.InstallResult.Ok)
+
+        val rejected = newStore().install(zip, fragmentPin = "deadbeef", confirmBadSignature = true)
+        assertTrue(rejected is KeyboardStore.InstallResult.Fail)
+        assertEquals(
+            KeyboardUpdateErrorCode.FRAGMENT_PIN_MISMATCH,
+            (rejected as KeyboardStore.InstallResult.Fail).code,
+        )
+    }
 }

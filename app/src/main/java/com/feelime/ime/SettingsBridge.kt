@@ -90,14 +90,18 @@ class SettingsBridge(
     private val uiPreferences = UiLanguage.preferences(context)
     private val modelDownloadGate = ModelDownloadConsentGate()
 
-    /** 签名不符但用户可能要装的本地包（§3 pending/confirm 状态机，
+    /** 签名不符但用户可能要装的包（§3 pending/confirm 状态机，
      * 仿 modelDownloadGate；只活在本进程内存，页面刷新即弃）。
-     * id 绑定具体那份包：确认/取消必须带上同一个 id 才生效。 */
-    @Volatile private var pendingKeyboardZip: ByteArray? = null
-    @Volatile private var pendingKeyboardId: String = ""
-    /** 待确认包随带的 sha256= 钉扎（URL 安装路径）；确认重装时一并执行，
-     * 防止「钉扎不匹配的包借确认通道绕过钉扎」。 */
-    @Volatile private var pendingKeyboardPin: String? = null
+     * bytes/id/sha256= 钉扎三者一体发布、一体取走：bridge binder 线程与
+     * 安装 worker 并发，拆散字段会让确认绑错包或丢钉扎。 */
+    private class PendingKeyboardInstall(
+        val bytes: ByteArray,
+        val id: String,
+        val pin: String?,
+    )
+
+    private val pendingLock = Any()
+    private var pendingKeyboardInstall: PendingKeyboardInstall? = null
     private val lifecycleLock = Any()
     @Volatile private var closed = false
     private var modelDownloadNetwork: ModelDownloadNetwork? = null
@@ -168,9 +172,7 @@ class SettingsBridge(
         closed = true
         uiPreferences.unregisterOnSharedPreferenceChangeListener(uiLanguageListener)
         modelDownloadGate.cancelPending()
-        pendingKeyboardZip = null
-        pendingKeyboardId = ""
-        pendingKeyboardPin = null
+        invalidatePendingInstall()
         modelDownloadNetwork?.close()
         modelDownloadNetwork = null
         modelStore.release()
@@ -621,6 +623,8 @@ class SettingsBridge(
         runCatching {
             worker.execute {
                 if (closed) return@execute
+                // 接受新导入请求即作废旧待确认包（§3）：读取/安装期间旧确认失效。
+                invalidatePendingInstall()
                 runCatching {
                     val read = runCatching {
                         context.contentResolver.openInputStream(uri)?.let(KeyboardPackageReader::read)
@@ -748,23 +752,16 @@ class SettingsBridge(
      * 装完/取消即弃。URL 路径的 sha256= 钉扎随包重放。 */
     @JavascriptInterface
     fun confirmKeyboardInstall(id: String, token: String) = guarded(token) {
-        val bytes = pendingKeyboardZip
-        if (bytes == null || id.isEmpty() || id != pendingKeyboardId) {
-            pendingKeyboardZip = null
-            pendingKeyboardId = ""
-            pendingKeyboardPin = null
+        val pending = takePendingInstall(id)
+        if (pending == null) {
             pushUpdateError("NO_PENDING_PACKAGE", "")
             return@guarded
         }
-        pendingKeyboardZip = null
-        pendingKeyboardId = ""
-        val pin = pendingKeyboardPin
-        pendingKeyboardPin = null
         worker.execute {
             if (closed) return@execute
             runCatching {
-                val result = KeyboardUpdateCenter.store(context)
-                    .install(bytes, fragmentPin = pin, confirmBadSignature = true)
+                val result = KeyboardUpdateCenter.store(context).install(
+                    pending.bytes, fragmentPin = pending.pin, confirmBadSignature = true)
                 if (result is KeyboardStore.InstallResult.Ok) {
                     KeyboardUpdateCenter.notifyUpdated(context)
                 } else if (result is KeyboardStore.InstallResult.Fail) {
@@ -777,13 +774,15 @@ class SettingsBridge(
         }
     }
 
-    /** 用户取消签名确认：作废待确认包，避免旧包残留到下一次操作。 */
+    /** 用户取消签名确认：作废待确认包，避免旧包残留到下一次操作；
+     * 带着旧 id 的迟到取消不动更新的请求。 */
     @JavascriptInterface
     fun dismissKeyboardInstall(id: String, token: String) = guarded(token) {
-        if (id.isEmpty() || id == pendingKeyboardId) {
-            pendingKeyboardZip = null
-            pendingKeyboardId = ""
-            pendingKeyboardPin = null
+        synchronized(pendingLock) {
+            val pending = pendingKeyboardInstall
+            if (id.isEmpty() || pending == null || id == pending.id) {
+                pendingKeyboardInstall = null
+            }
         }
     }
 
@@ -1058,14 +1057,31 @@ class SettingsBridge(
     }
 
     /** The keyboard install flow (metainfo-resolved or direct zip URL). */
+    // ---- §3 待确认包：整体发布/取走，避免 bridge 线程与 worker 交错 ----
+
+    private fun invalidatePendingInstall() = synchronized(pendingLock) {
+        pendingKeyboardInstall = null
+    }
+
+    /** 确认/取消按 id 整体取走；旧 id 只拒绝自身，不清掉更新的请求。 */
+    private fun takePendingInstall(id: String): PendingKeyboardInstall? = synchronized(pendingLock) {
+        val pending = pendingKeyboardInstall ?: return null
+        if (id.isEmpty() || id != pending.id) return null
+        pendingKeyboardInstall = null
+        pending
+    }
+
+    private fun publishPendingInstall(install: PendingKeyboardInstall) = synchronized(pendingLock) {
+        if (!closed) pendingKeyboardInstall = install
+    }
+
     /** 设置页两条导入入口（本地 SAF 导入 / URL 下载安装）共用的安装：
      * SIGNATURE_BAD 时留包待确认，设置页弹确认后凭同一 id 走
      * confirmKeyboardInstall（设计 docs/design/userdata.md §3）；其余失败
-     * 直接报错。每次新的导入尝试作废上一份待确认包：确认框永远只对应
+     * 直接报错。每次新的安装尝试作废上一份待确认包：确认框永远只对应
      * 最近一次 SIGNATURE_BAD。 */
     private fun installWithConsent(bytes: ByteArray, fragmentPin: String? = null) {
-        pendingKeyboardZip = null
-        pendingKeyboardPin = null
+        invalidatePendingInstall()
         when (val result = KeyboardUpdateCenter.store(context)
             .install(bytes, fragmentPin = fragmentPin)) {
             is KeyboardStore.InstallResult.Ok ->
@@ -1073,15 +1089,12 @@ class SettingsBridge(
             is KeyboardStore.InstallResult.Fail -> {
                 if (result.code == KeyboardUpdateErrorCode.SIGNATURE_BAD) {
                     val id = pendingRequestId(bytes)
-                    pendingKeyboardZip = bytes
-                    pendingKeyboardPin = fragmentPin
-                    pendingKeyboardId = id
+                    publishPendingInstall(PendingKeyboardInstall(bytes, id, fragmentPin))
                     pushUpdateError(
                         result.code.name, result.detail,
                         confirmable = true, confirmId = id,
                     )
                 } else {
-                    pendingKeyboardId = ""
                     pushUpdateError(result.code.name, result.detail)
                 }
             }
@@ -1092,6 +1105,8 @@ class SettingsBridge(
         val store = KeyboardUpdateCenter.store(context)
         val prefs = context.getSharedPreferences("keyboard_update", Context.MODE_PRIVATE)
         store.state.put(KeyboardStore.STATE_UPDATE_URL, resolvedUrl)
+        // 接受新安装请求即作废旧待确认包（§3）：下载期间旧确认失效。
+        invalidatePendingInstall()
         val url = URI(resolvedUrl)
         val fragmentPin = url.rawFragment
             ?.takeIf { it.startsWith("sha256=") }
@@ -1116,6 +1131,9 @@ class SettingsBridge(
     }
 
     private fun failUpdate(code: String, detail: String) {
+        // 任何导入/更新失败都作废待确认包（§3）：确认框只对应最近一次
+        // SIGNATURE_BAD，失败后的旧确认请求一律不再有效。
+        invalidatePendingInstall()
         val prefs = context.getSharedPreferences("keyboard_update", Context.MODE_PRIVATE)
         prefs.edit()
             .putString(KeyboardStore.STATE_LAST_ERROR_CODE, code)

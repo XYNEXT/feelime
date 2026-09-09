@@ -2540,6 +2540,43 @@ test('stores restore is authoritative: keys absent from the backup are removed l
     equal(followUp.feelime_quick_pair, undefined, 'push does not resurrect quick-pair');
 });
 
+test('hello locale change defers its push until after the pull (restore survives)', {since: '3.28.0'}, () => {
+    const world = new KeyboardWorld().build();
+    world.storage.set('feelime_theme', 'dark');
+    world.hello();
+    // 设置页导入空备份（镜像清空 + rev 跳号），hello 同时带语言切换：
+    // 语言分支若在拉取前 push，陈旧主题会写回镜像把恢复值顶掉。
+    world.native.storesPayload = JSON.stringify({ rev: 9, values: {} });
+    world.hello({ uiLocale: 'en' });
+    equal(world.storage.get('feelime_theme'), undefined,
+        'empty mirror clears the stale theme even when the locale also changed');
+    const tail = JSON.parse(world.native.of('pushStores').slice(-1)[0].args[0]);
+    equal(tail.feelime_theme, undefined,
+        'the post-hello push carries no resurrected theme');
+});
+
+test('stores pull ignores malformed mirror payloads', {since: '3.28.0'}, () => {
+    const world = new KeyboardWorld().build();
+    world.storage.set('feelime_theme', 'dark');
+    world.hello();
+    // rev 跳号但 values 是数组：异常镜像不能当成「空备份」触发全量删除。
+    world.native.storesPayload = JSON.stringify({ rev: 12, values: [] });
+    world.hello();
+    equal(world.storage.get('feelime_theme'), 'dark',
+        'array payload is not an empty backup');
+});
+
+test('restoring a backup without the locale key falls back to the default language', {since: '3.28.1'}, () => {
+    const world = new KeyboardWorld().build();
+    world.storage.set('feelime_ui_locale', 'en');
+    world.hello({ uiLocale: 'en' });
+    equal(world.document.documentElement.lang, 'en', 'starts as en');
+    world.native.storesPayload = JSON.stringify({ rev: 5, values: {} });
+    world.hello({ uiLocale: 'en' });
+    equal(world.document.documentElement.lang, 'zh-CN',
+        'runtime locale falls back to zh when the backup lacks the key');
+});
+
 // ------------------------------------------------- candidate compose controls
 
 test('candidate bar shows × and ˅ only while composing; × calls clearComposing and restores', () => {
