@@ -151,10 +151,13 @@ startVoice 无权限分支改为拉起它；Activity 调 requestPermissions(RECO
   "确认导入"形同虚设。
 - 状态面板 `signed=false` + `signature_confirmed=true`，设置页
   「⚠ 当前键盘：签名不符（已手动确认导入）」。
-- 入口两处，确认都**绑定包摘要 id**（sha256 前 16 位）：
-  - 设置页本地导入：SIGNATURE_BAD 时 bridge 暂存 zip 字节 +
-    id（pending/confirm 状态机），pushUpdateError 带 confirmable+confirmId；
-    设置页确认 → `confirmKeyboardInstall(id)`、取消 →
-    `dismissKeyboardInstall(id)`；任何新的导入尝试/失败都作废旧 pending。
+- 入口三处，确认都**绑定包摘要 id**（sha256 前 16 位）：
+  - 设置页本地导入与 URL 下载安装共用 `installWithConsent`：
+    SIGNATURE_BAD 时 bridge 暂存 zip 字节 + id（pending/confirm 状态机），
+    pushUpdateError 带 confirmable+confirmId；设置页确认 →
+    `confirmKeyboardInstall(id)`、取消 → `dismissKeyboardInstall(id)`；
+    任何新的导入尝试/失败都作废旧 pending。URL 带 `#sha256=` 钉扎时
+    钉扎随包暂存、确认重装时重放（验签先于钉扎检查，否则确认通道
+    会绕过钉扎）。
   - inbox 推送（scripts/push-keyboard.sh）：installFromInbox 遇
     SIGNATURE_BAD 弹 AlertDialog，确认后重装。

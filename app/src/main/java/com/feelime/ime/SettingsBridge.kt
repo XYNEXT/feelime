@@ -95,6 +95,9 @@ class SettingsBridge(
      * id 绑定具体那份包：确认/取消必须带上同一个 id 才生效。 */
     @Volatile private var pendingKeyboardZip: ByteArray? = null
     @Volatile private var pendingKeyboardId: String = ""
+    /** 待确认包随带的 sha256= 钉扎（URL 安装路径）；确认重装时一并执行，
+     * 防止「钉扎不匹配的包借确认通道绕过钉扎」。 */
+    @Volatile private var pendingKeyboardPin: String? = null
     private val lifecycleLock = Any()
     @Volatile private var closed = false
     private var modelDownloadNetwork: ModelDownloadNetwork? = null
@@ -167,6 +170,7 @@ class SettingsBridge(
         modelDownloadGate.cancelPending()
         pendingKeyboardZip = null
         pendingKeyboardId = ""
+        pendingKeyboardPin = null
         modelDownloadNetwork?.close()
         modelDownloadNetwork = null
         modelStore.release()
@@ -631,28 +635,7 @@ class SettingsBridge(
                         }
                         else -> {
                             val bytes = (read.getOrThrow() as KeyboardPackageReader.Result.Ok).bytes
-                            // 每次新的导入尝试作废上一份待确认包：确认框永远
-                            // 只对应最近一次 SIGNATURE_BAD。
-                            pendingKeyboardZip = null
-                            val result = KeyboardUpdateCenter.store(context).install(bytes)
-                            if (result is KeyboardStore.InstallResult.Ok) {
-                                KeyboardUpdateCenter.notifyUpdated(context)
-                            } else if (result is KeyboardStore.InstallResult.Fail) {
-                                if (result.code == KeyboardUpdateErrorCode.SIGNATURE_BAD) {
-                                    // 设计 docs/design/userdata.md §3：留包待确认，
-                                    // 设置页弹确认后凭同一 id 走 confirmKeyboardInstall。
-                                    val id = pendingRequestId(bytes)
-                                    pendingKeyboardZip = bytes
-                                    pendingKeyboardId = id
-                                    pushUpdateError(
-                                        result.code.name, result.detail,
-                                        confirmable = true, confirmId = id,
-                                    )
-                                } else {
-                                    pendingKeyboardId = ""
-                                    pushUpdateError(result.code.name, result.detail)
-                                }
-                            }
+                            installWithConsent(bytes)
                         }
                     }
                     pushState()
@@ -760,24 +743,28 @@ class SettingsBridge(
         context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: ""
     }.getOrDefault("")
 
-    /** 签名不符的确认导入（设计 §3）：凭 id 只认 installKeyboardFromUri
-     * 暂存的 SIGNATURE_BAD 包；一次确认装一份，装完/取消即弃。 */
+    /** 签名不符的确认导入（设计 §3）：凭 id 只认最近一次暂存的
+     * SIGNATURE_BAD 包（本地导入 / URL 下载同路）；一次确认装一份，
+     * 装完/取消即弃。URL 路径的 sha256= 钉扎随包重放。 */
     @JavascriptInterface
     fun confirmKeyboardInstall(id: String, token: String) = guarded(token) {
         val bytes = pendingKeyboardZip
         if (bytes == null || id.isEmpty() || id != pendingKeyboardId) {
             pendingKeyboardZip = null
             pendingKeyboardId = ""
+            pendingKeyboardPin = null
             pushUpdateError("NO_PENDING_PACKAGE", "")
             return@guarded
         }
         pendingKeyboardZip = null
         pendingKeyboardId = ""
+        val pin = pendingKeyboardPin
+        pendingKeyboardPin = null
         worker.execute {
             if (closed) return@execute
             runCatching {
                 val result = KeyboardUpdateCenter.store(context)
-                    .install(bytes, confirmBadSignature = true)
+                    .install(bytes, fragmentPin = pin, confirmBadSignature = true)
                 if (result is KeyboardStore.InstallResult.Ok) {
                     KeyboardUpdateCenter.notifyUpdated(context)
                 } else if (result is KeyboardStore.InstallResult.Fail) {
@@ -796,6 +783,7 @@ class SettingsBridge(
         if (id.isEmpty() || id == pendingKeyboardId) {
             pendingKeyboardZip = null
             pendingKeyboardId = ""
+            pendingKeyboardPin = null
         }
     }
 
@@ -1070,6 +1058,36 @@ class SettingsBridge(
     }
 
     /** The keyboard install flow (metainfo-resolved or direct zip URL). */
+    /** 设置页两条导入入口（本地 SAF 导入 / URL 下载安装）共用的安装：
+     * SIGNATURE_BAD 时留包待确认，设置页弹确认后凭同一 id 走
+     * confirmKeyboardInstall（设计 docs/design/userdata.md §3）；其余失败
+     * 直接报错。每次新的导入尝试作废上一份待确认包：确认框永远只对应
+     * 最近一次 SIGNATURE_BAD。 */
+    private fun installWithConsent(bytes: ByteArray, fragmentPin: String? = null) {
+        pendingKeyboardZip = null
+        pendingKeyboardPin = null
+        when (val result = KeyboardUpdateCenter.store(context)
+            .install(bytes, fragmentPin = fragmentPin)) {
+            is KeyboardStore.InstallResult.Ok ->
+                KeyboardUpdateCenter.notifyUpdated(context)
+            is KeyboardStore.InstallResult.Fail -> {
+                if (result.code == KeyboardUpdateErrorCode.SIGNATURE_BAD) {
+                    val id = pendingRequestId(bytes)
+                    pendingKeyboardZip = bytes
+                    pendingKeyboardPin = fragmentPin
+                    pendingKeyboardId = id
+                    pushUpdateError(
+                        result.code.name, result.detail,
+                        confirmable = true, confirmId = id,
+                    )
+                } else {
+                    pendingKeyboardId = ""
+                    pushUpdateError(result.code.name, result.detail)
+                }
+            }
+        }
+    }
+
     private fun installResolved(resolvedUrl: String) {
         val store = KeyboardUpdateCenter.store(context)
         val prefs = context.getSharedPreferences("keyboard_update", Context.MODE_PRIVATE)
@@ -1086,10 +1104,8 @@ class SettingsBridge(
         )
         when (val download = downloader.download(url)) {
             is KeyboardUpdateDownloader.Result.Fail -> failUpdate(download.code.name, download.detail.take(200))
-            is KeyboardUpdateDownloader.Result.Ok -> {
-                store.install(download.bytes, fragmentPin)
-                KeyboardUpdateCenter.notifyUpdated(context)
-            }
+            is KeyboardUpdateDownloader.Result.Ok ->
+                installWithConsent(download.bytes, fragmentPin)
         }
         pushState()
     }
