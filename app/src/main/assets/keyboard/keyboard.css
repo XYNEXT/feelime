@@ -1097,21 +1097,39 @@ body.height-editing #candidateBar { margin-top: 39px; }
     background: var(--pressed);
     color: var(--card-text);
 }
-/* 长按空格浮层：无按钮，只有上滑撤销提示（随进度变明显）。 */
+/* 长按空格浮层：无按钮；「上滑撤销」是卡片下方的常驻 toast 胶囊
+ * （半透明底、不自动消失），上滑时整体 transform scale 放大——
+ * 字体和背景同步变大。位置锚在卡片下沿之下，不随卡片缩放。 */
 #voiceSlideHint {
     display: none;
-    font-size: 12px;
-    font-weight: 550;
-    color: var(--card-sub);
-    min-height: 15px;
+    position: absolute;
+    left: 50%;
+    top: 42%;
+    transform: translateX(-50%) scale(0.85);
+    transform-origin: center;
+    margin-top: 96px;
+    z-index: 1;
+    padding: 8px 16px;
+    border-radius: 999px;
+    background: #000000b3;
+    color: #ffffff;
+    font-size: 13px;
+    font-weight: 600;
+    white-space: nowrap;
 }
 #voiceSlideHint.arm {
+    background: #07180ecc;
     color: var(--accent-text);
-    font-weight: 800;
 }
 #voiceOverlay.hold #voiceActions { display: none; }
 #voiceOverlay.hold #voiceSlideHint { display: block; }
 #voiceOverlay.hold #voiceClose { display: none; }
+#voiceOverlay.hold #voiceCard {
+    /* 提示挪到卡片外，卡片收紧：框住状态+识别内容+松手上屏即可。 */
+    gap: 6px;
+    padding-bottom: 11px;
+}
+#voiceOverlay.hold #voiceHint { min-height: 0; }
 /* The recording dot became a half-height mic icon (20px) - the
  * pulse animates the icon itself (colour pulse via opacity), both themes. */
 #voiceCard .vc-mic {
@@ -1132,6 +1150,7 @@ body.landscape #voiceCard {
 }
 body.landscape #voiceDone { min-height: 34px; font-size: 13px; width: 70%; }
 body.landscape #voiceClose { top: 4px; right: 4px; height: 21px; padding: 0 7px; font-size: 10px; }
+body.landscape #voiceSlideHint { top: 50%; margin-top: 78px; font-size: 12px; }
 #voiceStatus { font-size: 13px; font-weight: 650; color: var(--card-text); min-height: 17px; text-align: center; }
 #partialText {
     font-size: 14px;

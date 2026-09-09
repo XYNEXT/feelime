@@ -1442,7 +1442,8 @@
             button.addEventListener('touchcancel', () => finish(true));
         }
 
-        /** 上滑撤销的进度动画：浮层变小变透明，提示字样变明显。 */
+        /** 上滑撤销的进度动画：浮层变小变透明；下方 toast 胶囊
+         * 「上滑撤销」字体和背景同步放大（transform scale），过阈值 arm。 */
         updateSlideCancel(progress) {
             const card = document.getElementById('voiceCard');
             const hint = document.getElementById('voiceSlideHint');
@@ -1450,7 +1451,8 @@
             card.style.transform =
                 `translate(-50%, -50%) scale(${(1 - 0.22 * progress).toFixed(3)})`;
             card.style.opacity = (1 - 0.55 * progress).toFixed(3);
-            hint.style.opacity = (0.55 + 0.45 * progress).toFixed(2);
+            hint.style.transform =
+                `translateX(-50%) scale(${(0.85 + 0.45 * progress).toFixed(3)})`;
             hint.classList.toggle('arm', progress >= 1);
         }
 
@@ -1462,7 +1464,7 @@
                 card.style.opacity = '';
             }
             if (hint) {
-                hint.style.opacity = '';
+                hint.style.transform = '';
                 hint.classList.remove('arm');
             }
         }

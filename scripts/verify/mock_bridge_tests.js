@@ -389,11 +389,13 @@ test('hold voice slide-up: card shrinks+fades with progress; past threshold rele
     world.clock.advance(400);
     equal(world.native.of('startVoice').length, 1, 'hold started voice');
 
-    // 中途（未过阈值）：浮层随进度变小变透明，提示变明显。
+    // 中途（未过阈值）：浮层随进度变小变透明，提示胶囊同步放大。
     world.move(space, 20, 145); // 55px 上滑 → 0.5
     const card = world.$('voiceCard');
     equal(card.style.opacity, '0.725', 'mid-slide card fade');
     assert(card.style.transform.includes('scale(0.890)'), 'mid-slide card shrink');
+    assert(world.$('voiceSlideHint').style.transform.includes('scale(1.075)'),
+        'slide pill scales up (font+bg together)');
     equal(world.$('voiceSlideHint').className.includes('arm'), false, 'not armed yet');
 
     // 过阈值：提示进入 arm 态。

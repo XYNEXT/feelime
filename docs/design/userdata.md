@@ -120,12 +120,15 @@ startVoice 无权限分支改为拉起它；Activity 调 requestPermissions(RECO
     单击弃稿 + toast「已撤销本次听写」；aria-label 撤销本次听写。
   - 「✓ 说完了」accent 实心大按钮**居中**（44px 高、卡片宽 78%），
     结束并上屏——浮层的主要出口。
-- **长按空格浮层**（「松手上屏」）：无任何按钮——
+- **长按空格浮层**（「松手上屏」）：无任何按钮，卡片收紧（只框住
+  状态+识别内容+松手上屏）——
   - **上滑撤销手势**：按住期间上滑，浮层随进度（110px 满程）变小
-    （scale 1→0.78）变透明（opacity 1→0.45），「上滑撤销」字样
-    0.55→1 不透明度、过阈值进入 arm 态（accent 加粗）；
+    （scale 1→0.78）变透明（opacity 1→0.45）；
+  - 「上滑撤销」提示是**卡片下方的常驻 toast 胶囊**（半透明底、
+    不自动消失），上滑时字体和背景同步放大（translateX(-50%) 
+    scale 0.85→1.30），过阈值进入 arm 态（底色转墨绿、字转 accent）；
   - 过阈值松手=撤销（toast），未过阈值或原地松手=上屏；
-  - 「上滑撤销」提示只在 hold 形态显示（`#voiceOverlay.hold`）。
+  - 提示只在 hold 形态显示（`#voiceOverlay.hold`）。
 - 实现载体：`voiceSession`（'space-hold' / 其他）驱动 overlay 的
   hold 类；preview 页用 setVoiceSession/previewVoiceSlide 钩子模拟。
 ## 3. 键盘 zip 签名不符可确认导入

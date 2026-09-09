@@ -277,8 +277,6 @@
             <div id="partialText" aria-live="polite"></div>
             <div id="levelBar"><i></i></div>
             <div id="voiceHint" data-i18n="点击任意位置结束">点击任意位置结束</div>
-            <!-- 长按空格的浮层专用：上滑撤销的进度提示（随上滑变明显）。 -->
-            <div id="voiceSlideHint" data-i18n="上滑撤销">上滑撤销</div>
             <!-- mic 浮层动作行：说完了居中大按钮（主要出口）。 -->
             <div id="voiceActions">
                 <button id="voiceDone" type="button" aria-label="说完了，结束并上屏" data-i18n-aria-label="说完了，结束并上屏">
@@ -294,6 +292,9 @@
                 </svg><span id="voiceCloseLabel" data-i18n="撤销">撤销</span>
             </button>
         </div>
+        <!-- 长按空格浮层专用：上滑撤销提示，toast 样式挂在卡片下方，
+             不自动消失；上滑时字体和背景同步放大（updateSlideCancel）。 -->
+        <div id="voiceSlideHint" data-i18n="上滑撤销">上滑撤销</div>
     </div>
 
     <div id="keyPopup"><div id="keyPopupInner"></div></div>
