@@ -773,7 +773,30 @@ def launch_settings(with_fixtures=False):
     extra = " --ez com.feelime.ime.extra.SHOW_DEBUG_FIXTURES true" if with_fixtures else ""
     d.shell(f"am start -n {d.PKG}/.SetupActivity{extra}")
     time.sleep(1.5)
-    return wait_settings_ready()
+    ready = wait_settings_ready()
+    if not ready:
+        return ready
+    # am start RESUMES the activity with whatever sub-page an earlier suite
+    # left open (9i parks settings on the input-test page, its editor still
+    # focused and the page scrolled). Reset the router, drop focus (the
+    # browser otherwise scroll-anchores back toward the focused editor) and
+    # WAIT until the scroll truly settles - a moving page makes every
+    # geometry read a stale snapshot and the taps land on other entries.
+    sev("(() => { if (document.activeElement && document.activeElement.blur)"
+        " document.activeElement.blur();"
+        " window.FeelimeSettings.showPage('home');"
+        " window.scrollTo(0, 0); return 'ok'; })()")
+    stable = 0
+    for _ in range(12):
+        if str(sev("window.scrollY")) in ("0", "0.0"):
+            stable += 1
+            if stable >= 2:
+                break
+        else:
+            stable = 0
+            sev("window.scrollTo(0, 0)")
+        time.sleep(0.4)
+    return ready
 
 
 def case_settings_and_json(keyboard):
@@ -785,12 +808,32 @@ def case_settings_and_json(keyboard):
     home = settings_home_text()
     pages = settings_visible_pages()
     debug_nodes = "feelime-test-input" in d.ui_dump()
-    duplicate_management = any(term in home for term in ("剪贴板", "常用语"))
-    no_version_card = "版本信息" not in home and "复制版本信息" not in home
+    # 1.0.4's backup entry subtitle ("设置 · 常用语 · 词库") legitimately
+    # MENTIONS 常用语 - the old home-text substring check false-positived on
+    # it. The actual R4/R5/R7 target is management ENTRIES on the home page,
+    # so match entry labels, not free text.
+    duplicate_management = sev(
+        "[...document.querySelectorAll('[data-page=\"home\"] button[data-target]')]"
+        ".some(b => /^（?(剪贴板|常用语)/.test(b.textContent.trim()))")
+    # The about ENTRY subtitle legitimately says 版本信息; the old card flaw
+    # was a copy button + rows table on the home page - check for those.
+    no_version_card = (sev("!!document.querySelector('[data-page=\"home\"] #aboutRows, "
+                           "[data-page=\"home\"] #btnCopyAbout')") is False)
     record("R4/R5/R7 settings home has no debug/version/duplicate management",
-           pages == ["home"] and not debug_nodes and no_version_card and not duplicate_management,
+           pages == ["home"] and not debug_nodes and no_version_card
+           and duplicate_management is False,
            f"pages={pages} version={no_version_card} debug={debug_nodes} duplicate={duplicate_management}")
 
+    # The height-card steps leave the IME open; an open keyboard squeezes
+    # the settings WebView and swallows the taps aimed at the home entries
+    # (geometry maps below the window bottom, input swipe lands on keys).
+    # Close it first - the JSON editor step reopens it via the focus tap.
+    for _ in range(3):
+        if "mInputShown=true" not in d.shell(
+                "dumpsys input_method | grep -m1 mInputShown"):
+            break
+        d.shell("input keyevent 4")
+        time.sleep(0.8)
     opened_input = settings_tap('button[data-target="input"]')
     input_page = wait_until(settings_visible_pages,
                             lambda value: value == ["input"], timeout=4.0)
