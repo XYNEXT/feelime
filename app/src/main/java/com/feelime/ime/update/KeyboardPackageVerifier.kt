@@ -82,7 +82,11 @@ class KeyboardPackageVerifier(
         class Ok(val pkg: VerifiedKeyboardPackage) : Result()
     }
 
-    fun verify(zip: ByteArray): Result {
+    /** [acceptBadSignature]（docs/design/userdata.md §3）：只放行
+     * SIGNATURE_BAD（长度不对/验签失败）这一类，签名缺失仍拒绝；放行时
+     * signed=false 且签名字节原样保留，由 KeyboardStore 落盘
+     * `.signature-confirmed` 标记。 */
+    fun verify(zip: ByteArray, acceptBadSignature: Boolean = false): Result {
         if (zip.size > maxZipBytes) return rejected(KeyboardUpdateErrorCode.ZIP_TOO_LARGE, "${zip.size} bytes")
         val index = parseCentralDirectory(zip) ?: return rejected(KeyboardUpdateErrorCode.NOT_ZIP, "no central directory")
 
@@ -186,15 +190,20 @@ class KeyboardPackageVerifier(
         val signature = contents[SIGNATURE_ENTRY]
         var signed = false
         if (signature != null) {
-            if (signature.size != 64) {
-                return rejected(KeyboardUpdateErrorCode.SIGNATURE_BAD, "signature ${signature.size} bytes")
-            }
+            // KEY_UNKNOWN 在确认通道之外：陌生密钥一律拒绝，与 SIGNATURE_BAD
+            // （可确认导入）区分开。
             val key = releaseKeys[manifest.keyId]
                 ?: return rejected(KeyboardUpdateErrorCode.KEY_UNKNOWN, manifest.keyId)
-            if (!Ed25519.verify(key, manifestBytes, signature)) {
-                return rejected(KeyboardUpdateErrorCode.SIGNATURE_BAD, manifest.keyId)
+            val signatureValid = signature.size == 64 && Ed25519.verify(key, manifestBytes, signature)
+            if (signatureValid) {
+                signed = true
+            } else if (!acceptBadSignature) {
+                return if (signature.size != 64) {
+                    rejected(KeyboardUpdateErrorCode.SIGNATURE_BAD, "signature ${signature.size} bytes")
+                } else {
+                    rejected(KeyboardUpdateErrorCode.SIGNATURE_BAD, manifest.keyId)
+                }
             }
-            signed = true
         } else {
             if (allowUnsignedDebug) {
                 signed = false

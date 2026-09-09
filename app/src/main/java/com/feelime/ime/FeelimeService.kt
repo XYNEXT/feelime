@@ -141,6 +141,64 @@ class FeelimeService : InputMethodService(), AsrEngine.Listener {
         }
     }
 
+    /** 设置页导入 userdata 备份的收尾（docs/design/userdata.md §1.2）。 */
+    private val userdataReceiver = object : android.content.BroadcastReceiver() {
+        override fun onReceive(context: android.content.Context?, intent: android.content.Intent?) {
+            if (intent?.action != ACTION_USERDATA_RESTORED) return
+            applyRestoredUserdata()
+        }
+    }
+
+    /** 语音权限透明 Activity 的回执（docs/design/userdata.md §2）。 */
+    private val voicePermissionReceiver = object : android.content.BroadcastReceiver() {
+        override fun onReceive(context: android.content.Context?, intent: android.content.Intent?) {
+            when (intent?.action) {
+                VoicePermissionActivity.ACTION_VOICE_PERMISSION_GRANTED -> onMain {
+                    if (state == VoiceState.ERROR) {
+                        state = VoiceState.IDLE
+                        startVoice()
+                    }
+                }
+                VoicePermissionActivity.ACTION_VOICE_PERMISSION_DENIED -> onMain {
+                    if (state == VoiceState.ERROR) {
+                        pushState(
+                            message = t(
+                                this@FeelimeService,
+                                "未授予麦克风权限，可在系统设置或 Feelime 设置中开启",
+                                "Microphone permission denied; enable it in system or Feelime settings",
+                            ),
+                            messageCode = "MIC_PERMISSION_REQUIRED",
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    /** 换目录必须卡在关会话与开新会话之间（二次 rime 初始化死锁，
+     * keyboard.md §8）：recreateEngineSession 的回调就是那个卡点。
+     * 之后让常驻键盘页重拉 custom keys（hello 通道），并把恢复的
+     * localStorage 级设置当场推下去（页面不在也没关系——rev 协议保证
+     * 下次握手仍会拉到恢复值）。 */
+    private fun applyRestoredUserdata() = onMain {
+        val appPrefs = com.feelime.ime.backup.AndroidPrefs(applicationContext)
+        val backup = com.feelime.ime.backup.UserdataBackup(appPrefs, applicationContext.filesDir)
+        if (backup.hasPendingUserdb()) {
+            coordinator.recreateEngineSession { backup.applyPendingUserdb() }
+        }
+        val mirror = appPrefs.all(com.feelime.ime.backup.UserdataBackup.WEBVIEW_PREFS)
+            .get(com.feelime.ime.backup.UserdataBackup.WEBVIEW_KEY) as? String
+        val values = runCatching { mirror?.let(::JSONObject)?.optJSONObject("values") }
+            .getOrNull()
+        if (values != null && values.length() > 0) {
+            evaluate(
+                "window.Feelime && window.Feelime.onStoresRestored && " +
+                    "window.Feelime.onStoresRestored($values)",
+            )
+        }
+        pushBridgeHello()
+    }
+
     /** UI language is shared with SetupActivity. Keep an already visible
      * keyboard in sync when settings changes in another window. */
     private val uiLanguageListener =
@@ -186,6 +244,28 @@ class FeelimeService : InputMethodService(), AsrEngine.Listener {
             android.content.IntentFilter(KeyboardUpdateCenter.ACTION_KEYBOARD_UPDATED),
             androidx.core.content.ContextCompat.RECEIVER_NOT_EXPORTED,
         )
+        registerReceiver(
+            userdataReceiver,
+            android.content.IntentFilter(ACTION_USERDATA_RESTORED),
+            androidx.core.content.ContextCompat.RECEIVER_NOT_EXPORTED,
+        )
+        registerReceiver(
+            voicePermissionReceiver,
+            android.content.IntentFilter(VoicePermissionActivity.ACTION_VOICE_PERMISSION_GRANTED).apply {
+                addAction(VoicePermissionActivity.ACTION_VOICE_PERMISSION_DENIED)
+            },
+            androidx.core.content.ContextCompat.RECEIVER_NOT_EXPORTED,
+        )
+        // 设置页可能在我没运行时导入了带词库的备份（暂存目录已就位）：
+        // 引擎建立前把暂存换入正式目录。走主线程避免与恢复广播并发换目录。
+        onMain {
+            runCatching {
+                com.feelime.ime.backup.UserdataBackup(
+                    com.feelime.ime.backup.AndroidPrefs(applicationContext),
+                    applicationContext.filesDir,
+                ).applyPendingUserdb()
+            }
+        }
         com.feelime.ime.engine.EngineDataStore.ensureAsync(applicationContext) {
             main.post { pushBridgeHello() }
         }
@@ -509,6 +589,8 @@ class FeelimeService : InputMethodService(), AsrEngine.Listener {
         cursorSnapshotSupport.reset()
         clipboardStore.stop()
         unregisterReceiver(updateReceiver)
+        unregisterReceiver(userdataReceiver)
+        unregisterReceiver(voicePermissionReceiver)
         UiLanguage.preferences(this)
             .unregisterOnSharedPreferenceChangeListener(uiLanguageListener)
         // close any live engine session before tearing down.
@@ -544,15 +626,34 @@ class FeelimeService : InputMethodService(), AsrEngine.Listener {
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) !=
             PackageManager.PERMISSION_GRANTED
         ) {
+            // 首用直弹系统权限窗（docs/design/userdata.md §2）：Service 不能
+            // requestPermissions，用透明 Activity 代发；授权后广播回来重试，
+            // 拒绝则落到原有的去设置页手动路径。
             state = VoiceState.ERROR
             pushState(
                 message = t(
                     this,
-                    "请先打开 Feelime 设置并授予麦克风权限",
-                    "Open Feelime settings and grant microphone permission first",
+                    "等待麦克风权限…",
+                    "Waiting for microphone permission…",
                 ),
-                messageCode = "MIC_PERMISSION_REQUIRED",
+                messageCode = "MIC_PERMISSION_REQUESTED",
             )
+            runCatching {
+                startActivity(
+                    Intent(this, VoicePermissionActivity::class.java)
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                )
+            }.onFailure { failure ->
+                android.util.Log.w("FeelimeService", "voice permission activity launch dropped", failure)
+                pushState(
+                    message = t(
+                        this,
+                        "请先打开 Feelime 设置并授予麦克风权限",
+                        "Open Feelime settings and grant microphone permission first",
+                    ),
+                    messageCode = "MIC_PERMISSION_REQUIRED",
+                )
+            }
             return@onMain
         }
         if (currentInputConnection == null) {
@@ -1668,6 +1769,55 @@ class FeelimeService : InputMethodService(), AsrEngine.Listener {
             if (json.isNotEmpty() && json.length <= MAX_JSON_CHARS) {
                 com.feelime.ime.CustomKeysStore(applicationContext).save(json, enabled = true)
             }
+        }
+
+        /** 键盘页把 localStorage 里设置级的键镜像上来（备份数据源，
+         * docs/design/userdata.md §1.4）：握手后与这些键变化时各调一次。
+         * 只收录白名单键，最近符号/emoji 等使用痕迹不进备份。
+         * 返回递增的 rev——键盘页存下它，握手时与原生比对决定
+         * 谁更新（设置页导入会让 rev 跳号，键盘页据此拉取恢复值）。 */
+        @JavascriptInterface
+        fun pushStores(json: String, token: String): String = guardedStore(token) {
+            if (json.isEmpty() || json.length > MAX_JSON_CHARS) return@guardedStore ""
+            runCatching {
+                val parsed = JSONObject(json)
+                val mirror = readStoresMirror()
+                val merged = JSONObject()
+                for (key in com.feelime.ime.backup.UserdataBackup.WEBVIEW_STORE_KEYS) {
+                    val value = parsed.opt(key) ?: continue
+                    merged.put(key, value)
+                }
+                val nextRev = mirror.optInt("rev", 0) + 1
+                val payload = JSONObject().put("rev", nextRev).put("values", merged)
+                com.feelime.ime.backup.AndroidPrefs(applicationContext)
+                    .put(
+                        com.feelime.ime.backup.UserdataBackup.WEBVIEW_PREFS,
+                        com.feelime.ime.backup.UserdataBackup.WEBVIEW_KEY,
+                        payload.toString(),
+                    )
+                nextRev.toString()
+            }.getOrDefault("")
+        }
+
+        /** 键盘页握手时拉取镜像（rev + 白名单值）。rev 大于本地已见的值，
+         * 说明设置页恢复过备份，键盘页先落地恢复值再继续。 */
+        @JavascriptInterface
+        fun getStores(token: String): String = guardedStore(token) {
+            readStoresMirror().toString()
+        }
+
+        private fun readStoresMirror(): JSONObject {
+            val raw = com.feelime.ime.backup.AndroidPrefs(applicationContext)
+                .all(com.feelime.ime.backup.UserdataBackup.WEBVIEW_PREFS)
+                .get(com.feelime.ime.backup.UserdataBackup.WEBVIEW_KEY) as? String
+            return runCatching { JSONObject(raw ?: "{}") }.getOrDefault(JSONObject())
+        }
+
+        /** stores 通道的守卫：与 guarded 相同的 token 校验，但不限流、
+         * 可携带返回值。 */
+        private fun guardedStore(token: String, action: () -> String): String {
+            if (token != pageToken || !pageReady) return ""
+            return action()
         }
 
         /** The panel add/edit inputs report focus here so editor

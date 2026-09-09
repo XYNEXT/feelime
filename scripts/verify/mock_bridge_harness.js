@@ -657,6 +657,17 @@ class MockNative {
     getFavorites(token) {
         this._record('getFavorites', [token]);
     }
+    // userdata 备份的 localStorage 设置级镜像（docs/design/userdata.md §1.4）。
+    pushStores(json, token) {
+        this._record('pushStores', [json, token]);
+        this.storesRev = (this.storesRev || 0) + 1;
+        return String(this.storesRev);
+    }
+    getStores(token) {
+        this._record('getStores', [token]);
+        if (this.storesPayload) return this.storesPayload;
+        return JSON.stringify({ rev: this.storesRev || 0, values: {} });
+    }
     removeFavorite(id, token) {
         this._record('removeFavorite', [id, token]);
     }

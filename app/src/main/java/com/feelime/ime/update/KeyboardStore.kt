@@ -32,6 +32,8 @@ class ActiveKeyboard(
     val contentHash: String?,
     val signed: Boolean,
     val manifest: KeyboardManifest?,
+    /** 签名不符但被用户显式确认导入（docs/design/userdata.md §3）。 */
+    val signatureConfirmed: Boolean = false,
 ) {
     /** What the IME compares to decide whether the WebView must reload. */
     val revision: String get() = contentHash ?: "built-in:$version"
@@ -55,11 +57,13 @@ class KeyboardStore(
     private val builtInDir get() = File(root, "built-in")
     private val pointerFile get() = File(root, "active.json")
 
-    /** §8.3: staging -> fsync -> rename -> pointer swap is the only switch. */
-    fun install(zip: ByteArray, fragmentPin: String? = null): InstallResult {
+    /** §8.3: staging -> fsync -> rename -> pointer swap is the only switch.
+     * [confirmBadSignature]（docs/design/userdata.md §3）：用户显式确认后的
+     * 签名不符导入；落盘带 `.signature-confirmed` 标记，resolve() 靠它放行。 */
+    fun install(zip: ByteArray, fragmentPin: String? = null, confirmBadSignature: Boolean = false): InstallResult {
         state.put(STATE_UPDATE_STATE, "VERIFYING")
         state.put(STATE_LAST_ATTEMPT_AT, clock().toString())
-        val verified = verifier.verify(zip)
+        val verified = verifier.verify(zip, acceptBadSignature = confirmBadSignature)
         val pkg = when (verified) {
             is KeyboardPackageVerifier.Result.Rejected -> {
                 recordFailure(verified.code, verified.detail)
@@ -82,13 +86,21 @@ class KeyboardStore(
         val hash = pkg.manifest.contentHash
         val target = File(versionsDir, hash)
         if (target.isDirectory) {
-            // Immutable version already present: only the pointer may need to move.
+            // Immutable version already present: only the pointer may need to
+            // move. A confirmed install must leave the marker behind even
+            // here - the pre-existing directory predates the confirmation.
+            if (confirmBadSignature && !pkg.signed &&
+                !File(target, SIGNATURE_CONFIRMED_MARKER).exists()
+            ) {
+                writeSynced(File(target, SIGNATURE_CONFIRMED_MARKER), ByteArray(0))
+            }
             faults.at("before-pointer")
             val swapped = swapPointer(hash)
             faults.at("after-pointer")
             val signed = File(target, KeyboardPackageVerifier.SIGNATURE_ENTRY).isFile &&
                 !File(target, UNSIGNED_MARKER).exists()
-            recordSuccess(pkg.manifest, signed = signed, alreadyCurrent = !swapped)
+            recordSuccess(pkg.manifest, signed = signed, alreadyCurrent = !swapped,
+                confirmed = confirmBadSignature && !pkg.signed)
             return InstallResult.Ok(pkg.manifest, alreadyCurrent = !swapped)
         }
 
@@ -103,7 +115,19 @@ class KeyboardStore(
                 faults.at("staging-write")
             }
             writeSynced(File(staging, KeyboardPackageVerifier.MANIFEST_ENTRY), pkg.manifest.rawBytes)
-            if (pkg.signed) {
+            if (confirmBadSignature && !pkg.signed) {
+                // 确认导入：签名字节照存（留痕），加确认标记让 resolve() 放行。
+                val signature = extractSignature(zip)
+                if (signature == null) {
+                    staging.deleteRecursively()
+                    return failed(
+                            KeyboardUpdateErrorCode.SIGNATURE_MISSING,
+                            KeyboardPackageVerifier.SIGNATURE_ENTRY,
+                        )
+                }
+                writeSynced(File(staging, KeyboardPackageVerifier.SIGNATURE_ENTRY), signature)
+                writeSynced(File(staging, SIGNATURE_CONFIRMED_MARKER), ByteArray(0))
+            } else if (pkg.signed) {
                 val signature = extractSignature(zip) ?: ByteArray(0)
                 writeSynced(File(staging, KeyboardPackageVerifier.SIGNATURE_ENTRY), signature)
             } else {
@@ -129,7 +153,8 @@ class KeyboardStore(
         if (!swapped) {
             return failed(KeyboardUpdateErrorCode.IO_ERROR, "pointer")
         }
-        recordSuccess(pkg.manifest, signed = pkg.signed, alreadyCurrent = false)
+        recordSuccess(pkg.manifest, signed = pkg.signed, alreadyCurrent = false,
+            confirmed = confirmBadSignature && !pkg.signed)
         return InstallResult.Ok(pkg.manifest, alreadyCurrent = false)
     }
 
@@ -221,20 +246,19 @@ class KeyboardStore(
         }
         // The directory name must bind to the manifest content hash, and the
         // stored signature must still verify against a release key (§8.3).
-        // Unsigned (debug-only) versions carry a marker instead of a signature.
+        // Unsigned (debug-only) versions carry a marker instead of a signature;
+        // signature-confirmed versions (userdata.md §3) carry a REAL signature
+        // that fails verification PLUS the confirmation marker - only that
+        // combination is accepted without a valid signature.
         if (manifest.contentHash != hash) return null
         val signatureFile = File(dir, KeyboardPackageVerifier.SIGNATURE_ENTRY)
         val unsignedMarker = File(dir, UNSIGNED_MARKER).exists()
-        val signedVersion = when {
-            unsignedMarker -> false
-            signatureFile.isFile -> true
-            else -> return null
-        }
-        if (signedVersion) {
-            if (!verifier.verifyStoredSignature(manifestBytes, manifest.keyId, signatureFile.readBytes())) {
-                return null
-            }
-        } else if (!allowUnsignedVersions) {
+        val confirmedMarker = File(dir, SIGNATURE_CONFIRMED_MARKER).exists()
+        val signedVersion = signatureFile.isFile &&
+            verifier.verifyStoredSignature(manifestBytes, manifest.keyId, signatureFile.readBytes())
+        // 可接受的三个路径：签名有效；或用户确认过的签名不符（§3）；
+        // 或调试构建的免签版本（allowUnsignedVersions）。
+        if (!signedVersion && !confirmedMarker && !allowUnsignedVersions) {
             return null
         }
         for (name in KeyboardPackageVerifier.PAYLOAD_ENTRIES) {
@@ -256,6 +280,7 @@ class KeyboardStore(
             contentHash = manifest.contentHash,
             signed = signedVersion,
             manifest = manifest,
+            signatureConfirmed = !signedVersion && confirmedMarker,
         )
     }
 
@@ -394,7 +419,12 @@ class KeyboardStore(
         state.put(STATE_LAST_ERROR_MESSAGE, detail.take(200))
     }
 
-    private fun recordSuccess(manifest: KeyboardManifest, signed: Boolean, alreadyCurrent: Boolean) {
+    private fun recordSuccess(
+        manifest: KeyboardManifest,
+        signed: Boolean,
+        alreadyCurrent: Boolean,
+        confirmed: Boolean = false,
+    ) {
         state.put(STATE_UPDATE_STATE, if (alreadyCurrent) "READY" else "ACTIVE")
         state.put(STATE_SOURCE_TYPE, KeyboardSource.ACTIVE_VERSION.name)
         state.put(STATE_KEYBOARD_VERSION, manifest.keyboardVersion)
@@ -404,10 +434,15 @@ class KeyboardStore(
         state.put(STATE_CONTENT_HASH, manifest.contentHash)
         state.put(STATE_LAST_SUCCESS_AT, clock().toString())
         state.put(STATE_SIGNED, signed.toString())
+        state.put(STATE_SIGNATURE_CONFIRMED, confirmed.toString())
     }
 
     companion object {
         const val UNSIGNED_MARKER = ".unsigned"
+
+        /** 用户确认签名不符后导入的版本标记（docs/design/userdata.md §3）。
+         * 与 `.unsigned`（调试免签）不同：目录里是真签名、只是验不过。 */
+        const val SIGNATURE_CONFIRMED_MARKER = ".signature-confirmed"
         const val STATE_UPDATE_URL = "update_url"
 
         /** The saved metainfo.json source - one stable address
@@ -425,6 +460,7 @@ class KeyboardStore(
         const val STATE_LAST_ERROR_CODE = "last_error_code"
         const val STATE_LAST_ERROR_MESSAGE = "last_error_message"
         const val STATE_SIGNED = "signed"
+        const val STATE_SIGNATURE_CONFIRMED = "signature_confirmed"
     }
 }
 

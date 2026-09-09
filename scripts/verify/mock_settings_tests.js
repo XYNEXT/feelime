@@ -63,6 +63,10 @@ class MockSettingsNative {
     downloadModel(...a) { this._rec('downloadModel', a); }
     openModelDocument(...a) { this._rec('openModelDocument', a); }
     openKeyboardDocument(...a) { this._rec('openKeyboardDocument', a); }
+    exportUserdata(...a) { this._rec('exportUserdata', a); }
+    openBackupDocument(...a) { this._rec('openBackupDocument', a); }
+    confirmKeyboardInstall(...a) { this._rec('confirmKeyboardInstall', a); }
+    dismissKeyboardInstall(...a) { this._rec('dismissKeyboardInstall', a); }
     confirmModelDownload(...a) { this._rec('confirmModelDownload', a); }
     cancelModelDownload(...a) { this._rec('cancelModelDownload', a); }
     deleteModel(...a) { this._rec('deleteModel', a); }
@@ -370,6 +374,51 @@ test('metered-network confirmation: cancel and approve use one-shot confirm brid
         'hidden consent cannot reuse an old approval');
 });
 
+test('backup: export calls straight through; import gates on overwrite consent; status notes render', () => {
+    const world = new SettingsWorld();
+    world.push({ ...BASE_STATE });
+    world.$('btnExportBackup').click();
+    equal(world.lastCall('exportUserdata').args, [world.token], 'export opens the save picker');
+
+    world.$('btnImportBackup').click();
+    equal(world.$('backupConsent').hidden, false, 'import shows the overwrite consent first');
+    equal(world.native.of('openBackupDocument').length, 0, 'no picker before consent');
+    world.$('backupConsentCancel').click();
+    equal(world.$('backupConsent').hidden, true, 'cancel backs out');
+    world.$('btnImportBackup').click();
+    world.$('backupConsentConfirm').click();
+    equal(world.lastCall('openBackupDocument').args, [world.token], 'consent opens the file picker');
+
+    world.FeelimeSettings().onEvent({ type: 'backupStatus', direction: 'import', ok: true });
+    assert(world.$('backupNote').textContent.includes('导入完成'), 'success note');
+    world.FeelimeSettings().onEvent({ type: 'backupStatus', direction: 'import', ok: false, code: 'KIND' });
+    assert(world.$('backupNote').textContent.includes('不是 Feelime 备份'), 'wrong-kind note');
+});
+
+test('keyboard signature mismatch: confirmable errors open the consent; confirm reinstalls once', () => {
+    const world = new SettingsWorld();
+    world.push({ ...BASE_STATE });
+    world.FeelimeSettings().onEvent({
+        type: 'updateError', code: 'SIGNATURE_BAD', message: 'x', confirmable: true, confirmId: 'abc123',
+    });
+    equal(world.$('kbSigConsent').hidden, false, 'signature consent shown');
+    world.$('kbSigConsentCancel').click();
+    equal(world.$('kbSigConsent').hidden, true, 'cancel hides it');
+    equal(world.lastCall('dismissKeyboardInstall').args, ['abc123', world.token],
+        'cancel invalidates the stashed package');
+    world.FeelimeSettings().onEvent({
+        type: 'updateError', code: 'IO_ERROR', message: 'x', confirmable: false,
+    });
+    equal(world.$('kbSigConsent').hidden, true, 'plain errors never open the consent');
+    world.FeelimeSettings().onEvent({
+        type: 'updateError', code: 'SIGNATURE_BAD', message: 'x', confirmable: true, confirmId: 'def456',
+    });
+    world.$('kbSigConsentConfirm').click();
+    equal(world.lastCall('confirmKeyboardInstall').args, ['def456', world.token],
+        'confirm carries the package-bound id');
+    equal(world.native.of('confirmKeyboardInstall').length, 1, 'one confirmation per consent');
+});
+
 test('model errors translate stable codes without altering model names', () => {
     const world = new SettingsWorld();
     world.push({ ...BASE_STATE, uiLanguage: 'en', uiLocale: 'en' });
@@ -472,12 +521,12 @@ test('navigation: home starts as the only visible page; showPage swaps and repor
     const hiddenMap = () => Object.fromEntries(
         [...world.doc.querySelectorAll('[data-page]')].map(p => [p.dataset.page, p.hidden]));
     equal(hiddenMap(), {
-        home: false, input: true, voice: true, update: true, about: true, test: true,
+        home: false, input: true, voice: true, update: true, backup: true, about: true, test: true,
     }, 'initial: home visible, sub-pages hidden');
 
     world.FeelimeSettings().showPage('voice');
     equal(hiddenMap(), {
-        home: true, input: true, voice: false, update: true, about: true, test: true,
+        home: true, input: true, voice: false, update: true, backup: true, about: true, test: true,
     }, 'voice page visible, everything else hidden');
     equal(world.lastCall('reportPage').args, [true, world.token], 'reportPage(true) on sub-page');
 

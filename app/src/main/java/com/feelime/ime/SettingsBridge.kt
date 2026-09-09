@@ -2,6 +2,7 @@ package com.feelime.ime
 
 import android.content.ClipData
 import android.content.ClipDescription
+import android.content.Intent
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.content.ClipboardManager
@@ -14,12 +15,16 @@ import android.os.Looper
 import android.os.PersistableBundle
 import android.util.Log
 import android.webkit.JavascriptInterface
+import com.feelime.ime.backup.AndroidPrefs
+import com.feelime.ime.backup.UserdataBackup
 import com.feelime.ime.update.GithubReleaseSource
+import com.feelime.ime.update.KeyboardPackageVerifier
 import com.feelime.ime.update.KeyboardSource
 import com.feelime.ime.update.KeyboardPackageReader
 import com.feelime.ime.update.KeyboardStore
 import com.feelime.ime.update.KeyboardUpdateCenter
 import com.feelime.ime.update.KeyboardUpdateDownloader
+import com.feelime.ime.update.KeyboardUpdateErrorCode
 import com.feelime.ime.update.HttpUrlConnectionFactory
 import com.feelime.ime.update.UpdateMetainfo
 import org.json.JSONArray
@@ -27,6 +32,10 @@ import org.json.JSONObject
 import java.io.File
 import java.net.URI
 import java.util.concurrent.Executors
+
+/** userdata 恢复广播：设置页发，IME 收（userdb 暂存已就位，
+ * 换目录+重建引擎会话，docs/design/userdata.md §1.2）。 */
+const val ACTION_USERDATA_RESTORED = "com.feelime.ime.USERDATA_RESTORED"
 
 /** The full-settings WebView bridge (design §6.2).
  *
@@ -59,6 +68,10 @@ class SettingsBridge(
         fun openModelDocument(modelId: String)
         /** Launch ACTION_OPEN_DOCUMENT for a local keyboard ZIP package. */
         fun openKeyboardDocument() = Unit
+        /** Launch ACTION_CREATE_DOCUMENT for the userdata backup (userdata.md §1). */
+        fun createBackupDocument() = Unit
+        /** Launch ACTION_OPEN_DOCUMENT for a userdata backup file. */
+        fun openBackupDocument() = Unit
         fun addImeShortcut() = Unit
         fun addImeTile() = Unit
         fun onSettingsChanged()
@@ -76,6 +89,12 @@ class SettingsBridge(
     private val worker = Executors.newSingleThreadExecutor { task -> Thread(task, "feelime-settings") }
     private val uiPreferences = UiLanguage.preferences(context)
     private val modelDownloadGate = ModelDownloadConsentGate()
+
+    /** 签名不符但用户可能要装的本地包（§3 pending/confirm 状态机，
+     * 仿 modelDownloadGate；只活在本进程内存，页面刷新即弃）。
+     * id 绑定具体那份包：确认/取消必须带上同一个 id 才生效。 */
+    @Volatile private var pendingKeyboardZip: ByteArray? = null
+    @Volatile private var pendingKeyboardId: String = ""
     private val lifecycleLock = Any()
     @Volatile private var closed = false
     private var modelDownloadNetwork: ModelDownloadNetwork? = null
@@ -146,6 +165,8 @@ class SettingsBridge(
         closed = true
         uiPreferences.unregisterOnSharedPreferenceChangeListener(uiLanguageListener)
         modelDownloadGate.cancelPending()
+        pendingKeyboardZip = null
+        pendingKeyboardId = ""
         modelDownloadNetwork?.close()
         modelDownloadNetwork = null
         modelStore.release()
@@ -261,7 +282,8 @@ class SettingsBridge(
                 .put("activeSource", if (active.source == KeyboardSource.BUILT_IN) "built_in" else "hot")
                 .put("activeVersion", active.version)
                 .put("activeContentHash", active.contentHash ?: "")
-                .put("activeSigned", active.signed))
+                .put("activeSigned", active.signed)
+                .put("activeSignatureConfirmed", active.signatureConfirmed))
             .put("notices", notices())
         return JSONObject().put("type", "state").put("state", state).toString()
     }
@@ -609,11 +631,27 @@ class SettingsBridge(
                         }
                         else -> {
                             val bytes = (read.getOrThrow() as KeyboardPackageReader.Result.Ok).bytes
+                            // 每次新的导入尝试作废上一份待确认包：确认框永远
+                            // 只对应最近一次 SIGNATURE_BAD。
+                            pendingKeyboardZip = null
                             val result = KeyboardUpdateCenter.store(context).install(bytes)
                             if (result is KeyboardStore.InstallResult.Ok) {
                                 KeyboardUpdateCenter.notifyUpdated(context)
                             } else if (result is KeyboardStore.InstallResult.Fail) {
-                                pushUpdateError(result.code.name, result.detail)
+                                if (result.code == KeyboardUpdateErrorCode.SIGNATURE_BAD) {
+                                    // 设计 docs/design/userdata.md §3：留包待确认，
+                                    // 设置页弹确认后凭同一 id 走 confirmKeyboardInstall。
+                                    val id = pendingRequestId(bytes)
+                                    pendingKeyboardZip = bytes
+                                    pendingKeyboardId = id
+                                    pushUpdateError(
+                                        result.code.name, result.detail,
+                                        confirmable = true, confirmId = id,
+                                    )
+                                } else {
+                                    pendingKeyboardId = ""
+                                    pushUpdateError(result.code.name, result.detail)
+                                }
                             }
                         }
                     }
@@ -629,6 +667,141 @@ class SettingsBridge(
             failUpdate("IO_ERROR", failure.message ?: "local package")
         }
     }
+
+    // ---- userdata backup (docs/design/userdata.md §1) ---------------------
+
+    @JavascriptInterface
+    fun exportUserdata(token: String) = guarded(token) { host.createBackupDocument() }
+
+    @JavascriptInterface
+    fun openBackupDocument(token: String) = guarded(token) { host.openBackupDocument() }
+
+    /** 设置页的 CreateDocument 回调：组包后写入选定位置。 */
+    fun writeUserdataBackupToUri(uri: Uri) {
+        if (closed) return
+        runCatching {
+            worker.execute {
+                if (closed) return@execute
+                runCatching {
+                    val json = UserdataBackup(AndroidPrefs(context), context.filesDir, appVersion())
+                        .export()
+                    context.contentResolver.openOutputStream(uri, "wt")?.use { output ->
+                        output.write(json.toString().toByteArray(Charsets.UTF_8))
+                        output.flush()
+                    } ?: throw java.io.IOException("selected document has no writable stream")
+                    pushEvent(JSONObject().put("type", "backupStatus").put("direction", "export").put("ok", true))
+                }.onFailure { failure ->
+                    Log.w(TAG, "userdata export failed", failure)
+                    pushEvent(
+                        JSONObject().put("type", "backupStatus").put("direction", "export")
+                            .put("ok", false).put("code", "IO_ERROR"),
+                    )
+                }
+            }
+        }
+    }
+
+    /** 设置页的 OpenDocument 回调：校验 kind/version 后恢复。settings 立即
+     * 生效；userdb 暂存并广播给 IME，由它在关会话→换目录→开新会话的
+     * 中间点换入（TextInputCoordinator.recreateEngineSession）。 */
+    fun restoreUserdataBackupFromUri(uri: Uri) {
+        if (closed) return
+        runCatching {
+            worker.execute {
+                if (closed) return@execute
+                runCatching {
+                    val bytes = context.contentResolver.openInputStream(uri)?.use { input ->
+                        // 有界读取：超出上限即拒绝，不把整个文件吃进内存。
+                        val buffer = java.io.ByteArrayOutputStream()
+                        val chunk = ByteArray(64 * 1024)
+                        var total = 0L
+                        while (true) {
+                            val read = input.read(chunk)
+                            if (read < 0) break
+                            total += read
+                            if (total > MAX_BACKUP_BYTES) {
+                                throw java.io.IOException("backup too large")
+                            }
+                            buffer.write(chunk, 0, read)
+                        }
+                        buffer.toByteArray()
+                    } ?: throw java.io.IOException("selected document has no readable stream")
+                    val result = UserdataBackup(AndroidPrefs(context), context.filesDir).restore(bytes)
+                    if (result is UserdataBackup.RestoreResult.Fail) {
+                        pushEvent(
+                            JSONObject().put("type", "backupStatus").put("direction", "import")
+                                .put("ok", false).put("code", result.code),
+                        )
+                    } else {
+                        com.feelime.ime.panel.PanelStoreSignals.fireFavoritesChanged()
+                        // 不带词库的备份也要广播：键盘页要刷新运行时设置；
+                        // 页面不在时 rev 协议保证下次握手仍会拉到恢复值。
+                        context.sendBroadcast(
+                            Intent(ACTION_USERDATA_RESTORED).setPackage(context.packageName),
+                        )
+                        pushEvent(
+                            JSONObject().put("type", "backupStatus").put("direction", "import").put("ok", true),
+                        )
+                    }
+                    pushState()
+                }.onFailure { failure ->
+                    Log.w(TAG, "userdata import failed", failure)
+                    pushEvent(
+                        JSONObject().put("type", "backupStatus").put("direction", "import")
+                            .put("ok", false).put("code", "IO_ERROR"),
+                    )
+                }
+            }
+        }
+    }
+
+    /** 从哪版 App 导出（信息性，恢复不依赖）。 */
+    private fun appVersion(): String = runCatching {
+        context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: ""
+    }.getOrDefault("")
+
+    /** 签名不符的确认导入（设计 §3）：凭 id 只认 installKeyboardFromUri
+     * 暂存的 SIGNATURE_BAD 包；一次确认装一份，装完/取消即弃。 */
+    @JavascriptInterface
+    fun confirmKeyboardInstall(id: String, token: String) = guarded(token) {
+        val bytes = pendingKeyboardZip
+        if (bytes == null || id.isEmpty() || id != pendingKeyboardId) {
+            pendingKeyboardZip = null
+            pendingKeyboardId = ""
+            pushUpdateError("NO_PENDING_PACKAGE", "")
+            return@guarded
+        }
+        pendingKeyboardZip = null
+        pendingKeyboardId = ""
+        worker.execute {
+            if (closed) return@execute
+            runCatching {
+                val result = KeyboardUpdateCenter.store(context)
+                    .install(bytes, confirmBadSignature = true)
+                if (result is KeyboardStore.InstallResult.Ok) {
+                    KeyboardUpdateCenter.notifyUpdated(context)
+                } else if (result is KeyboardStore.InstallResult.Fail) {
+                    pushUpdateError(result.code.name, result.detail)
+                }
+                pushState()
+            }.onFailure { failure ->
+                failUpdate("INTERNAL_ERROR", failure.javaClass.simpleName)
+            }
+        }
+    }
+
+    /** 用户取消签名确认：作废待确认包，避免旧包残留到下一次操作。 */
+    @JavascriptInterface
+    fun dismissKeyboardInstall(id: String, token: String) = guarded(token) {
+        if (id.isEmpty() || id == pendingKeyboardId) {
+            pendingKeyboardZip = null
+            pendingKeyboardId = ""
+        }
+    }
+
+    /** 短摘要作为确认请求 id（绑定「这一份包」，而非「随便哪份」）。 */
+    private fun pendingRequestId(bytes: ByteArray): String =
+        KeyboardPackageVerifier.sha256Hex(bytes).take(16)
 
     @JavascriptInterface
     fun confirmModelDownload(id: String, approved: Boolean, token: String) = guarded(token) {
@@ -947,12 +1120,19 @@ class SettingsBridge(
         pushState()
     }
 
-    private fun pushUpdateError(code: String, message: String) {
+    private fun pushUpdateError(
+        code: String,
+        message: String,
+        confirmable: Boolean = false,
+        confirmId: String = "",
+    ) {
         pushEvent(
             JSONObject()
                 .put("type", "updateError")
                 .put("code", code)
-                .put("message", message),
+                .put("message", message)
+                .put("confirmable", confirmable)
+                .put("confirmId", confirmId),
         )
     }
 
@@ -972,6 +1152,9 @@ class SettingsBridge(
         const val DEFAULT_GITHUB_SOURCE = "https://github.com/feelime/feelime"
         const val STATE_AUTO_CHECK_ENABLED = "update_auto_check_enabled"
         const val STATE_AUTO_CHECK_LAST_ATTEMPT_AT = "update_auto_check_last_attempt_at"
+
+        /** 备份文件大小上限：userdb base64 后通常几百 KB，给到 64MB 防呆。 */
+        const val MAX_BACKUP_BYTES = 64 * 1024 * 1024
     }
 }
 

@@ -228,6 +228,56 @@ class TextInputCoordinator(
     }
 
     /**
+     * userdata 导入后重建引擎会话（docs/design/userdata.md §1.2）：
+     * rime/mozc 的用户目录在引擎初始化时打开，二次初始化会死锁
+     * （keyboard.md §8），所以换目录必须卡在关会话与开新会话之间——
+     * [swapUserdb] 就是那个卡点。
+     *
+     * 与 selectMode 的同步链不同，这里必须「等旧引擎 Close 真正执行完」
+     * 再换目录：Close 是排进引擎线程的异步命令，不等就会和旧引擎的
+     * 收尾写入赛跑。所以链路是 主线程 accept → dispatch Close →
+     * （引擎线程上）Close 完成 → 换目录 → 回主线程开新会话。
+     * 须在主线程调用。
+     */
+    fun recreateEngineSession(swapUserdb: () -> Unit) {
+        acceptCurrentComposition()
+        val liveEngine = engine
+        val liveStamp = stamp
+        closed = true
+
+        fun beginSession() = mainPoster {
+            abandonPending()
+            newSession()
+            startEngine(mode)
+        }
+
+        fun closePendingThenSwap() {
+            val warmupEngine = pendingEngine
+            val warmupStamp = pendingStamp
+            pendingEngine = null
+            pendingStamp = null
+            pendingLastRevision = 0
+            if (warmupEngine == null || warmupStamp == null) {
+                runCatching { swapUserdb() }
+                beginSession()
+                return
+            }
+            background?.execute {
+                warmupEngine.dispatch(EngineRequest(warmupStamp, EngineCommand.Close)) { }
+                runCatching { swapUserdb() }
+                beginSession()
+            } ?: run {
+                runCatching { swapUserdb() }
+                beginSession()
+            }
+        }
+
+        liveEngine.dispatch(EngineRequest(liveStamp, EngineCommand.Close)) { _ ->
+            background?.execute { closePendingThenSwap() } ?: closePendingThenSwap()
+        }
+    }
+
+    /**
      * Accept and clear the composition owned by this coordinator.  Chinese
      * engines expose raw pinyin only to the keyboard UI, so it is committed
      * explicitly.  Alphabetic modes expose an editor composing span, so

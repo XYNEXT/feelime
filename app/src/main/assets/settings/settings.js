@@ -47,6 +47,8 @@ const I18N = {
         "entry.voice.subtitle": "语音模型 · 识别设置",
         "entry.update.title": "键盘热更新",
         "entry.update.subtitle": "键盘前端文件更新",
+        "entry.backup.title": "备份与恢复",
+        "entry.backup.subtitle": "设置 · 常用语 · 词库",
         "entry.about.title": "关于",
         "entry.about.subtitle": "版本信息 · 组件说明",
         "entry.test.title": "输入测试",
@@ -108,6 +110,33 @@ const I18N = {
         "action.restore": "恢复内置",
         "update.localHint": "从本地 ZIP 导入不需要网络，仍会校验签名和兼容性。",
         "update.unsigned": "⚠ 未签名键盘拥有 IME 权限（仅限调试构建）",
+        "update.sigConfirmed": "⚠ 当前键盘：签名不符（已手动确认导入）",
+        "page.backup": "备份与恢复",
+        "backup.title": "备份与恢复",
+        "backup.badge": "备份",
+        "backup.note": "把设置、常用语、自定义键位与输入词库打包成一个 JSON 文件，方便换机或手工编辑。",
+        "backup.export": "导出数据",
+        "backup.import": "导入数据",
+        "backup.consent.title": "确认覆盖",
+        "backup.consent.badge": "覆盖提示",
+        "backup.consent.message": "导入会覆盖当前的设置、常用语、自定义键位与词库，且无法撤销。确定继续吗？",
+        "backup.consent.cancel": "取消",
+        "backup.consent.confirm": "选择文件导入",
+        "backup.done.export": "已导出到所选位置。",
+        "backup.done.import": "导入完成，正在生效。",
+        "backup.failed.export": "导出失败",
+        "backup.failed.import": "导入失败",
+        "backup.error.FORMAT": "文件不是有效的 JSON。",
+        "backup.error.KIND": "这不是 Feelime 备份文件。",
+        "backup.error.VERSION": "备份文件版本较新，请先升级 Feelime。",
+        "backup.error.IO_ERROR": "读取或写入文件失败。",
+        "backup.error.PATH": "备份里包含不安全的路径，已拒绝。",
+        "backup.error.BASE64": "备份中的词库数据损坏。",
+        "kbSig.title": "键盘包签名不符",
+        "kbSig.badge": "安全提示",
+        "kbSig.message": "这个键盘包的签名与官方发布密钥不一致（可能是自改包或第三方包）。仍要导入将以“已确认签名不符”的状态运行，重启后仍生效。",
+        "kbSig.cancel": "取消",
+        "kbSig.confirm": "仍要导入",
         "about.versionTitle": "版本信息",
         "about.badge": "信息",
         "action.copyVersion": "复制版本信息",
@@ -258,6 +287,8 @@ const I18N = {
         "nav.back": "Back to home",
         "entry.input.title": "Keyboard & input",
         "entry.input.subtitle": "Double pinyin · Custom keyboard",
+        "entry.backup.title": "Backup & restore",
+        "entry.backup.subtitle": "Settings · Phrases · Lexicons",
         "entry.voice.title": "Voice recognition",
         "entry.voice.subtitle": "Voice models · Recognition options",
         "entry.update.title": "Keyboard updates",
@@ -323,6 +354,33 @@ const I18N = {
         "action.restore": "Restore built-in",
         "update.localHint": "Importing a local ZIP needs no network; its signature and compatibility are still verified.",
         "update.unsigned": "⚠ An unsigned keyboard has IME access (debug builds only)",
+        "update.sigConfirmed": "⚠ Active keyboard: signature unverified (manually confirmed)",
+        "page.backup": "Backup & restore",
+        "backup.title": "Backup & restore",
+        "backup.badge": "Backup",
+        "backup.note": "Pack settings, saved phrases, custom keys and input lexicons into one editable JSON file for device migration.",
+        "backup.export": "Export data",
+        "backup.import": "Import data",
+        "backup.consent.title": "Confirm overwrite",
+        "backup.consent.badge": "Overwrite",
+        "backup.consent.message": "Importing overwrites your current settings, saved phrases, custom keys and lexicons. This cannot be undone. Continue?",
+        "backup.consent.cancel": "Cancel",
+        "backup.consent.confirm": "Choose a file",
+        "backup.done.export": "Exported to the chosen location.",
+        "backup.done.import": "Import complete; applying changes.",
+        "backup.failed.export": "Export failed",
+        "backup.failed.import": "Import failed",
+        "backup.error.FORMAT": "The file is not valid JSON.",
+        "backup.error.KIND": "This is not a Feelime backup file.",
+        "backup.error.VERSION": "The backup is from a newer version; update Feelime first.",
+        "backup.error.IO_ERROR": "Could not read or write the file.",
+        "backup.error.PATH": "The backup contains unsafe paths and was rejected.",
+        "backup.error.BASE64": "The lexicon data in the backup is corrupted.",
+        "kbSig.title": "Keyboard package signature mismatch",
+        "kbSig.badge": "Security",
+        "kbSig.message": "This keyboard package was not signed with the official release key (it may be self-modified or third-party). After importing it runs marked as \"signature unverified\" and survives restart.",
+        "kbSig.cancel": "Cancel",
+        "kbSig.confirm": "Import anyway",
         "about.versionTitle": "Version information",
         "about.badge": "Info",
         "action.copyVersion": "Copy version info",
@@ -449,7 +507,7 @@ const I18N = {
     },
 };
 
-const PAGES = ["home", "input", "voice", "update", "about", "test"];
+const PAGES = ["home", "input", "voice", "update", "backup", "about", "test"];
 const ERROR_KEYS = new Set(Object.keys(I18N.zh).filter(key => key.startsWith("error.")));
 const progressPercent = {};
 
@@ -622,7 +680,18 @@ window.FeelimeSettings = {
                 }));
                 break;
             case "updateError":
+                if (event.confirmable && event.confirmId) {
+                    pendingKbSigId = String(event.confirmId);
+                    $("kbSigConsent").hidden = false;
+                } else if (pendingKbSigId) {
+                    // 新的失败事件让旧的确认请求作废。
+                    pendingKbSigId = "";
+                    $("kbSigConsent").hidden = true;
+                }
                 setNote("updateStatus", eventText(event, "error.INTERNAL_ERROR"));
+                break;
+            case "backupStatus":
+                renderBackupStatus(event);
                 break;
             default:
                 break;
@@ -962,7 +1031,11 @@ function renderUpdate(state) {
     }
     if (update.lastSuccessAt) lines.push(t("update.lastSuccess", { value: update.lastSuccessAt }));
     $("updateStatus").textContent = lines.join("\n");
-    $("updateDanger").hidden = !(update.activeSource === "hot" && !update.activeSigned);
+    // 三种状态：正常签名（隐藏）/ 确认过的签名不符 / （调试构建）未签名。
+    const confirmedBad = update.activeSource === "hot" &&
+        !update.activeSigned && !!update.activeSignatureConfirmed;
+    $("updateDanger").hidden = !confirmedBad && !(update.activeSource === "hot" && !update.activeSigned);
+    $("updateDanger").textContent = t(confirmedBad ? "update.sigConfirmed" : "update.unsigned");
 }
 
 function aboutRows(state) {
@@ -1063,6 +1136,39 @@ $("autoUpdateCheck").addEventListener("change", event => call("setAutoUpdateChec
 $("btnInstallZip").addEventListener("click", () => call("installZip", $("updateUrl").value));
 $("btnImportZip").addEventListener("click", () => call("openKeyboardDocument"));
 $("btnRestore").addEventListener("click", () => call("restoreBuiltInKeyboard"));
+
+// 备份（docs/design/userdata.md §1）：导出直接拉起系统“保存文件”；
+// 导入先弹覆盖确认，确认后才打开文件选择器。
+$("btnExportBackup").addEventListener("click", () => call("exportUserdata"));
+$("btnImportBackup").addEventListener("click", () => { $("backupConsent").hidden = false; });
+$("backupConsentCancel").addEventListener("click", () => { $("backupConsent").hidden = true; });
+$("backupConsentConfirm").addEventListener("click", () => {
+    $("backupConsent").hidden = true;
+    call("openBackupDocument");
+});
+// 签名不符的确认导入（§3）：凭 confirmId 只对暂存的那一份包生效，
+// 取消/确认都会作废它，旧包残留不到下一次操作。
+let pendingKbSigId = "";
+$("kbSigConsentCancel").addEventListener("click", () => {
+    $("kbSigConsent").hidden = true;
+    if (pendingKbSigId) call("dismissKeyboardInstall", pendingKbSigId);
+    pendingKbSigId = "";
+});
+$("kbSigConsentConfirm").addEventListener("click", () => {
+    $("kbSigConsent").hidden = true;
+    if (pendingKbSigId) call("confirmKeyboardInstall", pendingKbSigId);
+    pendingKbSigId = "";
+});
+
+function renderBackupStatus(event) {
+    const exporting = event.direction === "export";
+    if (event.ok) {
+        setNote("backupNote", t(exporting ? "backup.done.export" : "backup.done.import"));
+    } else {
+        setNote("backupNote", t(exporting ? "backup.failed.export" : "backup.failed.import") + " " +
+            t("backup.error." + String(event.code || "IO_ERROR")));
+    }
+}
 
 $("btnAppStore").addEventListener("click", () => call("openAppStore"));
 $("btnCopyAbout").addEventListener("click", () => {

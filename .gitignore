@@ -56,3 +56,4 @@ app/src/modelAssets/
 # deliberate fixtures under test-fixtures/ stay addable.
 feelime-keyboard*.zip
 !test-fixtures/*.zip
+.claude/

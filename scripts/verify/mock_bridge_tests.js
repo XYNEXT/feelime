@@ -315,8 +315,38 @@ test('voice card keeps the era-specific submit and cancel controls', () => {
     const cancel = fresh();
     cancel.nativeState({ state: 'listening', partial: '第二段' });
     cancel.tap(cancel.$('voiceClose'));
-    equal(cancel.native.of('cancelVoice').length, 1, 'close cancels voice');
+    equal(cancel.native.of('cancelVoice').length, 0,
+        'first tap with content only arms the discard');
+    equal(cancel.$('voiceClose').className.includes('arm'), true, 'armed state shown');
+    cancel.tap(cancel.$('voiceClose'));
+    equal(cancel.native.of('cancelVoice').length, 1, 'second tap cancels voice');
     equal(cancel.native.of('stopVoice').length, 0, 'close does not submit');
+});
+
+test('voice discard confirm: empty partial discards at once; arm expires without a second tap', () => {
+    if (!verAtLeast(KEYBOARD_VERSION, '3.24.0')) return;
+    const empty = fresh();
+    empty.nativeState({ state: 'listening', partial: '' });
+    empty.tap(empty.$('voiceClose'));
+    equal(empty.native.of('cancelVoice').length, 1, 'no content yet: single tap discards');
+
+    const arm = fresh();
+    arm.nativeState({ state: 'listening', partial: '说了很长的一段话' });
+    arm.tap(arm.$('voiceClose'));
+    equal(arm.$('voiceCloseLabel').textContent, '再点一次撤销', 'armed label');
+    arm.clock.advance(3000);
+    equal(arm.$('voiceCloseLabel').textContent, '撤销', 'arm expires and restores the label');
+    equal(arm.$('voiceClose').className.includes('arm'), false, 'arm visual cleared');
+    arm.tap(arm.$('voiceClose'));
+    equal(arm.native.of('cancelVoice').length, 0,
+        'after expiry the first tap only re-arms');
+
+    const sessionEnd = fresh();
+    sessionEnd.nativeState({ state: 'listening', partial: '又一段' });
+    sessionEnd.tap(sessionEnd.$('voiceClose'));
+    sessionEnd.nativeState({ state: 'idle' });
+    equal(sessionEnd.$('voiceClose').className.includes('arm'), false,
+        'session end clears the armed state');
 });
 
 test('voice entry hints match the gesture that started it', () => {
@@ -802,7 +832,7 @@ test('nine-pad enter label follows composition; locale re-renders the pad', () =
         'emoji', 'emoji entry label stays language-neutral');
 });
 
-test('方向 category fires host key events with repeat, not text', () => {
+test('方向 category commits directional text and a real tab', () => {
     const world = fresh();
     world.tap([...world.document.querySelectorAll('.kb-special')].find(
         el => el.textContent === '123',
@@ -814,20 +844,47 @@ test('方向 category fires host key events with repeat, not text', () => {
         el => el.textContent === '←',
     );
     assert(left, 'arrow cell rendered');
-    equal(left.dataset.lp, 'repeat', 'arrows repeat while held');
+    assert(!left.dataset.lp, 'no repeat long-press on text arrows');
     world.tap(left);
-    const ev = world.native.of('keyEvent');
-    equal(ev.length, 1, 'one key event');
-    equal(ev[0].args[0], 21, 'KEYCODE_DPAD_LEFT');
-    equal(ev[0].args[1], 0, 'no meta -> single-event channel');
-    equal(world.native.of('commitText').length, 0, 'nothing committed');
+    equal(world.native.of('commitText').slice(-1)[0].args[0], '←',
+        'arrow commits as literal text');
+    equal(world.native.of('keyEvent').length, 0, 'no key events');
     equal(world.native.of('key').length, 0, 'no engine traffic');
-    equal(world.native.of('keyEventPhysical').length, 0, 'meta-less combo stays single-event');
-    // The 10-column rhythm holds and row 3 ends with the backspace key.
-    equal([...world.$('symGrid').children].map(r => r.children.length).join(','),
-        '10,10,10', 'every arrows row spans the uniform 10 columns');
-    equal(world.$('symGrid').children[2].children[9].dataset.role, 'backspace',
-        'row 3 ends with backspace');
+    const tab = [...world.$('symGrid').querySelectorAll('.kb-key')].find(
+        el => el.textContent === '⇥',
+    );
+    assert(tab, 'tab cell rendered');
+    world.tap(tab);
+    equal(world.native.of('commitText').slice(-1)[0].args[0], '\t',
+        'tab cell commits a real tab character');
+});
+
+test('quote tab toggles zh/en; en side supplies ascii brackets', () => {
+    const world = fresh();
+    world.tap([...world.document.querySelectorAll('.kb-special')].find(
+        el => el.textContent === '123',
+    ));
+    const quoteTab = () => [...world.document.querySelectorAll('[data-sym-cat]')]
+        .find(el => el.dataset.symCat === 'quote');
+    world.tap(quoteTab());
+    equal(quoteTab().querySelector('.cat-sub').textContent, '中',
+        'quote defaults to the zh table');
+    equal([...world.$('symGrid').children[0].children].map(k => k.textContent).join(''),
+        '“”‘’„‟«»‹›', 'zh quote rows');
+    world.tap(quoteTab());
+    equal(quoteTab().querySelector('.cat-sub').textContent, 'En', 'badge flips');
+    equal([...world.$('symGrid').children[0].children].map(k => k.textContent).join(''),
+        '[]{}()<>\'"', 'en quote table leads with ascii brackets');
+    world.tap([...world.$('symGrid').querySelectorAll('.kb-key')].find(
+        el => el.textContent === '[',
+    ));
+    equal(world.native.of('commitText').slice(-1)[0].args[0], '[',
+        'english bracket commits literally');
+    // The two pins are independent.
+    const commonTab = world.document.querySelector('[data-sym-cat="common"]');
+    world.tap(commonTab);
+    equal(commonTab.querySelector('.cat-sub').textContent, 'En',
+        'common tab unaffected by the quote pin');
 });
 
 test('second tap on the active 常用 tab flips the zh/en table', () => {
@@ -892,8 +949,8 @@ test('symbol category strip lists all batches with stable keys', () => {
     );
     equal(
         cats.map(c => c.textContent).join(','),
-        '常用En,最近,引号,货币,数学,方向,序号,拼音,平假名,片假名,希腊',
-        'labels aligned with the category list (常用 carries the 中/En badge)',
+        '常用En,最近,引号中,货币,数学,方向,序号,拼音,平假名,片假名,希腊',
+        'labels aligned with the category list (paired tables carry 中/En badges)',
     );
     // Japanese kana and Greek are newer symbol-layer additions.
     const keyText = () => [...world.$('symGrid').querySelectorAll('.kb-key')]
@@ -2348,6 +2405,50 @@ test('theme preference survives a reload', () => {
     secondWorld.storage.set('feelime_theme', 'light');
     const second = secondWorld.build();
     equal(second.document.documentElement.className, 'theme-light', 'pinned light reapplies on load');
+});
+
+// ------------------------------------------------- userdata stores mirror
+
+test('stores mirror: hello pushes localStorage settings to native; onStoresRestored applies them', () => {
+    const world = new KeyboardWorld().build();
+    world.storage.set('feelime_theme', 'dark');
+    world.storage.set('feelime_scrub_speed', '5');
+    world.storage.set('feelime_symbol_recent', '["x"]'); // 使用痕迹：不应进镜像
+    world.hello();
+    const pushes = world.native.of('pushStores');
+    equal(pushes.length, 1, 'one mirror push per hello');
+    const payload = JSON.parse(pushes[0].args[0]);
+    equal(payload.feelime_theme, 'dark', 'theme rides the mirror');
+    equal(payload.feelime_scrub_speed, '5', 'scrub speed rides the mirror');
+    equal(payload.feelime_symbol_recent, undefined, 'usage traces stay out of the backup');
+
+    // 导入恢复：原生把镜像推回来，主题当场生效、白名单外键被忽略。
+    world.context.window.Feelime.onStoresRestored({ feelime_theme: 'light', feelime_evil_key: '1' });
+    equal(world.document.documentElement.className, 'theme-light', 'restored theme applies');
+    equal(world.storage.get('feelime_evil_key'), undefined, 'non-whitelisted keys are dropped');
+    equal(world.storage.get('feelime_theme'), 'light', 'restored theme is persisted');
+});
+
+test('stores rev: a newer native mirror (settings import) wins the next hello', () => {
+    const world = new KeyboardWorld().build();
+    world.storage.set('feelime_theme', 'dark');
+    world.storage.set('feelime_scrub_speed', '3');
+    world.hello();
+    // 设置页导入备份：原生镜像 rev 跳号 + 携带恢复值。
+    world.native.storesRev = 7;
+    world.native.storesPayload = JSON.stringify({
+        rev: 7,
+        values: { feelime_theme: 'light', feelime_scrub_speed: '5', feelime_evil: 'x' },
+    });
+    world.hello();
+    equal(world.storage.get('feelime_theme'), 'light', 'hello pulls the restored values');
+    // 拉取(7)之后 hello 收尾的 push 把 rev 推到 8——值已收敛，只是计号前进。
+    equal(parseInt(world.storage.get('feelime_stores_rev'), 10) >= 7, true,
+        'rev recorded after pull');
+    equal(world.storage.get('feelime_evil'), undefined, 'non-whitelisted values are dropped');
+    equal(world.document.documentElement.className, 'theme-light', 'restored theme applies');
+    equal(JSON.parse(world.native.of('pushStores').slice(-1)[0].args[0]).feelime_theme,
+        'light', 'the follow-up push carries the restored values, not the stale ones');
 });
 
 // ------------------------------------------------- candidate compose controls

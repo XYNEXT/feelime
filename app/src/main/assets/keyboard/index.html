@@ -265,7 +265,13 @@
     <div id="voiceOverlay">
         <div id="voiceScrim"></div>
         <div id="voiceCard">
-            <button id="voiceClose" type="button" aria-label="取消语音输入" data-i18n-aria-label="取消语音输入">×</button>
+            <!-- 撤销（非“关闭”）：↺ 图标 + 文字明确弃稿语义；有内容时
+                 两击确认（见 bindVoiceCancel），单击不再整段丢失。 -->
+            <button id="voiceClose" type="button" aria-label="撤销本次听写" data-i18n-aria-label="撤销本次听写">
+                <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor" aria-hidden="true">
+                    <path d="M12.5 8c-2.65 0-5.05.99-6.9 2.6L2 7v9h9l-3.62-3.62c1.39-1.16 3.16-1.88 5.12-1.88 3.54 0 6.55 2.31 7.6 5.5l2.37-.78C21.08 11.03 17.15 8 12.5 8z"/>
+                </svg><span id="voiceCloseLabel" data-i18n="撤销">撤销</span>
+            </button>
  <!-- The big red dot became a half-height mic icon
                  (portrait AND landscape); only colours/pulse animate. -->
             <div class="vc-mic">

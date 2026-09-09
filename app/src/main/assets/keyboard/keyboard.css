@@ -400,6 +400,14 @@ body.settings-page .compose-tool { display: none; }
     font-weight: 400;
     color: var(--key-subtext);
 }
+/* 方向 category: two text rows top-aligned inside the three-row slot. */
+.sym-arrows {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+    gap: 5px;
+}
 /* Single-glyph cells read at near-main-key size - 13px on a
  * 44px cell wasted the key face and hurt digit recognition. */
 .kb-key.sym-single { font-size: min(20px, calc(var(--kb-row-h, 44px) * 0.46)); font-weight: 400; }
@@ -427,7 +435,7 @@ body.settings-page .compose-tool { display: none; }
     flex: 1;
     min-height: 0;
     display: grid;
-    grid-template-columns: 1.15fr 1fr 1fr 1fr 1.3fr;
+    grid-template-columns: 0.8fr 1.2fr 1.2fr 1.2fr 1fr;
     grid-template-rows: repeat(4, var(--kb-row-h, 44px));
     gap: 5px;
 }
@@ -1046,19 +1054,29 @@ body.height-editing #candidateBar { margin-top: 39px; }
     position: absolute;
     top: 6px;
     right: 6px;
-    width: 28px;
-    height: 28px;
-    padding: 0;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    height: 26px;
+    padding: 0 9px;
     border: 0;
-    border-radius: 50%;
-    background: transparent;
+    border-radius: 13px;
+    background: var(--pressed);
     color: var(--card-sub);
-    font-size: 20px;
+    font-size: 12px;
     line-height: 1;
+}
+#voiceClose.arm {
+    background: var(--danger);
+    color: #fff;
 }
 #voiceClose:active, #voiceClose.active-touch {
     background: var(--pressed);
     color: var(--card-text);
+}
+#voiceClose.arm:active, #voiceClose.arm.active-touch {
+    background: var(--danger);
+    color: #fff;
 }
 /* The recording dot became a half-height mic icon (20px) - the
  * pulse animates the icon itself (colour pulse via opacity), both themes. */
@@ -1078,7 +1096,7 @@ body.landscape #voiceCard {
     padding: 10px 12px 9px;
     gap: 5px;
 }
-body.landscape #voiceClose { top: 4px; right: 4px; width: 24px; height: 24px; font-size: 18px; }
+body.landscape #voiceClose { top: 4px; right: 4px; height: 22px; padding: 0 7px; font-size: 11px; }
 #voiceStatus { font-size: 13px; font-weight: 650; color: var(--card-text); min-height: 17px; text-align: center; }
 #partialText {
     font-size: 14px;

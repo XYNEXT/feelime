@@ -23,4 +23,7 @@
     <string name="permission_missing">需要麦克风权限才能语音输入</string>
     <string name="model_ready">流式中英、整句纠错与英文标点模型已安装</string>
     <string name="model_missing">语音模型未安装：请在 设置 → 语音识别 中下载，或使用完整版安装包</string>
+    <string name="keyboard_signature_bad_title">键盘包签名不符</string>
+    <string name="keyboard_signature_bad_message">这个键盘包的签名与官方发布密钥不一致（可能是自改包或第三方包）。导入后将以“已确认签名不符”的状态运行，重启后仍生效。确认导入吗？</string>
+    <string name="keyboard_signature_bad_confirm">仍要导入</string>
 </resources>

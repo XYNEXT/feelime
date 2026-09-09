@@ -30,6 +30,9 @@ import android.webkit.WebViewClient
 import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.Toast
+import com.feelime.ime.update.KeyboardStore
+import com.feelime.ime.update.KeyboardPackageVerifier
+import com.feelime.ime.update.KeyboardUpdateErrorCode
 import androidx.activity.addCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
@@ -110,6 +113,22 @@ class SetupActivity : AppCompatActivity() {
         ActivityResultContracts.OpenDocument(),
     ) { uri: Uri? ->
         if (uri != null) bridge.installKeyboardFromUri(uri)
+    }
+
+    /** ACTION_CREATE_DOCUMENT for the userdata backup export
+     * (docs/design/userdata.md §1). The bridge writes through the granted
+     * stream immediately; no persisted grant. */
+    private val backupCreateLauncher = registerForActivityResult(
+        ActivityResultContracts.CreateDocument("application/json"),
+    ) { uri: Uri? ->
+        if (uri != null) bridge.writeUserdataBackupToUri(uri)
+    }
+
+    /** ACTION_OPEN_DOCUMENT for importing a userdata backup file. */
+    private val backupOpenLauncher = registerForActivityResult(
+        ActivityResultContracts.OpenDocument(),
+    ) { uri: Uri? ->
+        if (uri != null) bridge.restoreUserdataBackupFromUri(uri)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -307,6 +326,33 @@ class SetupActivity : AppCompatActivity() {
             }
         }
 
+        override fun createBackupDocument() {
+            if (!canTouchWebView()) return
+            runOnUiThread {
+                if (!canTouchWebView()) return@runOnUiThread
+                val stamp = java.text.SimpleDateFormat(
+                    "yyyyMMdd-HHmm", java.util.Locale.US,
+                ).format(java.util.Date())
+                runCatching {
+                    backupCreateLauncher.launch("feelime-backup-$stamp.json")
+                }.onFailure { Log.w(TAG, "backup create picker launch dropped", it) }
+            }
+        }
+
+        override fun openBackupDocument() {
+            if (!canTouchWebView()) return
+            runOnUiThread {
+                if (!canTouchWebView()) return@runOnUiThread
+                runCatching {
+                    backupOpenLauncher.launch(arrayOf(
+                        "application/json",
+                        "application/octet-stream",
+                        "text/*",
+                    ))
+                }.onFailure { Log.w(TAG, "backup open picker launch dropped", it) }
+            }
+        }
+
         override fun addImeShortcut() = requestImeShortcut()
 
         override fun addImeTile() = requestImeTile()
@@ -453,10 +499,38 @@ class SetupActivity : AppCompatActivity() {
         runCatching {
             val bytes = file.readBytes()
             file.delete()
-            KeyboardUpdateCenter.store(this).install(bytes)
-            KeyboardUpdateCenter.notifyUpdated(this)
+            when (val result = KeyboardUpdateCenter.store(this).install(bytes)) {
+                is KeyboardStore.InstallResult.Ok -> KeyboardUpdateCenter.notifyUpdated(this)
+                is KeyboardStore.InstallResult.Fail -> {
+                    // 设计 docs/design/userdata.md §3：inbox 推送遇签名不符
+                    // 也给确认通道（设置页走 bridge 的 pending/confirm）。
+                    if (result.code == KeyboardUpdateErrorCode.SIGNATURE_BAD) {
+                        confirmBadSignatureInstall(bytes)
+                    }
+                }
+            }
         }
         bridge.pushState()
+    }
+
+    private fun confirmBadSignatureInstall(bytes: ByteArray) {
+        runOnUiThread {
+            android.app.AlertDialog.Builder(this)
+                .setTitle(getString(R.string.keyboard_signature_bad_title))
+                .setMessage(getString(R.string.keyboard_signature_bad_message))
+                .setPositiveButton(R.string.keyboard_signature_bad_confirm) { _, _ ->
+                    runCatching {
+                        val result = KeyboardUpdateCenter.store(this)
+                            .install(bytes, confirmBadSignature = true)
+                        if (result is KeyboardStore.InstallResult.Ok) {
+                            KeyboardUpdateCenter.notifyUpdated(this)
+                        }
+                    }
+                    bridge.pushState()
+                }
+                .setNegativeButton(android.R.string.cancel, null)
+                .show()
+        }
     }
 
     private fun updateSetupLaunchMarker(intent: Intent) {

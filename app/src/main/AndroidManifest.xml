@@ -42,6 +42,17 @@
             android:noHistory="true"
             android:theme="@style/Theme.Feelime.Picker" />
 
+        <!-- 语音首用权限弹窗的透明壳（userdata.md §2）：只为替 IME Service
+             发起 requestPermissions，收到结果即 finish，不进最近任务。
+             注意不能 noHistory：官方明确要求请求权限的 Activity 不能用它，
+             否则授权回调不可靠。 -->
+        <activity
+            android:name=".VoicePermissionActivity"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:finishOnTaskLaunch="true"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+
         <service
             android:name=".ImeTileService"
             android:exported="true"

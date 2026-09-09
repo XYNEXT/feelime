@@ -164,6 +164,10 @@
         "松手结束": "Release to finish.",
         "点击任意位置结束": "Tap anywhere to finish.",
         "取消语音输入": "Cancel voice input",
+        "撤销本次听写": "Discard this dictation",
+        "撤销": "Discard",
+        "再点一次撤销": "Tap again to discard",
+        "已撤销本次听写": "Dictation discarded",
         "当前版本不支持取消语音输入，请更新 APK": "Update the app to enable voice cancellation.",
         "关闭组合键浮层": "Close shortcut menu",
         "Meta 键": "Meta key",
@@ -196,7 +200,7 @@
         });
     }
 
-    const KEYBOARD_VERSION = '3.27.0';
+    const KEYBOARD_VERSION = '3.28.0';
     const MIN_NATIVE_API = 1;
     const REQUIRED_CAPABILITIES = [
         'candidate-revision-v1',
@@ -341,6 +345,26 @@
         ['-', '/', ':', ';', '(', ')', '&', '@', '+', '='],
         ['.', ',', '?', '!', '"', "'", '*', '#', '%'],
     ];
+    // The 引号 table's zh side (the only quote table until the 中/En
+    // toggle landed): fullwidth CJK quotes and brackets.
+    const ZH_QUOTE_ROWS = [
+        ['“', '”', '‘', '’', '„', '‟', '«', '»', '‹', '›'],
+        ['「', '」', '『', '』', '【', '】', '〖', '〗', '〔', '〕'],
+        ['《', '》', '〈', '〉', '［', '］', '｛', '｝', '＃'],
+    ];
+    // The 引号 table's en side: ASCII quotes and brackets the zh table
+    // has no room for ([ ] were unreachable on the whole keyboard).
+    const EN_QUOTE_ROWS = [
+        ['[', ']', '{', '}', '(', ')', '<', '>', '\'', '"'],
+        ['`', '*', '/', '\\', '|', '~', '^', '&', '@', '#'],
+        ['$', '%', '=', '+', '_', '«', '»', '‹', '›'],
+    ];
+    // Categories shipping a 中/En table pair; a second tap on the ACTIVE
+    // tab flips the pin (design §2.4).
+    const VARIANT_TABLES = {
+        common: { zh: ZH_COMMON_ROWS, en: EN_COMMON_ROWS },
+        quote: { zh: ZH_QUOTE_ROWS, en: EN_QUOTE_ROWS },
+    };
     // The nine-pad's left strip - symbols that pair well with digits
     // (phone numbers, prices, units, simple math). Literal commits.
     const NUM_PAD_SYMBOLS = ['@', '%', '-', '+', '/', '*', '(', ')',
@@ -394,11 +418,8 @@
         { id: 'recent', label: '最近', rows: null }, // filled from history, falls back to 常用
         {
             id: 'quote', label: '引号',
-            rows: [
-                ['“', '”', '‘', '’', '„', '‟', '«', '»', '‹', '›'],
-                ['「', '」', '『', '』', '【', '】', '〖', '〗', '〔', '〕'],
-                ['《', '》', '〈', '〉', '［', '］', '｛', '｝', '＃'],
-            ],
+            // 中/En paired like 常用 - rows come from VARIANT_TABLES.
+            rows: null,
         },
         {
             id: 'money', label: '货币',
@@ -542,6 +563,52 @@
         rows: 3, keys: 100, tapChars: 128, labelChars: 12, noteChars: 60,
         maxKeySteps: 16, // combo/key steps per tap (the 25/s bridge throttle)
     };
+
+    // 备份数据源（docs/design/userdata.md §1.4）：这些设置级 localStorage
+    // 键在握手后与每次变化时镜像给原生（ImeBridge.pushStores），导出/换机
+    // 由原生统一打包；最近符号/最近 emoji 属于使用痕迹，不进备份。
+    const STORE_BACKUP_KEYS = [
+        'feelime_theme', 'feelime_ui_locale', 'feelime_scrub_speed',
+        'feelime_quick_pair', 'feelime_menu_modes', 'feelime_mode_order',
+    ];
+
+    function collectStores() {
+        const stores = {};
+        try {
+            for (const key of STORE_BACKUP_KEYS) {
+                const value = localStorage.getItem(key);
+                if (value !== null) stores[key] = value;
+            }
+        } catch (_) { /* storage unavailable */ }
+        return JSON.stringify(stores);
+    }
+
+    function pushStores() {
+        // 类型守卫：热更键盘（新 JS）跑在旧原生（无 pushStores）上时，
+        // 不许在 hello 路径抛错——能力握手之外的方法一律探测后再调。
+        try {
+            if (typeof Native.pushStores === 'function') {
+                const rev = Native.pushStores(collectStores(), keyboard.token);
+                if (rev) localStorage.setItem('feelime_stores_rev', String(rev));
+            }
+        } catch (_) { /* bridge unavailable */ }
+    }
+
+    /** 原生镜像比本地新（设置页导入过备份）时拉取恢复值（userdata.md §1.5）。
+     * rev 跳号只能出现在导入侧，比较用大于即可。 */
+    function pullStores(token) {
+        try {
+            if (typeof Native.getStores !== 'function') return;
+            const mirror = JSON.parse(Native.getStores(token) || '{}');
+            const remoteRev = parseInt(mirror.rev || 0, 10) || 0;
+            const localRev = parseInt(localStorage.getItem('feelime_stores_rev') || '0', 10) || 0;
+            if (remoteRev > localRev && mirror.values) {
+                keyboard.onStoresRestored(mirror.values);
+                localStorage.setItem('feelime_stores_rev', String(remoteRev));
+            }
+        } catch (_) { /* old native or bad payload */ }
+    }
+
     // DSL key names -> the CTRL_KEY_CODES label sent through sendCombo.
     const CUSTOM_KEY_TOKENS = {
         esc: 'Escape', tab: 'Tab', enter: 'Enter', space: 'Space',
@@ -637,10 +704,10 @@
             this.lastEngineState = null;
             this.lastRawInput = '';
             this.symbolCat = 'common';
-            // 常用 tab variant: null follows the input mode; a second
-            // tap on the active 常用 tab pins 'zh'/'en' until the mode
-            // changes (design §2.4).
-            this.commonVariant = null;
+            // 中/En table pins per category (常用/引号): a second tap on
+            // the active tab pins 'zh'/'en'; a mode switch clears the
+            // map (design §2.4).
+            this.tableVariants = {};
             // Which key-area layer is visible (letters/symbols/numpad) -
             // panels and settings borrow the area and restore this.
             this.keyLayer = 'letters';
@@ -959,7 +1026,18 @@
             const voiceClose = document.getElementById('voiceClose');
             voiceClose.addEventListener('click', event => {
                 event.stopPropagation();
-                this.requestVoiceStop(true);
+                // 弃稿是毁灭性操作（长篇听写一击全丢）：已经说了内容时
+                // 第一次点只进入武装态，2.6s 内再点一次才真正撤销；
+                // 还没说话时单击直接撤销（没有可丢的东西）。
+                const partial = (document.getElementById('partialText').textContent || '').trim();
+                if (partial && !this.voiceCancelArmed) {
+                    this.armVoiceCancel();
+                    return;
+                }
+                this.disarmVoiceCancel();
+                if (this.requestVoiceStop(true)) {
+                    this.showToast(t("已撤销本次听写"));
+                }
             });
             this.bindPressFeedback(voiceClose);
             // The toolbar mic needs bindTouch (preventDefault + active-touch
@@ -1071,16 +1149,43 @@
             // the first native loading callback. Keep the session marker as
             // the source of truth for that race.
             const active = ['listening', 'loading'].includes(this.voiceState) || this.voiceSession;
-            if (!active) return;
+            if (!active) return false;
             if (cancel) {
                 if (typeof Native.cancelVoice !== 'function') {
                     this.showToast(t("当前版本不支持取消语音输入，请更新 APK"));
-                    return;
+                    return false;
                 }
                 Native.cancelVoice(this.token);
-                return;
+                return true;
             }
             Native.stopVoice(this.token);
+            return false;
+        }
+
+        /** 撤销按钮的两击确认：武装态换文案+高亮，超时或会话结束自动复原。 */
+        armVoiceCancel() {
+            this.voiceCancelArmed = true;
+            const button = document.getElementById('voiceClose');
+            if (!button) return;
+            button.classList.add('arm');
+            const label = document.getElementById('voiceCloseLabel');
+            if (label) label.textContent = t("再点一次撤销");
+            if (this.voiceCancelTimer) clearTimeout(this.voiceCancelTimer);
+            this.voiceCancelTimer = setTimeout(() => this.disarmVoiceCancel(), 2600);
+        }
+
+        disarmVoiceCancel() {
+            if (!this.voiceCancelArmed) return;
+            this.voiceCancelArmed = false;
+            if (this.voiceCancelTimer) {
+                clearTimeout(this.voiceCancelTimer);
+                this.voiceCancelTimer = null;
+            }
+            const button = document.getElementById('voiceClose');
+            if (!button) return;
+            button.classList.remove('arm');
+            const label = document.getElementById('voiceCloseLabel');
+            if (label) label.textContent = t("撤销");
         }
 
         /* ===== rendering ===== */
@@ -1113,13 +1218,13 @@
             // layouts have no shift key to undo them with).
             this.shift = false;
             this.caps = false;
-            // The 常用 variant follows the MODE, not the render: rotation
+            // Table pins follow the MODE, not the render: rotation
             // re-renders through applyOrientation and must keep a pinned
             // variant, or the grid, its badge and the recent-fill
             // disagree (design §2.4, review P2).
             if (this.renderedMode !== this.mode) {
                 this.renderedMode = this.mode;
-                this.commonVariant = null;
+                this.tableVariants = {};
                 // A mode switch can land while the symbol layer is open -
                 // the grid and its badge must follow the new default.
                 if (!document.getElementById('symbolLayer').hidden) {
@@ -2067,24 +2172,25 @@
                 button.className = 'sym-cat' + (category.id === this.symbolCat ? ' active' : '');
                 button.textContent = t(category.label);
                 button.dataset.symCat = category.id;
-                // The 常用 tab borrows the mode toggle's dual-label
-                // grammar: a small 中/En badge names the table it shows.
-                if (category.id === 'common') {
+                // Paired-table tabs (常用/引号) borrow the mode toggle's
+                // dual-label grammar: a small 中/En badge names the table.
+                if (VARIANT_TABLES[category.id]) {
                     button.classList.add('sym-cat-variant');
                     const badge = document.createElement('span');
                     badge.className = 'cat-sub';
-                    badge.textContent = this.commonVariantNow() === 'zh' ? '中' : 'En';
+                    badge.textContent = this.variantNow(category.id) === 'zh' ? '中' : 'En';
                     button.append(badge);
                 }
                 button.addEventListener('click', () => {
-                    // Second tap on the ACTIVE 常用 tab flips the zh/en
+                    // Second tap on the ACTIVE paired tab flips its zh/en
                     // table in place - the badge is updated, not the strip
                     // rebuilt (scroll position survives), and the grid
                     // re-renders from the other row set.
-                    if (category.id === 'common' && this.symbolCat === 'common') {
-                        this.commonVariant = this.commonVariantNow() === 'zh' ? 'en' : 'zh';
+                    if (VARIANT_TABLES[category.id] && this.symbolCat === category.id) {
+                        const to = this.variantNow(category.id) === 'zh' ? 'en' : 'zh';
+                        this.tableVariants[category.id] = to;
                         const badge = button.querySelector('.cat-sub');
-                        if (badge) badge.textContent = this.commonVariantNow() === 'zh' ? '中' : 'En';
+                        if (badge) badge.textContent = to === 'zh' ? '中' : 'En';
                         this.renderSymbols();
                         return;
                     }
@@ -2101,15 +2207,20 @@
             });
         }
 
-        /** The 常用 table on screen: the pinned variant (second tap on
-         * the active 常用 tab flips it) or the input mode's default. */
-        commonVariantNow() {
-            if (this.commonVariant) return this.commonVariant;
-            return this.isChineseMode() ? 'zh' : 'en';
+        /** The variant a paired table (常用/引号) shows: the pinned one
+         * (second tap on the active tab flips it) or the default - 常用
+         * follows the input mode, 引号 defaults to zh. */
+        variantNow(catId) {
+            if (this.tableVariants[catId]) return this.tableVariants[catId];
+            return catId === 'common' && !this.isChineseMode() ? 'en' : 'zh';
+        }
+
+        rowsFor(catId) {
+            return VARIANT_TABLES[catId][this.variantNow(catId)];
         }
 
         commonRows() {
-            return this.commonVariantNow() === 'zh' ? ZH_COMMON_ROWS : EN_COMMON_ROWS;
+            return VARIANT_TABLES.common[this.variantNow('common')];
         }
 
         /** The user's custom symbol table - exactly 3 rows of
@@ -2265,8 +2376,9 @@
         }
 
         symbolCategoryValues() {
-            if (this.symbolCat === 'common') {
-                return this.commonRows().flat();
+            // 中/En paired tables (常用/引号) pick rows by variant.
+            if (VARIANT_TABLES[this.symbolCat]) {
+                return this.rowsFor(this.symbolCat).flat();
             }
             if (this.symbolCat === 'recent') {
                 const values = this.recent();
@@ -2332,42 +2444,43 @@
                 return;
             }
             if (this.symbolCat === 'arrows') {
-                // The 方向 category sends host key events (design §2.4):
-                // cells pair a display glyph with a CTRL_KEY_CODES label,
-                // every cell repeats while held (navigation wants 1..n
-                // steps), and nothing lands in the recent list. Rows pad
-                // to the 10-column rhythm with blanks like every category.
+                // The 方向 category commits directional TEXT (design §2.4):
+                // the glyphs land literally and ⇥ commits a real tab
+                // character - no key events, no repeat, nothing remembered.
+                // Rows live in a top-aligned wrap: two rows spread across
+                // the three-row slot would read as a hole in the middle.
                 const arrowsRows = [
-                    [['←', 'ArrowLeft'], ['↑', 'ArrowUp'],
-                        ['↓', 'ArrowDown'], ['→', 'ArrowRight']],
-                    [['Home', 'Home'], ['End', 'End'],
-                        ['PgUp', 'PageUp'], ['PgDn', 'PageDown']],
-                    [['Tab', 'Tab'], ['Esc', 'Escape'], ['Del', 'Del'],
-                        [t("空格"), 'Space'], [t("换行"), 'Enter']],
+                    [['←'], ['↑'], ['→'], ['↓'], ['↔'], ['↕'], ['↖'], ['↗'], ['↘'], ['↙']],
+                    [['⇥', '\t']],
                 ];
-                arrowsRows.forEach((cells, index) => {
+                const wrap = document.createElement('div');
+                wrap.className = 'sym-arrows';
+                arrowsRows.forEach(cells => {
                     const row = this.row();
-                    cells.forEach(([glyph, label]) => {
+                    cells.forEach(([glyph, text]) => {
                         row.append(this.functionKey(glyph,
-                            () => this.sendCombo([label]),
-                            glyph.length > 1 ? 'sym-multi' : 'sym-single',
-                            'repeat'));
+                            () => this.sendSymbol(text || glyph), 'sym-single'));
                     });
-                    // Rows 1-2 carry 10 cells, row 3 keeps its last slot
-                    // for the backspace key - mixed 9/10 rows stretched
-                    // the arrow keys wider than the rest (review P2).
-                    const target = index === arrowsRows.length - 1 ? 9 : 10;
-                    while (row.children.length < target) {
+                    while (row.children.length < 10) {
                         const blank = document.createElement('span');
                         blank.className = 'sym-blank';
                         row.append(blank);
                     }
-                    grid.append(row);
+                    wrap.append(row);
                 });
-                grid.children[grid.children.length - 1].append(
-                    this.specialKey('backspace', ICONS.backspace,
-                        () => this.call(() => Native.backspace(this.token)),
-                        'kb-special', 'repeat'));
+                // 行 3 末位固定 ⌫（keyboard.md §155）：分类再特殊，
+                // 删自己刚输入的字符不该先切层。
+                const lastRow = this.row();
+                for (let i = 0; i < 9; i++) {
+                    const blank = document.createElement('span');
+                    blank.className = 'sym-blank';
+                    lastRow.append(blank);
+                }
+                lastRow.append(this.specialKey('backspace', ICONS.backspace,
+                    () => this.call(() => Native.backspace(this.token)),
+                    'kb-special', 'repeat'));
+                wrap.append(lastRow);
+                grid.append(wrap);
                 return;
             }
             const values = this.symbolCategoryValues();
@@ -3234,6 +3347,7 @@
             ], theme, value => {
                 try { localStorage.setItem('feelime_theme', value); } catch (_) {}
                 applyTheme();
+                pushStores();
             });
 
             const speedRow = addRow(t("光标移动速度"));
@@ -3242,6 +3356,7 @@
             ], this.scrubSpeed, value => {
                 this.scrubSpeed = value;
                 try { localStorage.setItem('feelime_scrub_speed', String(value)); } catch (_) {}
+                pushStores();
             });
 
             // Only 自然码 exists; Moved its key map to a
@@ -3440,6 +3555,7 @@
                     this.quickPair.push(name);
                     if (this.quickPair.length > 2) this.quickPair.shift();
                     try { localStorage.setItem('feelime_quick_pair', JSON.stringify(this.quickPair)); } catch (_) {}
+                    pushStores();
                     this.updateToggleLabels();
                     box.querySelectorAll('.pair-row').forEach(el => {
                         const active = this.quickPair.includes(el.dataset.mode);
@@ -3492,6 +3608,7 @@
                     try {
                         localStorage.setItem('feelime_menu_modes', JSON.stringify(next));
                     } catch (_) {}
+                    pushStores();
                     tick.classList.toggle('on', next.includes(name));
                     tick.textContent = next.includes(name) ? '✓' : '';
                 });
@@ -3499,6 +3616,7 @@
                 box.append(row);
                 this.bindListDrag(row, box, '.pair-row', 'mode', order => {
                     try { localStorage.setItem('feelime_mode_order', JSON.stringify(order)); } catch (_) {}
+                    pushStores();
                 });
             });
             panel.append(box);
@@ -4731,6 +4849,44 @@
             if (this.panelOpen && this.panelTab === 'clipboard') this.renderPanel();
         }
 
+        /** 导入备份后原生把 localStorage 级设置推回来（userdata.md §1.4）。
+         * 白名单外的键一律忽略；主题当场生效，语言变化重走一次渲染。 */
+        onStoresRestored(stores) {
+            let localeChanged = false;
+            try {
+                const incoming = stores || {};
+                for (const key of Object.keys(incoming)) {
+                    if (!STORE_BACKUP_KEYS.includes(key)) continue;
+                    if (key === 'feelime_ui_locale' && incoming[key] !== uiLocale) {
+                        localeChanged = true;
+                    }
+                    localStorage.setItem(key, String(incoming[key]));
+                }
+            } catch (_) { /* storage unavailable */ }
+            applyTheme();
+            // 构造时缓存的运行时值一并刷新，否则恢复值只在下次冷启动生效。
+            try {
+                const speed = parseInt(localStorage.getItem('feelime_scrub_speed') || '3', 10);
+                if (speed >= 1 && speed <= 5) this.scrubSpeed = speed;
+            } catch (_) { /* keep current */ }
+            try {
+                const pair = JSON.parse(localStorage.getItem('feelime_quick_pair') || 'null');
+                if (Array.isArray(pair) && pair.length === 2 &&
+                    MODES[pair[0]] && MODES[pair[1]]) this.quickPair = pair;
+            } catch (_) { /* keep current */ }
+            this.updateToggleLabels();
+            if (localeChanged) {
+                uiLocale = String((stores || {})['feelime_ui_locale'] || uiLocale);
+                translateStaticUi();
+                this.renderLetters((MODES[this.mode] || MODES.direct).layout);
+                this.renderSymbolCats();
+            }
+            this.updateLabels();
+            if (document.getElementById('settingsPanel').classList.contains('open')) {
+                this.renderSettingsPanel();
+            }
+        }
+
         onFavorites(payload) {
             this.favoriteItems = (payload.items || []).map(item => ({
                 id: String(item.id), text: String(item.text), time: Number(item.time) || 0,
@@ -4760,6 +4916,7 @@
                 uiLocale = payload.uiLocale;
                 try { localStorage.setItem('feelime_ui_locale', uiLocale); } catch (_) {}
                 translateStaticUi();
+                pushStores();
             }
             this.token = payload.pageGenerationToken;
             this.engineReady = payload.engineDataReady || {};
@@ -4861,6 +5018,10 @@
             // design §7.4: the candidate injection matches against this
             // cache - it must be warm before the favorites panel ever opens.
             this.call(() => Native.getFavorites(this.token));
+            // 备份数据源（userdata.md §1.4/§1.5）：先按 rev 拉取恢复值，
+            // 再把本地镜像推给原生——两个方向都走一遍，导入与修改才收敛。
+            pullStores(this.token);
+            pushStores();
         }
 
         onEngineState(payload) {
@@ -4951,6 +5112,7 @@
             const overlay = document.getElementById('voiceOverlay');
             const recording = ['listening', 'loading', 'stopping'].includes(this.voiceState);
             overlay.classList.toggle('open', recording);
+            if (!recording) this.disarmVoiceCancel();
             document.getElementById('voiceStatus').textContent =
                 this.voiceState === 'listening' ? t("正在聆听…")
                 : this.voiceState === 'loading' ? t("启动识别…")
@@ -5001,6 +5163,8 @@
 
     const Native = window.FeelimeNative || {
         keyboardReady: () => {},
+        pushStores: () => '',
+        getStores: () => '{}',
         key: value => console.log('key', value),
         setComposition: keys => console.log('setComposition', keys),
         space: () => console.log('space'),
@@ -5107,6 +5271,7 @@
         cancelTouches: () => keyboard.cancelTouches(),
         onClipboard: payload => keyboard.onClipboard(payload),
         onFavorites: payload => keyboard.onFavorites(payload),
+        onStoresRestored: stores => keyboard.onStoresRestored(stores),
         onPanelCommit: payload => keyboard.onPanelCommit(payload),
         onPanelDelete: payload => keyboard.onPanelDelete(payload),
         onPanelComposing: payload => keyboard.onPanelComposing(payload),

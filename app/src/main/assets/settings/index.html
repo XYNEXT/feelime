@@ -82,6 +82,10 @@
         <span class="entry-label"><span data-i18n="entry.update.title">键盘热更新</span><small data-i18n="entry.update.subtitle">键盘前端文件更新</small></span>
         <span class="entry-chevron" aria-hidden="true">›</span>
       </button>
+      <button class="entry" type="button" data-target="backup">
+        <span class="entry-label"><span data-i18n="entry.backup.title">备份与恢复</span><small data-i18n="entry.backup.subtitle">设置 · 常用语 · 词库</small></span>
+        <span class="entry-chevron" aria-hidden="true">›</span>
+      </button>
       <button class="entry" type="button" data-target="about">
         <span class="entry-label"><span data-i18n="entry.about.title">关于</span><small data-i18n="entry.about.subtitle">版本信息 · 组件说明</small></span>
         <span class="entry-chevron" aria-hidden="true">›</span>
@@ -232,6 +236,47 @@
       <p class="hint" data-i18n="update.localHint">从本地 ZIP 导入不需要网络，仍会校验签名和兼容性。</p>
       <pre class="status-block" id="updateStatus" aria-live="polite"></pre>
       <p class="danger-note" id="updateDanger" hidden data-i18n="update.unsigned">⚠ 未签名键盘拥有 IME 权限（仅限调试构建）</p>
+      <div class="consent" id="kbSigConsent" hidden role="dialog" aria-labelledby="kbSigConsentTitle" aria-describedby="kbSigConsentMessage">
+        <div class="section-heading">
+          <h3 id="kbSigConsentTitle" data-i18n="kbSig.title">键盘包签名不符</h3>
+          <span class="eyebrow" data-i18n="kbSig.badge">安全提示</span>
+        </div>
+        <p class="hint block" id="kbSigConsentMessage" data-i18n="kbSig.message">这个键盘包的签名与官方发布密钥不一致（可能是自改包或第三方包）。仍要导入将以“已确认签名不符”的状态运行，重启后仍生效。</p>
+        <div class="actions">
+          <button class="btn" id="kbSigConsentCancel" type="button" data-i18n="kbSig.cancel">取消</button>
+          <button class="btn primary" id="kbSigConsentConfirm" type="button" data-i18n="kbSig.confirm">仍要导入</button>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<!-- Userdata backup and restore. -->
+<div class="page" data-page="backup" hidden>
+  <header class="page-head">
+    <button class="page-back" type="button" data-back data-i18n-aria="nav.back" aria-label="返回首页">‹</button>
+    <h2 class="page-title" data-i18n="page.backup">备份与恢复</h2>
+  </header>
+  <main>
+    <section class="card" id="sec-backup" aria-labelledby="backupTitle">
+      <div class="section-heading"><h2 id="backupTitle" data-i18n="backup.title">备份与恢复</h2><span class="eyebrow" data-i18n="backup.badge">备份</span></div>
+      <p class="hint block" data-i18n="backup.note">把设置、常用语、自定义键位与输入词库打包成一个 JSON 文件，方便换机或手工编辑。</p>
+      <div class="actions">
+        <button class="btn primary" id="btnExportBackup" type="button" data-i18n="backup.export">导出数据</button>
+        <button class="btn" id="btnImportBackup" type="button" data-i18n="backup.import">导入数据</button>
+      </div>
+      <div class="consent" id="backupConsent" hidden role="dialog" aria-labelledby="backupConsentTitle" aria-describedby="backupConsentMessage">
+        <div class="section-heading">
+          <h3 id="backupConsentTitle" data-i18n="backup.consent.title">确认覆盖</h3>
+          <span class="eyebrow" data-i18n="backup.consent.badge">覆盖提示</span>
+        </div>
+        <p class="hint block" id="backupConsentMessage" data-i18n="backup.consent.message">导入会覆盖当前的设置、常用语、自定义键位与词库，且无法撤销。确定继续吗？</p>
+        <div class="actions">
+          <button class="btn" id="backupConsentCancel" type="button" data-i18n="backup.consent.cancel">取消</button>
+          <button class="btn primary" id="backupConsentConfirm" type="button" data-i18n="backup.consent.confirm">选择文件导入</button>
+        </div>
+      </div>
+      <p class="save-note model-note" id="backupNote" role="status" aria-live="polite"></p>
     </section>
   </main>
 </div>
