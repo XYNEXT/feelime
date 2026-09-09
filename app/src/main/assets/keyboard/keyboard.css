@@ -1107,7 +1107,7 @@ body.height-editing #candidateBar { margin-top: 39px; }
     top: 42%;
     transform: translateX(-50%) scale(0.85);
     transform-origin: center;
-    margin-top: 96px;
+    margin-top: 65px;
     z-index: 1;
     padding: 8px 16px;
     border-radius: 999px;
@@ -1150,7 +1150,12 @@ body.landscape #voiceCard {
 }
 body.landscape #voiceDone { min-height: 34px; font-size: 13px; width: 70%; }
 body.landscape #voiceClose { top: 4px; right: 4px; height: 21px; padding: 0 7px; font-size: 10px; }
-body.landscape #voiceSlideHint { top: 50%; margin-top: 78px; font-size: 12px; }
+/* 横屏卡片同锚点 42%（原 50% 会把下方胶囊挤进空格键行）。 */
+body.landscape #voiceCard { top: 42%; }
+/* 横屏卡片下缘与空格键之间放不下整颗胶囊（20px < 23px+间距）：
+   让胶囊贴住并轻微压住卡片下缘——滑动时卡片本来就变透明，
+   换来永不遮挡空格键。 */
+body.landscape #voiceSlideHint { margin-top: 48px; padding: 5px 13px; font-size: 12px; }
 #voiceStatus { font-size: 13px; font-weight: 650; color: var(--card-text); min-height: 17px; text-align: center; }
 #partialText {
     font-size: 14px;
