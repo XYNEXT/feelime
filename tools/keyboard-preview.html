@@ -111,7 +111,9 @@ body { height: 100dvh; display: flex; flex-direction: column; overflow: hidden; 
   <button id="actSettings">快捷设置</button>
   <button id="actCtrl">控制键层</button>
   <button id="actNumpad">九宫格</button>
-  <button id="actVoiceOverlay">语音浮层</button>
+  <button id="actVoiceOverlay">语音浮层(mic)</button>
+  <button id="actVoiceHold">长按语音浮层</button>
+  <label class="dim">上滑 <input type="range" id="voiceSlideRange" min="0" max="100" value="0" style="vertical-align:middle;width:90px"></label>
   <label>界面 <select id="previewLocale"><option value="zh">中文</option><option value="en">English</option></select></label>
   <label>主题 <select id="previewTheme"><option value="auto">跟随系统</option><option value="light">浅色</option><option value="dark">深色</option></select></label>
   <a href="settings-preview.html">完整设置预览</a>
@@ -710,14 +712,20 @@ document.getElementById('actNumpad').onclick = () => {
     frame.contentWindow.Feelime.showNumpad();
 };
 
-// 语音浮层：真实卡片 + 底部「撤销 / 说完了」动作行（撤销与说完了的
-// 视觉对比在这里确认）。
-document.getElementById('actVoiceOverlay').onclick = () => {
+// 语音浮层两种形态：mic（撤销右上角小按钮 + 说完了居中大按钮）与
+// 长按空格（无按钮，松手上屏，上滑撤销——拖动滑块看进度动画）。
+function driveVoiceOverlay(session) {
     const win = frame.contentWindow;
+    win.Feelime.setVoiceSession(session);
     win.Feelime.onNativeState({
         state: 'listening', partial: '这是一段正在识别的听写内容',
-        uiLocale: win.uiLocale || 'zh', messageCode: '', message: '', level: 0.6,
+        uiLocale: 'zh', messageCode: '', message: '', level: 0.6,
     });
+}
+document.getElementById('actVoiceOverlay').onclick = () => driveVoiceOverlay('mic');
+document.getElementById('actVoiceHold').onclick = () => driveVoiceOverlay('space-hold');
+document.getElementById('voiceSlideRange').oninput = event => {
+    frame.contentWindow.Feelime.previewVoiceSlide(Number(event.target.value) / 100);
 };
 
 /* ---- 验收清单：逐项确认，问题可直接用真输入法描述 ---- */

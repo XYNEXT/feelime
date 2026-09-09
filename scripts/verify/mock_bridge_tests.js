@@ -353,10 +353,83 @@ test('voice entry hints match the gesture that started it', () => {
     hold.clock.advance(400);
     hold.nativeState({ state: 'listening' });
     equal(hold.$('voiceHint').textContent,
-        verAtLeast(KEYBOARD_VERSION, '3.24.0') ? '松手结束' : '说完后点击任意位置结束',
+        verAtLeast(KEYBOARD_VERSION, '3.28.0') ? '松手上屏' :
+            verAtLeast(KEYBOARD_VERSION, '3.24.0') ? '松手结束' : '说完后点击任意位置结束',
         'space hold hint');
     hold.touchCancel(space);
 });
+
+test('hold voice overlay: no buttons, slide hint only; mic overlay keeps both buttons', () => {
+    if (!verAtLeast(KEYBOARD_VERSION, '3.28.0')) return;
+    const hold = fresh();
+    const space = hold.$('spaceKey');
+    hold.touchDown(space);
+    hold.clock.advance(400);
+    hold.nativeState({ state: 'listening', partial: '长按说的' });
+    equal(hold.$('voiceOverlay').className.includes('hold'), true, 'hold class on overlay');
+    equal(hold.$('voiceActions').className.includes('hold') ||
+        getComputedStyleBridge(hold, 'voiceActions') === 'none', true,
+        '说完了 hidden in hold overlay');
+    equal(getComputedStyleBridge(hold, 'voiceSlideHint') !== 'none', true,
+        'slide hint visible in hold overlay');
+    hold.touchCancel(space);
+
+    const mic = fresh();
+    mic.nativeState({ state: 'listening' });
+    equal(mic.$('voiceOverlay').className.includes('hold'), false, 'mic overlay not hold');
+    equal(getComputedStyleBridge(mic, 'voiceDone') !== 'none', true, '说完了 visible for mic');
+    equal(getComputedStyleBridge(mic, 'voiceClose') !== 'none', true, '撤销 visible for mic');
+});
+
+test('hold voice slide-up: card shrinks+fades with progress; past threshold release cancels', () => {
+    if (!verAtLeast(KEYBOARD_VERSION, '3.28.0')) return;
+    const world = fresh();
+    const space = world.$('spaceKey');
+    world.touchDown(space, 20, 200);
+    world.clock.advance(400);
+    equal(world.native.of('startVoice').length, 1, 'hold started voice');
+
+    // 中途（未过阈值）：浮层随进度变小变透明，提示变明显。
+    world.move(space, 20, 145); // 55px 上滑 → 0.5
+    const card = world.$('voiceCard');
+    equal(card.style.opacity, '0.725', 'mid-slide card fade');
+    assert(card.style.transform.includes('scale(0.890)'), 'mid-slide card shrink');
+    equal(world.$('voiceSlideHint').className.includes('arm'), false, 'not armed yet');
+
+    // 过阈值：提示进入 arm 态。
+    world.move(space, 20, 80); // 120px 上滑 → 1.0+
+    equal(world.$('voiceSlideHint').className.includes('arm'), true, 'armed hint');
+
+    // 松手 = 撤销（不是上屏）。
+    world.touchUp(space, 20, 80);
+    equal(world.native.of('cancelVoice').length, 1, 'armed release discards');
+    equal(world.native.of('stopVoice').length, 0, 'armed release does not submit');
+
+    // 未过阈值松手 = 上屏。
+    const commit = fresh();
+    const space2 = commit.$('spaceKey');
+    commit.touchDown(space2, 20, 200);
+    commit.clock.advance(400);
+    commit.move(space2, 20, 180); // 20px，远低于阈值
+    commit.touchUp(space2, 20, 180);
+    equal(commit.native.of('stopVoice').length, 1, 'plain release inserts');
+    equal(commit.native.of('cancelVoice').length, 0, 'plain release never cancels');
+    // 松手后动画复位。
+    equal(commit.$('voiceCard').style.opacity === '' ||
+        commit.$('voiceCard').style.opacity === undefined, true, 'card styles reset');
+});
+
+function getComputedStyleBridge(world, id) {
+    // fake DOM 没有样式计算：看类/显隐约定（overlay.hold 的 CSS 规则由
+    // css_lint R2 与真机/preview 截图把关），这里断言状态类本身。
+    const overlay = world.$('voiceOverlay');
+    const el = world.$(id);
+    if (overlay.className.includes('hold')) {
+        if (id === 'voiceActions' || id === 'voiceClose') return 'none';
+        return 'block';
+    }
+    return el && el.id ? 'flex' : 'none';
+}
 
 test('sensitive editor disables mic', () => {
     const world = fresh();

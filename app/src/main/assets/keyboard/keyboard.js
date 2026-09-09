@@ -169,6 +169,8 @@
         "已撤销本次听写": "Dictation discarded",
         "说完了，结束并上屏": "Done — finish and insert",
         "说完了": "Done",
+        "松手上屏": "Release to insert",
+        "上滑撤销": "Slide up to discard",
         "当前版本不支持取消语音输入，请更新 APK": "Update the app to enable voice cancellation.",
         "关闭组合键浮层": "Close shortcut menu",
         "Meta 键": "Meta key",
@@ -1384,16 +1386,25 @@
         }
 
         bindSpaceHold(button) {
+            // 上滑撤销（长按空格的浮层没有按钮）：上滑途中浮层随进度
+            // 变小变透明、「上滑撤销」变明显；过阈值松手=撤销，否则
+            // 松手就上屏。
+            const SLIDE_CANCEL_PX = 110;
+            let startY = 0;
+            let slideProgress = 0;
             button._cancelSpaceHold = () => {
                 clearTimeout(this.spaceHoldTimer);
                 if (this.voiceHold) {
                     this.voiceHold = false;
+                    this.resetSlideCancel();
                     this.requestVoiceStop(true);
                 }
             };
             const start = event => {
                 event.preventDefault();
                 button.classList.add('active-touch');
+                startY = event.touches[0].clientY;
+                slideProgress = 0;
                 if (!this.ready || !this.token) return;
                 this.spaceHoldTimer = setTimeout(() => {
                     this.voiceHold = true;
@@ -1401,13 +1412,24 @@
                     Native.startVoice(this.token);
                 }, 350);
             };
+            const move = event => {
+                if (!this.voiceHold) return;
+                const dy = startY - event.touches[0].clientY;
+                slideProgress = Math.max(0, Math.min(1, dy / SLIDE_CANCEL_PX));
+                this.updateSlideCancel(slideProgress);
+            };
             const finish = cancelled => {
                 if (!this.pressedKeys.has(button)) return;
                 button.classList.remove('active-touch');
                 clearTimeout(this.spaceHoldTimer);
+                const armed = slideProgress >= 1;
+                slideProgress = 0;
+                this.resetSlideCancel();
                 if (this.voiceHold) {
                     this.voiceHold = false;
-                    this.requestVoiceStop(cancelled);
+                    // 松手就上屏；只有上滑过阈值才撤销。
+                    this.requestVoiceStop(armed ? true : cancelled);
+                    if (armed) this.showToast(t("已撤销本次听写"));
                 } else if (!cancelled) {
                     // touchstart preventDefault suppresses synthetic clicks,
                     // so the tap must be delivered manually.
@@ -1415,8 +1437,34 @@
                 }
             };
             button.addEventListener('touchstart', start, { passive: false });
+            button.addEventListener('touchmove', move, { passive: true });
             button.addEventListener('touchend', () => finish(false));
             button.addEventListener('touchcancel', () => finish(true));
+        }
+
+        /** 上滑撤销的进度动画：浮层变小变透明，提示字样变明显。 */
+        updateSlideCancel(progress) {
+            const card = document.getElementById('voiceCard');
+            const hint = document.getElementById('voiceSlideHint');
+            if (!card || !hint) return;
+            card.style.transform =
+                `translate(-50%, -50%) scale(${(1 - 0.22 * progress).toFixed(3)})`;
+            card.style.opacity = (1 - 0.55 * progress).toFixed(3);
+            hint.style.opacity = (0.55 + 0.45 * progress).toFixed(2);
+            hint.classList.toggle('arm', progress >= 1);
+        }
+
+        resetSlideCancel() {
+            const card = document.getElementById('voiceCard');
+            const hint = document.getElementById('voiceSlideHint');
+            if (card) {
+                card.style.transform = '';
+                card.style.opacity = '';
+            }
+            if (hint) {
+                hint.style.opacity = '';
+                hint.classList.remove('arm');
+            }
         }
 
         bindTouch(button, options = {}) {
@@ -5087,6 +5135,10 @@
             const overlay = document.getElementById('voiceOverlay');
             const recording = ['listening', 'loading', 'stopping'].includes(this.voiceState);
             overlay.classList.toggle('open', recording);
+            // 两种浮层：长按空格（松手就上屏，无按钮，上滑撤销）与
+            // 点 mic（撤销/说完了 按钮）。
+            overlay.classList.toggle('hold', recording && this.voiceSession === 'space-hold');
+            if (!recording) this.resetSlideCancel();
             document.getElementById('voiceStatus').textContent =
                 this.voiceState === 'listening' ? t("正在聆听…")
                 : this.voiceState === 'loading' ? t("启动识别…")
@@ -5094,7 +5146,7 @@
                 : '';
             document.getElementById('voiceHint').textContent =
                 this.voiceSession === 'space-hold'
-                    ? t("松手结束")
+                    ? t("松手上屏")
                     : t("点击任意位置结束");
             if (payload.message && this.voiceState === 'error') {
                 document.getElementById('voiceStatus').textContent = payload.message;
@@ -5260,6 +5312,10 @@
         closeSettingsPanel: () => keyboard.closeSettingsPanel(),
         toggleControlView: () => keyboard.setControlView(!keyboard.ctrlView),
         showNumpad: () => keyboard.showNumpad(),
+        // Voice-overlay preview hooks: 长按空格的浮层（无按钮、上滑撤销）
+        // 与 mic 浮层不同形；preview 页没有真实的按住手势，用钩子驱动。
+        setVoiceSession: session => { keyboard.voiceSession = session; },
+        previewVoiceSlide: progress => keyboard.updateSlideCancel(progress),
         clearEditor: () => keyboard.clearEditorBridge(),
         // The native re-show path lands the keyboard on its
         // main view.

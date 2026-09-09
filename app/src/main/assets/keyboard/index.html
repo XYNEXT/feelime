@@ -277,20 +277,22 @@
             <div id="partialText" aria-live="polite"></div>
             <div id="levelBar"><i></i></div>
             <div id="voiceHint" data-i18n="点击任意位置结束">点击任意位置结束</div>
-            <!-- 底部动作行：撤销（描边幽灵按钮，单击即弃稿）与
-                 说完了（accent 大按钮，结束并上屏）——视觉重量一眼区分。 -->
+            <!-- 长按空格的浮层专用：上滑撤销的进度提示（随上滑变明显）。 -->
+            <div id="voiceSlideHint" data-i18n="上滑撤销">上滑撤销</div>
+            <!-- mic 浮层动作行：说完了居中大按钮（主要出口）。 -->
             <div id="voiceActions">
-                <button id="voiceClose" type="button" aria-label="撤销本次听写" data-i18n-aria-label="撤销本次听写">
-                    <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true">
-                        <path d="M12.5 8c-2.65 0-5.05.99-6.9 2.6L2 7v9h9l-3.62-3.62c1.39-1.16 3.16-1.88 5.12-1.88 3.54 0 6.55 2.31 7.6 5.5l2.37-.78C21.08 11.03 17.15 8 12.5 8z"/>
-                    </svg><span id="voiceCloseLabel" data-i18n="撤销">撤销</span>
-                </button>
                 <button id="voiceDone" type="button" aria-label="说完了，结束并上屏" data-i18n-aria-label="说完了，结束并上屏">
                     <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true">
                         <path d="M9 16.2L4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4L9 16.2z"/>
                     </svg><span data-i18n="说完了">说完了</span>
                 </button>
             </div>
+            <!-- 撤销（弃稿）回右上角：小而语义明确（↺+文字）。 -->
+            <button id="voiceClose" type="button" aria-label="撤销本次听写" data-i18n-aria-label="撤销本次听写">
+                <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor" aria-hidden="true">
+                    <path d="M12.5 8c-2.65 0-5.05.99-6.9 2.6L2 7v9h9l-3.62-3.62c1.39-1.16 3.16-1.88 5.12-1.88 3.54 0 6.55 2.31 7.6 5.5l2.37-.78C21.08 11.03 17.15 8 12.5 8z"/>
+                </svg><span id="voiceCloseLabel" data-i18n="撤销">撤销</span>
+            </button>
         </div>
     </div>
 

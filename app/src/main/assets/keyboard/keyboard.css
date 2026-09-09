@@ -1050,40 +1050,20 @@ body.height-editing #candidateBar { margin-top: 39px; }
     gap: 9px;
     max-height: calc(100% - 12px);
 }
-/* 底部动作行：撤销（描边幽灵）与 说完了（accent 实心大按钮）。
- * 高度一致、视觉重量拉满对比——主要出口一眼可见，误触撤销也难。 */
+/* mic 浮层：撤销回右上角（小、描边、能看明白即可），
+ * 说完了居中实心大按钮（主要出口）。 */
 #voiceActions {
     display: flex;
-    align-items: stretch;
-    gap: 10px;
+    justify-content: center;
     width: 100%;
     margin-top: 3px;
 }
-#voiceClose {
-    flex: 1;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 5px;
-    min-height: 44px;
-    padding: 0 10px;
-    border: 1px solid var(--line);
-    border-radius: 22px;
-    background: transparent;
-    color: var(--card-sub);
-    font-size: 13px;
-    line-height: 1;
-}
-#voiceClose:active, #voiceClose.active-touch {
-    background: var(--pressed);
-    color: var(--card-text);
-}
 #voiceDone {
-    flex: 1.6;
     display: flex;
     align-items: center;
     justify-content: center;
     gap: 6px;
+    width: 78%;
     min-height: 44px;
     padding: 0 12px;
     border: 0;
@@ -1097,6 +1077,41 @@ body.height-editing #candidateBar { margin-top: 39px; }
 #voiceDone:active, #voiceDone.active-touch {
     background: var(--accent-text);
 }
+#voiceClose {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    height: 24px;
+    padding: 0 8px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: transparent;
+    color: var(--card-sub);
+    font-size: 11px;
+    line-height: 1;
+}
+#voiceClose:active, #voiceClose.active-touch {
+    background: var(--pressed);
+    color: var(--card-text);
+}
+/* 长按空格浮层：无按钮，只有上滑撤销提示（随进度变明显）。 */
+#voiceSlideHint {
+    display: none;
+    font-size: 12px;
+    font-weight: 550;
+    color: var(--card-sub);
+    min-height: 15px;
+}
+#voiceSlideHint.arm {
+    color: var(--accent-text);
+    font-weight: 800;
+}
+#voiceOverlay.hold #voiceActions { display: none; }
+#voiceOverlay.hold #voiceSlideHint { display: block; }
+#voiceOverlay.hold #voiceClose { display: none; }
 /* The recording dot became a half-height mic icon (20px) - the
  * pulse animates the icon itself (colour pulse via opacity), both themes. */
 #voiceCard .vc-mic {
@@ -1115,9 +1130,8 @@ body.landscape #voiceCard {
     padding: 10px 12px 9px;
     gap: 5px;
 }
-body.landscape #voiceActions { gap: 7px; margin-top: 1px; }
-body.landscape #voiceClose { min-height: 34px; font-size: 12px; }
-body.landscape #voiceDone { min-height: 34px; font-size: 13px; }
+body.landscape #voiceDone { min-height: 34px; font-size: 13px; width: 70%; }
+body.landscape #voiceClose { top: 4px; right: 4px; height: 21px; padding: 0 7px; font-size: 10px; }
 #voiceStatus { font-size: 13px; font-weight: 650; color: var(--card-text); min-height: 17px; text-align: center; }
 #partialText {
     font-size: 14px;

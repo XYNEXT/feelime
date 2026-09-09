@@ -110,21 +110,24 @@ startVoice 无权限分支改为拉起它；Activity 调 requestPermissions(RECO
   ERROR/MIC_PERMISSION_REQUIRED 就重试 startVoice；
 - 拒绝 → pushState 提示（保留去设置页的手动路径）。
 
-## 2.1 语音卡动作行：撤销 / 说完了
+## 2.1 语音浮层两种形态（撤销/说完了/上滑撤销）
 
 原 ✕ 按钮长得像"关闭"，单击即整段丢弃听写，长篇听写误触挫败感强
-（两击确认方案被否决：确认步骤本身挫败感更强）。最终方案：
+（两击确认方案被否决：确认步骤本身挫败感更强）。按入口分两种形态：
 
-- 浮层底部新增动作行，两个按钮视觉重量一眼区分：
-  - 「↺ 撤销」：描边幽灵按钮（透明底 + `--line` 描边），图标+文字
-    明确"弃稿"语义，**单击即撤销**（无确认），成功后 toast
-    「已撤销本次听写」；aria-label 撤销本次听写。
-  - 「✓ 说完了」：accent 实心大按钮（flex 1.6 倍宽、44px 高），
-    结束并上屏（与点卡片任意位置同一路径），是浮层的主要出口。
-- 点卡片/遮罩任意位置仍是「结束并上屏」（requestVoiceStop(false)），
-  提示文案不变。
-- 横屏压缩到 34px 高，卡片 max-height 钳制内不裁切。
-
+- **mic 浮层**（点工具栏麦克风，「点击任意位置结束」不变）：
+  - 「↺ 撤销」小按钮回**右上角**（描边幽灵、↺+文字、24px 高），
+    单击弃稿 + toast「已撤销本次听写」；aria-label 撤销本次听写。
+  - 「✓ 说完了」accent 实心大按钮**居中**（44px 高、卡片宽 78%），
+    结束并上屏——浮层的主要出口。
+- **长按空格浮层**（「松手上屏」）：无任何按钮——
+  - **上滑撤销手势**：按住期间上滑，浮层随进度（110px 满程）变小
+    （scale 1→0.78）变透明（opacity 1→0.45），「上滑撤销」字样
+    0.55→1 不透明度、过阈值进入 arm 态（accent 加粗）；
+  - 过阈值松手=撤销（toast），未过阈值或原地松手=上屏；
+  - 「上滑撤销」提示只在 hold 形态显示（`#voiceOverlay.hold`）。
+- 实现载体：`voiceSession`（'space-hold' / 其他）驱动 overlay 的
+  hold 类；preview 页用 setVoiceSession/previewVoiceSlide 钩子模拟。
 ## 3. 键盘 zip 签名不符可确认导入
 
 现状：KeyboardPackageVerifier 对 SIGNATURE_BAD 一律拒绝
