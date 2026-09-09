@@ -166,8 +166,9 @@
         "取消语音输入": "Cancel voice input",
         "撤销本次听写": "Discard this dictation",
         "撤销": "Discard",
-        "再点一次撤销": "Tap again to discard",
         "已撤销本次听写": "Dictation discarded",
+        "说完了，结束并上屏": "Done — finish and insert",
+        "说完了": "Done",
         "当前版本不支持取消语音输入，请更新 APK": "Update the app to enable voice cancellation.",
         "关闭组合键浮层": "Close shortcut menu",
         "Meta 键": "Meta key",
@@ -1026,20 +1027,20 @@
             const voiceClose = document.getElementById('voiceClose');
             voiceClose.addEventListener('click', event => {
                 event.stopPropagation();
-                // 弃稿是毁灭性操作（长篇听写一击全丢）：已经说了内容时
-                // 第一次点只进入武装态，2.6s 内再点一次才真正撤销；
-                // 还没说话时单击直接撤销（没有可丢的东西）。
-                const partial = (document.getElementById('partialText').textContent || '').trim();
-                if (partial && !this.voiceCancelArmed) {
-                    this.armVoiceCancel();
-                    return;
-                }
-                this.disarmVoiceCancel();
+                // 撤销=弃稿：图标+文字明确语义，单击即撤销（无确认）。
                 if (this.requestVoiceStop(true)) {
                     this.showToast(t("已撤销本次听写"));
                 }
             });
             this.bindPressFeedback(voiceClose);
+            const voiceDone = document.getElementById('voiceDone');
+            voiceDone.addEventListener('click', event => {
+                // 说完了=结束并上屏（与点卡片任意位置同一路径），大按钮
+                // 是浮层里的主要出口。
+                event.stopPropagation();
+                this.requestVoiceStop(false);
+            });
+            this.bindPressFeedback(voiceDone);
             // The toolbar mic needs bindTouch (preventDefault + active-touch
             // + manual click dispatch), unlike the plain-click toolbar tools.
             this.bindTouch(document.getElementById('mic'));
@@ -1160,32 +1161,6 @@
             }
             Native.stopVoice(this.token);
             return false;
-        }
-
-        /** 撤销按钮的两击确认：武装态换文案+高亮，超时或会话结束自动复原。 */
-        armVoiceCancel() {
-            this.voiceCancelArmed = true;
-            const button = document.getElementById('voiceClose');
-            if (!button) return;
-            button.classList.add('arm');
-            const label = document.getElementById('voiceCloseLabel');
-            if (label) label.textContent = t("再点一次撤销");
-            if (this.voiceCancelTimer) clearTimeout(this.voiceCancelTimer);
-            this.voiceCancelTimer = setTimeout(() => this.disarmVoiceCancel(), 2600);
-        }
-
-        disarmVoiceCancel() {
-            if (!this.voiceCancelArmed) return;
-            this.voiceCancelArmed = false;
-            if (this.voiceCancelTimer) {
-                clearTimeout(this.voiceCancelTimer);
-                this.voiceCancelTimer = null;
-            }
-            const button = document.getElementById('voiceClose');
-            if (!button) return;
-            button.classList.remove('arm');
-            const label = document.getElementById('voiceCloseLabel');
-            if (label) label.textContent = t("撤销");
         }
 
         /* ===== rendering ===== */
@@ -5112,7 +5087,6 @@
             const overlay = document.getElementById('voiceOverlay');
             const recording = ['listening', 'loading', 'stopping'].includes(this.voiceState);
             overlay.classList.toggle('open', recording);
-            if (!recording) this.disarmVoiceCancel();
             document.getElementById('voiceStatus').textContent =
                 this.voiceState === 'listening' ? t("正在聆听…")
                 : this.voiceState === 'loading' ? t("启动识别…")

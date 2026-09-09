@@ -1050,33 +1050,52 @@ body.height-editing #candidateBar { margin-top: 39px; }
     gap: 9px;
     max-height: calc(100% - 12px);
 }
+/* 底部动作行：撤销（描边幽灵）与 说完了（accent 实心大按钮）。
+ * 高度一致、视觉重量拉满对比——主要出口一眼可见，误触撤销也难。 */
+#voiceActions {
+    display: flex;
+    align-items: stretch;
+    gap: 10px;
+    width: 100%;
+    margin-top: 3px;
+}
 #voiceClose {
-    position: absolute;
-    top: 6px;
-    right: 6px;
+    flex: 1;
     display: flex;
     align-items: center;
-    gap: 4px;
-    height: 26px;
-    padding: 0 9px;
-    border: 0;
-    border-radius: 13px;
-    background: var(--pressed);
+    justify-content: center;
+    gap: 5px;
+    min-height: 44px;
+    padding: 0 10px;
+    border: 1px solid var(--line);
+    border-radius: 22px;
+    background: transparent;
     color: var(--card-sub);
-    font-size: 12px;
+    font-size: 13px;
     line-height: 1;
-}
-#voiceClose.arm {
-    background: var(--danger);
-    color: #fff;
 }
 #voiceClose:active, #voiceClose.active-touch {
     background: var(--pressed);
     color: var(--card-text);
 }
-#voiceClose.arm:active, #voiceClose.arm.active-touch {
-    background: var(--danger);
-    color: #fff;
+#voiceDone {
+    flex: 1.6;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    min-height: 44px;
+    padding: 0 12px;
+    border: 0;
+    border-radius: 22px;
+    background: var(--accent);
+    color: var(--accent-ink);
+    font-size: 15px;
+    font-weight: 700;
+    line-height: 1;
+}
+#voiceDone:active, #voiceDone.active-touch {
+    background: var(--accent-text);
 }
 /* The recording dot became a half-height mic icon (20px) - the
  * pulse animates the icon itself (colour pulse via opacity), both themes. */
@@ -1096,7 +1115,9 @@ body.landscape #voiceCard {
     padding: 10px 12px 9px;
     gap: 5px;
 }
-body.landscape #voiceClose { top: 4px; right: 4px; height: 22px; padding: 0 7px; font-size: 11px; }
+body.landscape #voiceActions { gap: 7px; margin-top: 1px; }
+body.landscape #voiceClose { min-height: 34px; font-size: 12px; }
+body.landscape #voiceDone { min-height: 34px; font-size: 13px; }
 #voiceStatus { font-size: 13px; font-weight: 650; color: var(--card-text); min-height: 17px; text-align: center; }
 #partialText {
     font-size: 14px;

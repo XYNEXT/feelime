@@ -315,38 +315,28 @@ test('voice card keeps the era-specific submit and cancel controls', () => {
     const cancel = fresh();
     cancel.nativeState({ state: 'listening', partial: '第二段' });
     cancel.tap(cancel.$('voiceClose'));
-    equal(cancel.native.of('cancelVoice').length, 0,
-        'first tap with content only arms the discard');
-    equal(cancel.$('voiceClose').className.includes('arm'), true, 'armed state shown');
-    cancel.tap(cancel.$('voiceClose'));
-    equal(cancel.native.of('cancelVoice').length, 1, 'second tap cancels voice');
+    equal(cancel.native.of('cancelVoice').length, 1,
+        '撤销 discards immediately (icon makes the semantics clear, no confirm)');
     equal(cancel.native.of('stopVoice').length, 0, 'close does not submit');
 });
 
-test('voice discard confirm: empty partial discards at once; arm expires without a second tap', () => {
-    if (!verAtLeast(KEYBOARD_VERSION, '3.24.0')) return;
-    const empty = fresh();
-    empty.nativeState({ state: 'listening', partial: '' });
-    empty.tap(empty.$('voiceClose'));
-    equal(empty.native.of('cancelVoice').length, 1, 'no content yet: single tap discards');
+test('voice overlay: big 说完了 button finishes and inserts, visually distinct from 撤销', () => {
+    if (!verAtLeast(KEYBOARD_VERSION, '3.28.0')) return;
+    const done = fresh();
+    done.nativeState({ state: 'listening', partial: '说完的内容' });
+    done.tap(done.$('voiceDone'));
+    equal(done.native.of('stopVoice').length, 1, '说完了 submits');
+    equal(done.native.of('cancelVoice').length, 0, '说完了 never cancels');
 
-    const arm = fresh();
-    arm.nativeState({ state: 'listening', partial: '说了很长的一段话' });
-    arm.tap(arm.$('voiceClose'));
-    equal(arm.$('voiceCloseLabel').textContent, '再点一次撤销', 'armed label');
-    arm.clock.advance(3000);
-    equal(arm.$('voiceCloseLabel').textContent, '撤销', 'arm expires and restores the label');
-    equal(arm.$('voiceClose').className.includes('arm'), false, 'arm visual cleared');
-    arm.tap(arm.$('voiceClose'));
-    equal(arm.native.of('cancelVoice').length, 0,
-        'after expiry the first tap only re-arms');
+    const card = fresh();
+    card.nativeState({ state: 'listening', partial: '' });
+    card.tap(card.$('voiceCard'));
+    equal(card.native.of('stopVoice').length, 1, 'card tap still submits (hint unchanged)');
 
-    const sessionEnd = fresh();
-    sessionEnd.nativeState({ state: 'listening', partial: '又一段' });
-    sessionEnd.tap(sessionEnd.$('voiceClose'));
-    sessionEnd.nativeState({ state: 'idle' });
-    equal(sessionEnd.$('voiceClose').className.includes('arm'), false,
-        'session end clears the armed state');
+    const distinct = fresh();
+    distinct.nativeState({ state: 'listening', partial: '' });
+    equal(distinct.$('voiceDone').textContent.trim(), '说完了',
+        'done button reads 说完了 (vs 撤销)'); // 视觉比例由 preview/真机截图把关
 });
 
 test('voice entry hints match the gesture that started it', () => {
