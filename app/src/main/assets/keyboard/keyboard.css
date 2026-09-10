@@ -418,8 +418,6 @@ body.settings-page .compose-tool { display: none; }
     white-space: nowrap;
     overflow: hidden;
 }
-/* The key map's second-row indent is a bare spacer (no paint). */
-.kmap-pad { min-width: 0; }
 .sym-blank { flex: 1; min-width: 0; height: var(--kb-row-h, 44px); background: transparent; }
 /* 分词 (syllable separator) rides in the Shift slot of Chinese layouts. */
 .sep { font-size: 14px; font-weight: 500; }
@@ -529,12 +527,14 @@ body.landscape .num-grid { gap: 3px; }
 .kb-key[data-lp="lock"],
 .kb-key[data-lp="numpad"],
 .kb-key[data-lp="mode-menu"],
+.kb-key[data-lp="voice-hold"],
 #ctrlLayer .ctrl-mod {
     position: relative;
 }
 .kb-key[data-lp="lock"]::after,
 .kb-key[data-lp="numpad"]::after,
 .kb-key[data-lp="mode-menu"]::after,
+.kb-key[data-lp="voice-hold"]::after,
 #ctrlLayer .ctrl-mod::after {
     content: '';
     position: absolute;
@@ -1062,16 +1062,16 @@ body.height-editing #candidateBar { margin-top: 39px; }
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 6px;
-    width: 78%;
-    min-height: 44px;
+    gap: 5px;
+    width: 58%;
+    min-height: 36px;
     padding: 0 12px;
     border: 0;
-    border-radius: 22px;
+    border-radius: 18px;
     background: var(--accent);
     color: var(--accent-ink);
-    font-size: 15px;
-    font-weight: 700;
+    font-size: 14px;
+    font-weight: 650;
     line-height: 1;
 }
 #voiceDone:active, #voiceDone.active-touch {
@@ -1148,7 +1148,7 @@ body.landscape #voiceCard {
     padding: 10px 12px 9px;
     gap: 5px;
 }
-body.landscape #voiceDone { min-height: 34px; font-size: 13px; width: 70%; }
+body.landscape #voiceDone { min-height: 30px; font-size: 13px; width: 58%; }
 body.landscape #voiceClose { top: 4px; right: 4px; height: 21px; padding: 0 7px; font-size: 10px; }
 /* 横屏卡片同锚点 42%（原 50% 会把下方胶囊挤进空格键行）。 */
 body.landscape #voiceCard { top: 42%; }
@@ -1437,33 +1437,6 @@ body.expanded #preeditLine { display: none; }
 }
 #settingsPanel.open { display: flex; }
 #settingsPanel[hidden] { display: none; }
-/* / 自然码 key map drawn as an actual key layout.
- * No more shift/⌫ placeholder cells - every row is centered
- * on its own (flex), keys keep one uniform width, so the shorter third row
- * reads as a proper centered row instead of a padded one. V's
- * two short finals share one line ("ui ü"). */
-#schemaMap { margin: 4px 0 2px; font-size: 11px; color: var(--text); }
-#schemaMap .map-notes { margin-bottom: 8px; }
-#schemaMap .map-line { margin-bottom: 4px; color: var(--muted); font-size: 11px; }
-#schemaMap .kmap-row {
-    display: flex;
-    justify-content: center;
-    gap: 4px;
-    margin-bottom: 4px;
-}
-.kmap-key {
-    flex: none;
-    width: 9.2%;
-    min-width: 0;
-    background: var(--key);
-    border-radius: var(--radius-key);
-    padding: 3px 0;
-    text-align: center;
-    line-height: 1.25;
-}
-.kmap-key b { display: block; font-size: 12px; font-weight: 600; color: var(--text); }
-.kmap-key span { display: block; font-size: 8px; color: var(--muted); white-space: nowrap; }
-.kmap-key i { font-style: normal; font-size: 8px; color: var(--accent-text); }
 /* The custom table's per-row preview. */
 .custom-editor .set-row { align-items: center; }
 .custom-preview {

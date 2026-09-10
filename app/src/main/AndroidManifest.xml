@@ -45,9 +45,14 @@
         <!-- 语音首用权限弹窗的透明壳（userdata.md §2）：只为替 IME Service
              发起 requestPermissions，收到结果即 finish，不进最近任务。
              注意不能 noHistory：官方明确要求请求权限的 Activity 不能用它，
-             否则授权回调不可靠。 -->
+             否则授权回调不可靠。
+             taskAffinity 置空：Service 的 NEW_TASK 启动否则会复用同包
+             SetupActivity 的任务栈，把输入法设置界面顶到前台打断输入流
+             （用户反馈）；空 affinity 让它自起空任务，透明壳叠在用户
+             当前界面上。 -->
         <activity
             android:name=".VoicePermissionActivity"
+            android:taskAffinity=""
             android:excludeFromRecents="true"
             android:exported="false"
             android:finishOnTaskLaunch="true"

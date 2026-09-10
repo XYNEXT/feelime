@@ -1219,31 +1219,20 @@ test('settings sub-pages: nav, key map, back (requirements 1+6)', () => {
     const nav = label => [...world.$('settingsPanel').querySelectorAll('.set-row')]
         .find(row => row.querySelector('.set-label').textContent === label)
         .querySelector('.set-nav');
-    // schema sub-page: a real key layout (3 QWERTY rows, initials on v/i/u).
-    world.tap(nav('双拼键位'));
-    const rows = world.document.querySelectorAll('#schemaMap .kmap-row');
-    equal(rows.length, 3, 'key map renders three QWERTY rows');
-    const cells = world.document.querySelectorAll('#schemaMap .kmap-key');
-    equal(cells.length, 26, 'key map covers 26 keys');
-    const v = [...cells].find(el => el.querySelector('b').textContent === 'V');
-    assert(v.querySelector('i') && v.querySelector('i').textContent === 'zh', 'v carries zh initial');
     // Sub-page chrome rides the toolbar - title on the
     // left, close on the right; back returns home.
-    equal(world.$('settingsPageBar').querySelector('.page-title').textContent,
-        '双拼键位 - 自然码', 'schema title in the toolbar');
+    world.tap(nav('快捷切换'));
     assert(world.document.body.classList.contains('settings-page'),
         'settings-page hides the regular tools');
-    // harness DOM: structural queries only - back is child 0, close is child 2.
-    world.tap(world.$('settingsPageBar').children[0]);
-    equal(world.document.querySelectorAll('#schemaMap').length, 0, 'back returns home');
     // pair sub-page: still six keyboards, tick BEFORE the name .
-    world.tap(nav('快捷切换'));
     equal(world.document.querySelectorAll('#pairEditor .pair-row').length, 6, 'pair page rows');
     const pairRow = world.document.querySelector('#pairEditor .pair-row');
     assert(pairRow.children[0].classList.contains('pair-tick'),
         'pair tick precedes the name');
     assert(!pairRow.querySelector('.pair-drag'), 'pair page has no drag handle');
+    // harness DOM: structural queries only - back is child 0, close is child 2.
     world.tap(world.$('settingsPageBar').children[0]);
+    equal(world.document.querySelectorAll('#pairEditor').length, 0, 'back returns home');
     // menu sub-page: tick + name + drag handle LAST.
     world.tap(nav('长按菜单'));
     equal(world.document.querySelectorAll('#menuEditor .pair-row').length, 6, 'menu page rows');
@@ -2034,45 +2023,55 @@ test('leaving the editor via a panel tab clears the editing key height', {since:
         'editing class dropped on tab switch');
 });
 
-test('schema hint teaches natural-code zero initials', () => {
+test('double-pinyin key map lives in the settings app now', {since: '3.29.0'}, () => {
     const world = fresh();
     world.tap(world.$('setupButton'));
-    const nav = [...world.$('settingsPanel').querySelectorAll('.set-row')]
-        .find(row => row.querySelector('.set-label').textContent === '双拼键位')
-        .querySelector('.set-nav');
-    world.tap(nav);
-    // Both notes sit ABOVE the map in one .map-notes block.
-    const notes = [...world.document.querySelectorAll('#schemaMap .map-line')]
-        .map(el => el.textContent).join(' ');
-    assert(notes.includes('爱=ai') && notes.includes('啊=aa'),
-        'natural-code zero-initial hint (aa/ai/…)');
-    assert(!notes.includes('先按'), 'no o-prefix rule in the hint');
-    assert(notes.includes('声母：zh=V'), 'initials note above the map');
-    assert(world.document.querySelector('#schemaMap').children[0].className === 'map-notes',
-        'notes precede the key map');
-    // Double finals stack as two spans inside the key.
-    const w = [...world.document.querySelectorAll('#schemaMap .kmap-key')]
-        .find(el => el.querySelector('b').textContent === 'W');
-    equal(w.querySelectorAll('span').length, 2, 'double finals render two lines');
-    const z = [...world.document.querySelectorAll('#schemaMap .kmap-key')]
-        .find(el => el.querySelector('b').textContent === 'Z');
-    equal(z.querySelectorAll('span').length, 1, 'single final renders one line');
-    // No shift/backspace placeholders - row 3 centers its own
-    // seven keys; (#6) V's short finals share one line.
-    const rows = world.document.querySelectorAll('#schemaMap .kmap-row');
-    const lastRow = rows[2];
-    equal(lastRow.querySelectorAll('.kmap-mod').length, 0,
-        'no shift/backspace placeholders (rows center themselves)');
-    equal(lastRow.querySelectorAll('.kmap-key').length, 7, 'row 3 carries its 7 keys');
-    const v = [...lastRow.querySelectorAll('.kmap-key')]
-        .find(el => el.querySelector('b').textContent === 'V');
-    const vFins = [...v.querySelectorAll('span')].map(el => el.textContent);
-    assert(vFins.includes('ui ü'), 'V folds ui + ü onto one line');
-    // R's two finals (uan/er) stack as separate lines.
-    const r = [...world.document.querySelectorAll('#schemaMap .kmap-key')]
-        .find(c => c.querySelector('b').textContent === 'R');
-    const rFins = [...r.querySelectorAll('span')].map(el => el.textContent);
-    assert(rFins.includes('uan') && rFins.includes('er'), 'R carries uan + er');
+    const labels = [...world.$('settingsPanel').querySelectorAll('.set-label')]
+        .map(el => el.textContent);
+    assert(!labels.includes('双拼键位'), 'schema nav removed from the quick panel');
+    world.tap(world.$('setupButton'));
+});
+
+test('dp scheme switch: sep key and variant tables follow the hello', {since: '3.29.0'}, () => {
+    const world = fresh({ mode: 'double-pinyin' });
+    const sepKey = () => world.document.querySelector('[data-role="sep"]');
+    const sepLabel = () => (sepKey() ? sepKey().textContent : '');
+    equal(sepLabel(), '分词', 'default (ziranma) sep key is the separator');
+    // Sogou hello: the wide slot becomes the ing KEY and emits ';'.
+    world.hello({ mode: 'double-pinyin', dpScheme: 'sogou' });
+    equal(sepLabel(), 'ing', 'sogou sep key shows the ing final');
+    world.tap(sepKey());
+    equal(world.native.of('key').slice(-1)[0].args[0], ';', 'sogou sep key emits ;');
+    // Flypy keeps the separator (its wide slot is still 分词).
+    world.hello({ mode: 'double-pinyin', dpScheme: 'flypy' });
+    equal(sepLabel(), '分词', 'flypy sep key is the separator');
+    world.tap(sepKey());
+    equal(world.native.of('key').slice(-1)[0].args[0], "'", "flypy sep key emits '");
+    // Unknown scheme id (older engine) falls back to 自然码 parsing.
+    world.hello({ mode: 'double-pinyin', dpScheme: 'nonsense' });
+    equal(sepLabel(), '分词', 'unknown scheme falls back to ziranma');
+});
+
+test('dp scheme switch: single-key expansion uses the active scheme table', {since: '3.29.0'}, () => {
+    // Sogou carries ing on ';', so first-key x expands with x+; (xing);
+    // 自然码 has no ';' final. The expansion must follow the hello's scheme.
+    const world = fresh({ mode: 'double-pinyin' });
+    const variants = () => [...world.$('expandVariants').querySelectorAll('.expand-variant')]
+        .map(el => el.textContent);
+    const feed = revision => {
+        world.engineState({
+            mode: 'double-pinyin', composing: true, rawInput: "x'an", revision,
+            candidates: [{ id: 'a', text: '西安' }], hasPreviousPage: false, hasNextPage: false,
+        });
+        world.tap(world.$('composeExpand'));
+    };
+    world.hello({ mode: 'double-pinyin', dpScheme: 'sogou' });
+    feed(5);
+    assert(variants().some(keys => keys.startsWith("x;'")), 'sogou x expands with ; (xing)');
+    // Back to 自然码: the same input no longer offers ; expansions.
+    world.hello({ mode: 'double-pinyin', dpScheme: 'ziranma' });
+    feed(6);
+    assert(!variants().some(keys => keys.startsWith("x;'")), 'ziranma x never expands to ;');
 });
 
 // ---------------------------------------------------------------- modes
@@ -2121,7 +2120,8 @@ test('setup button opens the quick settings panel; full settings entry calls ope
         // tools live on the toolbar; 定制键盘 moved to the app settings page.
     const rows = [...panel.querySelectorAll('.set-label')].map(el => el.textContent);
     equal(JSON.stringify(rows),
-        JSON.stringify(['色彩模式', (verAtLeast(KEYBOARD_VERSION, '3.22.0') ? '光标移动速度' : '滑动跟手'), '双拼键位', '快捷切换', '长按菜单', '键盘高度']),
+        JSON.stringify(['色彩模式', (verAtLeast(KEYBOARD_VERSION, '3.22.0') ? '光标移动速度' : '滑动跟手'),
+            ...(verAtLeast(KEYBOARD_VERSION, '3.29.0') ? [] : ['双拼键位']), '快捷切换', '长按菜单', '键盘高度']),
         'settings rows present (tools on the toolbar)');
     equal(world.native.of('openSetup').length, 0, 'no openSetup until the full-settings entry');
     // The full-settings entry is a toolbar button next to the
@@ -3892,34 +3892,44 @@ test('old APKs without the bridge method never open the delete menu', () => {
 });
 
 test('DP_INITIAL_FINALS equals the prism spelling-pair derivation', () => {
-    // Review P3-1/P2-5: the variant table is hand-maintained; pin it
-    // to the shipped prism so schema changes cannot silently desync it.
+    // The variant table is generated, not hand-maintained; pin every
+    // scheme's table to its shipped prism so schema changes cannot
+    // silently desync the keyboard's double-pinyin parsing.
     const fs = require('fs');
     const path = require('path');
     const root = path.resolve(__dirname, '../..');
     const js = fs.readFileSync(path.join(root, 'app/src/main/assets/keyboard/keyboard.js'), 'utf8');
-    const block = js.match(/const DP_INITIAL_FINALS = \{([\s\S]*?)\};/);
+    const block = js.match(/const DP_INITIAL_FINALS = (\{.*?\});/);
     assert(block, 'variant table present in keyboard.js');
-    const table = {};
-    for (const m of block[1].matchAll(/(\w): '([^']*)'/g)) table[m[1]] = m[2];
-    const derived = {};
-    const prism = fs.readFileSync(
-        path.join(root, 'app/src/main/assets/engine-data/rime/ziranma_double_pinyin.prism.txt'),
-        'utf8');
-    for (const line of prism.split('\n')) {
-        const fields = line.split('\t');
-        // Continuation rows (empty col0) repeat the previous spelling: no new
-        // first-two-key pair. Single-key abbrev spellings have no second key.
-        if (fields.length < 2 || !fields[0] || fields[0].length < 2) continue;
-        const spelling = fields[0];
-        (derived[spelling[0]] = derived[spelling[0]] || new Set()).add(spelling[1]);
+    const tables = JSON.parse(block[1]);
+    const prisms = {
+        ziranma: 'ziranma_double_pinyin',
+        flypy: 'double_pinyin_flypy',
+        sogou: 'double_pinyin_sogou',
+    };
+    for (const [scheme, prismId] of Object.entries(prisms)) {
+        const table = tables[scheme];
+        assert(table, `variant table for ${scheme}`);
+        const derived = {};
+        const prism = fs.readFileSync(
+            path.join(root, 'app/src/main/assets/engine-data/rime', `${prismId}.prism.txt`),
+            'utf8');
+        for (const line of prism.split('\n')) {
+            const fields = line.split('\t');
+            // Continuation rows (empty col0) repeat the previous spelling: no
+            // new first-two-key pair. Single-key abbrev spellings have no
+            // second key.
+            if (fields.length < 2 || !fields[0] || fields[0].length < 2) continue;
+            const spelling = fields[0];
+            (derived[spelling[0]] = derived[spelling[0]] || new Set()).add(spelling[1]);
+        }
+        const expected = {};
+        for (const first of Object.keys(derived).sort()) {
+            expected[first] = [...derived[first]].sort().join('');
+        }
+        equal(JSON.stringify(table), JSON.stringify(expected),
+            `${scheme}: table keys ${Object.keys(table).length} vs prism initials ${Object.keys(expected).length}`);
     }
-    const expected = {};
-    for (const first of Object.keys(derived).sort()) {
-        expected[first] = [...derived[first]].sort().join('');
-    }
-    equal(JSON.stringify(table), JSON.stringify(expected),
-        `table keys ${Object.keys(table).length} vs prism initials ${Object.keys(expected).length}`);
 });
 
 

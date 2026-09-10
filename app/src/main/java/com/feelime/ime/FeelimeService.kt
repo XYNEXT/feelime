@@ -149,6 +149,21 @@ class FeelimeService : InputMethodService(), AsrEngine.Listener {
         }
     }
 
+    /** 设置页切换双拼方案（docs/design/double-pinyin.md §2）：当前就是双拼
+     * 会话时立即按新 schema 重建；顺带重推 hello，键盘的解析表与 sep 键
+     * 跟着切换。方案落盘在先，非双拼会话下次建会话自然取到。 */
+    private val dpSchemeReceiver = object : android.content.BroadcastReceiver() {
+        override fun onReceive(context: android.content.Context?, intent: android.content.Intent?) {
+            if (intent?.action != ACTION_DP_SCHEME_CHANGED) return
+            onMain {
+                if (coordinator.currentMode == com.feelime.ime.engine.InputMode.DOUBLE_PINYIN) {
+                    coordinator.recreateEngineSession { }
+                }
+                pushBridgeHello()
+            }
+        }
+    }
+
     /** 语音权限透明 Activity 的回执（docs/design/userdata.md §2）。 */
     private val voicePermissionReceiver = object : android.content.BroadcastReceiver() {
         override fun onReceive(context: android.content.Context?, intent: android.content.Intent?) {
@@ -247,6 +262,11 @@ class FeelimeService : InputMethodService(), AsrEngine.Listener {
         registerReceiver(
             userdataReceiver,
             android.content.IntentFilter(ACTION_USERDATA_RESTORED),
+            androidx.core.content.ContextCompat.RECEIVER_NOT_EXPORTED,
+        )
+        registerReceiver(
+            dpSchemeReceiver,
+            android.content.IntentFilter(ACTION_DP_SCHEME_CHANGED),
             androidx.core.content.ContextCompat.RECEIVER_NOT_EXPORTED,
         )
         registerReceiver(
@@ -590,6 +610,7 @@ class FeelimeService : InputMethodService(), AsrEngine.Listener {
         clipboardStore.stop()
         unregisterReceiver(updateReceiver)
         unregisterReceiver(userdataReceiver)
+        unregisterReceiver(dpSchemeReceiver)
         unregisterReceiver(voicePermissionReceiver)
         UiLanguage.preferences(this)
             .unregisterOnSharedPreferenceChangeListener(uiLanguageListener)
@@ -641,7 +662,12 @@ class FeelimeService : InputMethodService(), AsrEngine.Listener {
             runCatching {
                 startActivity(
                     Intent(this, VoicePermissionActivity::class.java)
-                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                        .addFlags(
+                            Intent.FLAG_ACTIVITY_NEW_TASK or
+                                // 空 taskAffinity 的透明壳叠在当前界面上，
+                                // 不带任务切换动画（userdata.md §2）。
+                                Intent.FLAG_ACTIVITY_NO_ANIMATION,
+                        ),
                 )
             }.onFailure { failure ->
                 android.util.Log.w("FeelimeService", "voice permission activity launch dropped", failure)
@@ -1172,6 +1198,7 @@ class FeelimeService : InputMethodService(), AsrEngine.Listener {
             )
             .put("pageGenerationToken", pageToken)
             .put("mode", coordinator.currentMode.wireName)
+            .put("dpScheme", com.feelime.ime.engine.DoublePinyinScheme.resolve(this))
             .put(
                 "engineDataReady",
                 JSONObject().apply {

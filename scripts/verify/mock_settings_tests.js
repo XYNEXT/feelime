@@ -58,6 +58,7 @@ class MockSettingsNative {
     addImeTile(...a) { this._rec('addImeTile', a); }
     requestMic(...a) { this._rec('requestMic', a); }
     openAppStore(...a) { this._rec('openAppStore', a); }
+    setDoublePinyinScheme(...a) { this._rec('setDoublePinyinScheme', a); }
     setModelBackend(...a) { this._rec('setModelBackend', a); }
     setModelDownloadSource(...a) { this._rec('setModelDownloadSource', a); }
     downloadModel(...a) { this._rec('downloadModel', a); }
@@ -634,6 +635,50 @@ test('Play app updates have their own store action while keyboard ZIP controls r
     world.$('btnAppStore').listeners.find(l => l.type === 'click').handler();
     equal(world.native.of('openAppStore').slice(-1)[0].args, [world.token], 'store action authenticated');
     assert(!world.$('btnInstallZip').hidden, 'keyboard resource installation stays available');
+});
+
+// ------------------------------------------------- double-pinyin scheme (§2)
+
+const DP_DATA = {
+    schemes: ['ziranma', 'flypy', 'sogou'],
+    maps: {
+        ziranma: [[['q', 'iu', null, null]], [['v', 'ui ü', null, 'zh']], [['m', 'ian', null, null]]],
+        sogou: [[['q', 'iu', null, null]], [[';', 'ing', null, null]]],
+        flypy: [[['k', 'ing', 'uai', null]]],
+    },
+};
+
+test('double-pinyin selector reflects state and sends the change with the token', () => {
+    const world = new SettingsWorld();
+    world.sandbox.FeelimeDp = DP_DATA;
+    world.push({ ...BASE_STATE, dpScheme: 'flypy' });
+    equal(world.$('dpScheme').value, 'flypy', 'state value wins');
+    assert(world.$('dpNote').textContent.length > 0, 'per-scheme note rendered');
+    const select = world.$('dpScheme');
+    select.value = 'sogou';
+    select.listeners.find(l => l.type === 'change').handler({ target: select });
+    equal(world.lastCall('setDoublePinyinScheme').args, ['sogou', world.token],
+        'setDoublePinyinScheme token');
+    // Native stays authoritative after the round trip.
+    world.push({ ...BASE_STATE, dpScheme: 'sogou' });
+    equal(world.$('dpScheme').value, 'sogou', 'selection follows the state push');
+});
+
+test('double-pinyin key map renders the active scheme chart', () => {
+    const world = new SettingsWorld();
+    world.sandbox.FeelimeDp = DP_DATA;
+    world.push({ ...BASE_STATE, dpScheme: 'sogou' });
+    const cells = [...world.doc.querySelectorAll('#dpKeymap .kmap-key')];
+    const semi = cells.find(el => el.querySelector('b').textContent === ';');
+    assert(semi, 'sogou chart carries the ; key cell');
+    assert(semi.textContent.includes('ing'), '; cell shows the ing final');
+    // Switching schemes redraws the chart from the same host.
+    const select = world.$('dpScheme');
+    select.value = 'flypy';
+    world.push({ ...BASE_STATE, dpScheme: 'flypy' });
+    const flypyCells = [...world.doc.querySelectorAll('#dpKeymap .kmap-key')];
+    const k = flypyCells.find(el => el.querySelector('b').textContent === 'K');
+    assert(k && k.textContent.includes('uai'), 'flypy chart shows K=ing/uai');
 });
 
 // ---------------------------------------------------------------- runner

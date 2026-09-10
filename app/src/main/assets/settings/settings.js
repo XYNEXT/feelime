@@ -60,7 +60,15 @@ const I18N = {
         "page.test": "输入测试",
         "input.double.title": "双拼方案",
         "input.double.badge": "输入",
-        "input.double.description": "当前方案：自然码。自然码与全拼共用声母（zh=V、ch=I、sh=U 三个双声母除外）；韵母按自然码映射到对应按键，完整键位图见键盘快捷设置 → 双拼键位。零声母（a/e 开头）直接打全拼：啊=aa、爱=ai、安=an、恩=en、二=er。",
+        "input.double.scheme": "方案",
+        "input.double.hint": "键盘切到「双拼」模式后按所选方案出字。",
+        "input.double.ziranma": "自然码",
+        "input.double.flypy": "小鹤双拼",
+        "input.double.sogou": "搜狗双拼",
+        "input.double.note.ziranma": "声母与全拼相同（zh=V、ch=I、sh=U 除外）。零声母（a/e 开头）直接打全拼：啊=aa、爱=ai、安=an、恩=en、二=er。",
+        "input.double.note.flypy": "声母与全拼相同（zh=V、ch=I、sh=U 除外）。零声母（a/e/o 开头）双打首字母，也可打全拼：啊=aa、爱=ai、恩=ef、二=er。",
+        "input.double.note.sogou": "声母与全拼相同（zh=V、ch=I、sh=U 除外）；ing 在「;」键（键盘上即分词键位置），ü 在 Y。零声母固定先打 O：啊=oa、爱=ol、安=oj、恩=of、二=or。",
+        "input.double.mapCaption": "韵母键位图（键名下方为该键韵母，右下为双声母）",
         "input.custom.title": "定制键盘",
         "input.custom.badge": "高级",
         "input.custom.enabled": "启用定制键盘",
@@ -206,6 +214,7 @@ const I18N = {
         "custom.none": "未定制",
         "custom.count": "已定制 {count} 个键",
         "error.INVALID_CUSTOM_JSON": "定制 JSON 格式不正确。",
+        "error.INVALID_DP_SCHEME": "双拼方案选项无效。",
         "error.EMPTY_SOURCE": "请先填入更新源地址（metainfo.json）。",
         "error.EMPTY_URL": "请先填入键盘包地址。",
         "error.INVALID_SOURCE": "更新源地址无效。",
@@ -304,7 +313,15 @@ const I18N = {
         "page.test": "Input test",
         "input.double.title": "Double-pinyin scheme",
         "input.double.badge": "Input",
-        "input.double.description": "Current scheme: Ziranma. It shares initials with full pinyin (except the zh=V, ch=I, and sh=U double initials); finals follow the Ziranma key map. See Quick settings → Double-pinyin keys for the full map. Zero-initial syllables (starting with a/e) use full pinyin: 啊=aa、爱=ai、安=an、恩=en、二=er。",
+        "input.double.scheme": "Scheme",
+        "input.double.hint": "Takes effect when the keyboard is in Double Pinyin mode.",
+        "input.double.ziranma": "Ziranma",
+        "input.double.flypy": "Flypy (小鹤)",
+        "input.double.sogou": "Sogou",
+        "input.double.note.ziranma": "Initials match full Pinyin (except zh=V, ch=I, sh=U). Zero-initial syllables (a/e) use full Pinyin: 啊=aa、爱=ai、安=an、恩=en、二=er.",
+        "input.double.note.flypy": "Initials match full Pinyin (except zh=V, ch=I, sh=U). Zero-initial syllables (a/e/o) double the first letter; full Pinyin also works: 啊=aa、爱=ai、恩=ef、二=er.",
+        "input.double.note.sogou": "Initials match full Pinyin (except zh=V, ch=I, sh=U); ing sits on the “;” key (the wide key on the keyboard), ü on Y. Zero-initial syllables always start with O: 啊=oa、爱=ol、安=oj、恩=of、二=or.",
+        "input.double.mapCaption": "Final key map (finals under each key, double initials bottom-right)",
         "input.custom.title": "Custom keyboard",
         "input.custom.badge": "Advanced",
         "input.custom.enabled": "Enable custom keyboard",
@@ -450,6 +467,7 @@ const I18N = {
         "custom.none": "No custom keys",
         "custom.count": "{count} custom keys",
         "error.INVALID_CUSTOM_JSON": "The custom JSON format is invalid.",
+        "error.INVALID_DP_SCHEME": "Invalid double-pinyin scheme.",
         "error.EMPTY_SOURCE": "Enter an update source (metainfo.json) first.",
         "error.EMPTY_URL": "Enter a keyboard package URL first.",
         "error.INVALID_SOURCE": "The update source URL is invalid.",
@@ -562,6 +580,7 @@ function applyLocale() {
     });
     const language = $("uiLanguage");
     if (language) language.value = uiChoice;
+    if (lastState) renderDoublePinyin(lastState);
     if (pendingModelConsent) {
         $("modelConsentMessage").textContent = t("model.consent.message", {
             name: pendingModelConsent.name,
@@ -674,6 +693,9 @@ window.FeelimeSettings = {
             case "customError":
                 setNote("customNote", eventText(event, "error.INVALID_CUSTOM_JSON"));
                 break;
+            case "dpSchemeError":
+                setNote("dpNote", eventText(event, "error.INVALID_DP_SCHEME"));
+                break;
             case "asrNote":
                 setNote("asrNote", eventText(event, "note.saved", {
                     count: event.count, max: event.max || event.maxLines, chars: event.chars || event.maxChars,
@@ -718,11 +740,62 @@ function render(state) {
     state = state || {};
     renderHero(state);
     renderIme(state);
+    renderDoublePinyin(state);
     renderVoice(state);
     renderAsr(state);
     renderCustom(state);
     renderUpdate(state);
     renderAbout(state);
+}
+
+/** 双拼方案 + 键位图（dp-data.js 的 window.FeelimeDp 提供各方案键位）。 */
+function renderDoublePinyin(state) {
+    const select = $("dpScheme");
+    if (!select) return;
+    const scheme = ["ziranma", "flypy", "sogou"].includes(state.dpScheme)
+        ? state.dpScheme : "ziranma";
+    if (document.activeElement !== select) select.value = scheme;
+    $("dpNote").textContent = t(`input.double.note.${select.value}`);
+    renderDpKeymap(select.value);
+}
+
+function renderDpKeymap(scheme) {
+    const host = $("dpKeymap");
+    if (!host) return;
+    host.replaceChildren();
+    const data = window.FeelimeDp || {};
+    const rows = data.maps && data.maps[scheme];
+    if (!Array.isArray(rows)) return;
+    const caption = document.createElement("div");
+    caption.className = "hint block";
+    caption.textContent = t("input.double.mapCaption");
+    host.append(caption);
+    // [key, final1, final2|null, initial|null] per cell; two finals stack
+    // inside the key, V's short pair shares one line ("ui ü").
+    rows.forEach(cells => {
+        const row = document.createElement("div");
+        row.className = "kmap-row";
+        cells.forEach(([key, first, second, initial]) => {
+            const cell = document.createElement("div");
+            cell.className = "kmap-key";
+            const cap = document.createElement("b");
+            cap.textContent = key === ";" ? ";" : key.toUpperCase();
+            cell.append(cap);
+            [first, second].forEach(final => {
+                if (!final) return;
+                const fin = document.createElement("span");
+                fin.textContent = final;
+                cell.append(fin);
+            });
+            if (initial) {
+                const ini = document.createElement("i");
+                ini.textContent = initial;
+                cell.append(ini);
+            }
+            row.append(cell);
+        });
+        host.append(row);
+    });
 }
 
 function renderHero(state) {
@@ -1080,6 +1153,7 @@ $("btnAddShortcut").addEventListener("click", () => call("addImeShortcut"));
 $("btnAddTile").addEventListener("click", () => call("addImeTile"));
 $("btnMic").addEventListener("click", () => call("requestMic"));
 $("uiLanguage").addEventListener("change", event => setUiLanguage(event.target.value));
+$("dpScheme").addEventListener("change", event => call("setDoublePinyinScheme", event.target.value));
 $("modelBackend").addEventListener("change", event => call("setModelBackend", event.target.value));
 $("modelDownloadSource").addEventListener("change", event => {
     const visible = event.target.value === "custom";

@@ -1,4 +1,5 @@
 {
+  "formatVersion": 1,
   "files": {
     "hunspell/fr.aff": {
       "bytes": 199870,
@@ -27,6 +28,30 @@
     "mozc/mozc.data": {
       "bytes": 18855160,
       "sha256": "fbb9a23419d677a33968145cfe1979dac6e7d3c28712d469854b4707a5965ed1"
+    },
+    "rime/double_pinyin_flypy.prism.bin": {
+      "bytes": 21816,
+      "sha256": "04a75ce105632f16ecba378586aafdfeeffc65fbed59858a6ceb82cb3097f057"
+    },
+    "rime/double_pinyin_flypy.prism.txt": {
+      "bytes": 13537,
+      "sha256": "55ed1c8855d45e23e10600f99daf34861a3321c948c1208163c66f1c48481a4f"
+    },
+    "rime/double_pinyin_flypy.schema.yaml": {
+      "bytes": 39028,
+      "sha256": "380ae29e4c6fc0f1deadc68d0fbf3c7f767a44972a0f544e973f9bd37e53fda3"
+    },
+    "rime/double_pinyin_sogou.prism.bin": {
+      "bytes": 22128,
+      "sha256": "a476d44777327baf40a92ecace2cd4d63477ee13a0b901ef347b32fe3d78d586"
+    },
+    "rime/double_pinyin_sogou.prism.txt": {
+      "bytes": 13762,
+      "sha256": "4682a75378609836e75a0151c7fe11e3569fb074f6457521d9410865fdf9c2f1"
+    },
+    "rime/double_pinyin_sogou.schema.yaml": {
+      "bytes": 39089,
+      "sha256": "26526ff2b43bec41f817d32f4020b23ca71f82fb9c8a024f53891e5509c49c47"
     },
     "rime/luna_pinyin.prism.bin": {
       "bytes": 31728,
@@ -76,6 +101,5 @@
       "bytes": 39293,
       "sha256": "7d4f5c1e0beb8d7f9ff6c9ca70c29999f2ea9a33f6025c4d9665eb79bd97d2ab"
     }
-  },
-  "formatVersion": 1
+  }
 }

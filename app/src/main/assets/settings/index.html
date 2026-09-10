@@ -107,7 +107,19 @@
   <main>
     <section class="card" id="sec-dp" aria-labelledby="dpTitle">
       <div class="section-heading"><h2 id="dpTitle" data-i18n="input.double.title">双拼方案</h2><span class="eyebrow" data-i18n="input.double.badge">输入</span></div>
-      <p class="hint block" data-i18n="input.double.description">当前方案：自然码。自然码与全拼共用声母（zh=V、ch=I、sh=U 三个双声母除外）；韵母按自然码映射到对应按键，完整键位图见键盘快捷设置 → 双拼键位。零声母（a/e 开头）直接打全拼：啊=aa、爱=ai、安=an、恩=en、二=er。</p>
+      <div class="row language-row">
+        <span class="row-label">
+          <span data-i18n="input.double.scheme">方案</span>
+          <small data-i18n="input.double.hint">键盘切到「双拼」模式后按所选方案出字。</small>
+        </span>
+        <select id="dpScheme" class="select" aria-label="双拼方案" data-i18n-aria="input.double.scheme">
+          <option value="ziranma" data-i18n="input.double.ziranma">自然码</option>
+          <option value="flypy" data-i18n="input.double.flypy">小鹤双拼</option>
+          <option value="sogou" data-i18n="input.double.sogou">搜狗双拼</option>
+        </select>
+      </div>
+      <p id="dpNote" class="hint block"></p>
+      <div id="dpKeymap"></div>
     </section>
 
     <section class="card" id="sec-custom" aria-labelledby="customTitle">
@@ -325,6 +337,7 @@
   </main>
 </div>
 
+<script src="dp-data.js"></script>
 <script src="settings.js"></script>
 </body>
 </html>

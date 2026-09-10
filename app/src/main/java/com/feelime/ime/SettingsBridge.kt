@@ -37,6 +37,10 @@ import java.util.concurrent.Executors
  * 换目录+重建引擎会话，docs/design/userdata.md §1.2）。 */
 const val ACTION_USERDATA_RESTORED = "com.feelime.ime.USERDATA_RESTORED"
 
+/** 双拼方案切换广播：设置页发，IME 收（当前是双拼会话时按新 schema
+ * 重建会话，并重推 hello 让键盘换解析表/sep 键，double-pinyin.md §2）。 */
+const val ACTION_DP_SCHEME_CHANGED = "com.feelime.ime.DP_SCHEME_CHANGED"
+
 /** The full-settings WebView bridge (design §6.2).
  *
  * Same handshake as the IME bridge (design §5.3): the activity mints a
@@ -248,6 +252,7 @@ class SettingsBridge(
                 .put("enabled", hostEnabled())
                 .put("isDefault", hostIsDefaultIme()))
             .put("mic", JSONObject().put("granted", micGranted()))
+            .put("dpScheme", com.feelime.ime.engine.DoublePinyinScheme.resolve(context))
             .put("appVersion", BuildConfig.VERSION_NAME)
             .put("keyboardVersion", keyboardVersion())
             .put("device", JSONObject()
@@ -544,6 +549,26 @@ class SettingsBridge(
             )
             return@guarded
         }
+        pushState()
+    }
+
+    /** 双拼方案切换（docs/design/double-pinyin.md §2）：落盘偏好并广播，
+     * IME 在当前双拼会话上换 schema 重建；hello 会把新方案推给键盘。 */
+    @JavascriptInterface
+    fun setDoublePinyinScheme(value: String, token: String) = guarded(token) {
+        if (!com.feelime.ime.engine.DoublePinyinScheme.set(context, value)) {
+            pushEvent(
+                JSONObject()
+                    .put("type", "dpSchemeError")
+                    .put("code", "BAD_DP_SCHEME")
+                    .put("message", t(context, "双拼方案选项无效", "Invalid double-pinyin scheme")),
+            )
+            pushState()
+            return@guarded
+        }
+        context.sendBroadcast(
+            Intent(ACTION_DP_SCHEME_CHANGED).setPackage(context.packageName),
+        )
         pushState()
     }
 

@@ -37,7 +37,7 @@ object EngineDataStore {
         return when (mode) {
             InputMode.DIRECT -> true
             InputMode.PINYIN -> File(root, "rime/luna_pinyin.schema.yaml").isFile
-            InputMode.DOUBLE_PINYIN -> File(root, "rime/ziranma_double_pinyin.schema.yaml").isFile
+            InputMode.DOUBLE_PINYIN -> File(root, "rime/${DoublePinyinScheme.schemaId(context)}.schema.yaml").isFile
             InputMode.FRENCH -> File(root, "hunspell/fr.aff").isFile
             InputMode.RUSSIAN -> File(root, "hunspell/ru_RU.aff").isFile
             InputMode.JAPANESE -> File(root, "mozc/mozc.data").isFile

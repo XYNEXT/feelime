@@ -13,6 +13,10 @@
         uiLocale = localStorage.getItem('feelime_ui_locale') ||
             (typeof navigator === 'undefined' || /^zh/i.test(navigator.language) ? 'zh' : 'en');
     } catch (_) {}
+    // Active double-pinyin scheme (ziranma/flypy/sogou) - native owns the
+    // choice (feelime_engine.dp_scheme) and pushes it in every hello;
+    // until then everything uses the default 自然码.
+    let dpScheme = 'ziranma';
     const UI_EN = {
         "英文 Direct": "English",
         "全拼 Pinyin": "Pinyin",
@@ -72,7 +76,6 @@
         "已恢复默认高度": "Default height restored",
         "输入法快捷切换": "Quick switch",
         "长按菜单": "Keyboard menu",
-        "双拼键位 - 自然码": "Double Pinyin · Ziranma",
         "定制键盘": "Custom keys",
         "返回设置首页": "Back to quick settings",
         "收起设置": "Close quick settings",
@@ -82,14 +85,10 @@
         "深色": "Dark",
         "滑动跟手": "Cursor speed",
         "光标移动速度": "Cursor speed",
-        "双拼键位": "Pinyin key map",
-        "自然码": "Ziranma",
         "快捷切换": "Quick switch",
         "{0} 个键盘": "{0} keyboards",
         "键盘高度": "Keyboard height",
         "调节 ›": "Adjust ›",
-        "声母：zh=V ch=I sh=U，其余与拼音相同": "Initials: zh=V, ch=I, sh=U. Others use their Pinyin letter.",
-        "零声母（a/e 开头）：直接打全拼，如 啊=aa、爱=ai、安=an、恩=en、二=er": "Vowel initials (a/e): type full Pinyin, e.g. 啊=aa, 爱=ai, 安=an, 恩=en, 二=er.",
         "粘贴 JSON 定义符号键盘（最多 3 行，每行键数不限）：t=键面，": "Paste JSON to define up to 3 key rows: t=label, ",
         "tap=单击行为（文本 / [esc] 单键 / [ctrl+s] 组合，可混排，如 [esc]ggVGD），": "tap=action (text, [esc], or [ctrl+s]; combine them, e.g. [esc]ggVGD), ",
         "note=长按说明。超宽的行可以左右拖动查看。": "note=long-press description. Swipe wide rows to see more keys.",
@@ -667,33 +666,25 @@
         ya yai yan yang yao ye yi yin ying yo yong you yu yuan yue yun
         za zai zan zang zao ze zei zen zeng zha zhai zhan zhang zhao zhe zhei zhen zheng zhi zhong zhou zhu zhua zhuai zhuan zhuang zhui zhun zhuo zi zong zou zu zuan zui zun zuo`.trim().split(/\s+/);
 
-    // Double-pinyin parse variants: initials key -> the final keys
-    // that form a real spelling with it. Derived mechanically from the
-    // shipped prism's spelling set (first two key columns; scripts/verify/
-    // guard_dp_finals.js re-checks the table against the prism), so zero
-    // initials (a/e/o rows) and ju/qu/xu/yu's dual u/v spellings are exact.
-    const DP_INITIAL_FINALS = {
-        a: 'ahijklno', b: 'acdfghijklmnouxyz', c: 'abefghijkloprsuvz',
-        d: 'abcefghijklmnopqrsuvwxyz', e: 'efginrz', f: 'abcfghjosuz',
-        g: 'abdefghjkloprsuvwyz', h: 'abdefghjkloprsuvwyz',
-        i: 'abdefghijkloprsuvwy', j: 'cdimnpqrstuvwxy',
-        k: 'abdefghjkloprsuvwyz', l: 'abcdeghijklmnopqrstuvwxyz',
-        m: 'abcefghijklmnoquxyz', n: 'abcdefghijklmnopqrstuvwxyz',
-        o: 'abefghjkloruz', p: 'abcfghijklmnouwxyz',
-        q: 'cdimnpqrstuvwxy', r: 'befghijkoprsuvw', s: 'abefghijkloprsuvz',
-        t: 'abceghijklmoprsuvxyz', u: 'abdefghijklopruvwyz',
-        v: 'abdefghijkloprsuvwyz', w: 'afghjlosuz', x: 'cdimnpqrstuvwxy',
-        y: 'abehijklnoprstuvy', z: 'abefghijkloprsuvz',
-    };
+    // Double-pinyin parse variants and the displayed key map come from the
+    // generated block below: per scheme (ziranma / flypy / sogou), derived
+    // from the shipped schemas by scripts/generate-keyboard-data.py and
+    // re-checked against the prisms by scripts/verify/guard_dp_finals.js.
 
     function modeLabel(mode) {
         if (uiLocale === 'en') return ({pinyin: 'PY', 'double-pinyin': 'DP', japanese: 'JP'})[mode] || MODES[mode].label;
         return (MODES[mode] || MODES.direct).label;
     }
 
+    /** Parse-variant table of the ACTIVE scheme (generated block); falls
+     * back to 自然码 when native reported an unknown id (older engine). */
+    function dpFinals() {
+        return DP_INITIAL_FINALS[dpScheme] || DP_INITIAL_FINALS.ziranma;
+    }
+
     // BEGIN GENERATED SCHEMA_MAP
-    // schema-sha256: 7d4f5c1e0beb8d7f9ff6c9ca70c29999f2ea9a33f6025c4d9665eb79bd97d2ab
-    const SCHEMA_MAP_ROWS = [[["q","iu",null,null],["w","ua","ia",null],["e","e",null,null],["r","uan","er",null],["t","ue","ve",null],["y","ing","uai",null],["u","u",null,"sh"],["i","i",null,"ch"],["o","o","uo",null],["p","un",null,null]],[["a","a",null,null],["s","ong","iong",null],["d","iang","uang",null],["f","en",null,null],["g","eng",null,null],["h","ang",null,null],["j","an",null,null],["k","ao",null,null],["l","ai",null,null]],[["z","ei",null,null],["x","ie",null,null],["c","iao",null,null],["v","ui ü",null,"zh"],["b","ou",null,null],["n","in",null,null],["m","ian",null,null]]];
+    // schema-sha256: ziranma=7d4f5c1e0beb8d7f flypy=380ae29e4c6fc0f1 sogou=26526ff2b43bec41
+    const DP_INITIAL_FINALS = {"ziranma":{"a":"ahijklno","b":"acdfghijklmnouxyz","c":"abefghijkloprsuvz","d":"abcefghijklmnopqrsuvwxyz","e":"efginrz","f":"abcfghjosuz","g":"abdefghjkloprsuvwyz","h":"abdefghjkloprsuvwyz","i":"abdefghijkloprsuvwy","j":"cdimnpqrstuvwxy","k":"abdefghjkloprsuvwyz","l":"abcdeghijklmnopqrstuvwxyz","m":"abcefghijklmnoquxyz","n":"abcdefghijklmnopqrstuvwxyz","o":"abefghjkloruz","p":"abcfghijklmnouwxyz","q":"cdimnpqrstuvwxy","r":"befghijkoprsuvw","s":"abefghijkloprsuvz","t":"abceghijklmoprsuvxyz","u":"abdefghijklopruvwyz","v":"abdefghijkloprsuvwyz","w":"afghjlosuz","x":"cdimnpqrstuvwxy","y":"abehijklnoprstuvy","z":"abefghijkloprsuvz"},"flypy":{"a":"acdhijno","b":"abcdfghijklmnopuw","c":"acdefghijorsuvwyz","d":"abcdefghijkmnopqrsuvwxyz","e":"efghinrw","f":"afghjnosuwz","g":"acdefghjklorsuvwxyz","h":"acdefghjklorsuvwxyz","i":"acdefghijklorsuvxyz","j":"biklmnpqrstuvxy","k":"acdefghjklorsuvwxyz","l":"abcdeghijklmnopqrstuvwxyz","m":"abcdefghijkmnopquwz","n":"abcdefghijklmnopqrstuvwxyz","o":"ouz","p":"abcdfghijkmnopuwxz","q":"biklmnpqrstuvxy","r":"cefghijorsuvxyz","s":"acdefghijorsuvwyz","t":"acdeghijkmnoprsuvwyz","u":"acdefghijkloruvwxyz","v":"acdefghijklorsuvwxyz","w":"adfghjosuw","x":"biklmnpqrstuvxy","y":"abcdehijkorstuvyz","z":"acdefghijorsuvwyz"},"sogou":{"a":"ahjkl","b":";acdfghijklmnouxz","c":"abefghijkloprsuvz","d":";abcefghijklmnopqrsuvwxz","e":"efgrz","f":"abcfghjosuz","g":"abdefghjkloprsuvwyz","h":"abdefghjkloprsuvwyz","i":"abdefghijkloprsuvwy","j":";cdimnpqrstuwxy","k":"abdefghjkloprsuvwyz","l":";abcdeghijklmnopqrstuwxyz","m":";abcefghijklmnoquxz","n":";abcdefghijklmnopqrstuwxyz","o":"abefghjkloruz","p":";abcfghijklmnouwxz","q":";cdimnpqrstuwxy","r":"befghijkoprsuvw","s":"abefghijkloprsuvz","t":";abceghijklmoprsuvxz","u":"abdefghijklopruvwyz","v":"abdefghijkloprsuvwyz","w":"afghjlosuz","x":";cdimnpqrstuwxy","y":";abehijklnoprstuy","z":"abefghijkloprsuvz"}};
     // END GENERATED SCHEMA_MAP
 
     class FeelimeKeyboard {
@@ -1238,8 +1229,12 @@
                     // frequency-ranked), so the separator is useful there too
                     // (an earlier iteration had reverted it to Shift while n'hk was dead
                     // input). Non-Chinese modes keep Shift/Caps.
+                    // Sogou double pinyin puts the ing final on the ';' key
+                    // (that wide slot), so there the key IS a letter key.
                     row.append(this.isChineseMode()
-                        ? this.specialKey('sep', t("分词"), () => this.call(() => Native.key("'", this.token)), 'kb-wide-1_4 kb-mod sep')
+                        ? (this.mode === 'double-pinyin' && dpScheme === 'sogou'
+                            ? this.specialKey('sep', 'ing', () => this.call(() => Native.key(';', this.token)), 'kb-wide-1_4 kb-mod sep')
+                            : this.specialKey('sep', t("分词"), () => this.call(() => Native.key("'", this.token)), 'kb-wide-1_4 kb-mod sep'))
                         : this.specialKey('shift', ICONS.shift, () => this.toggleShift(), 'kb-wide-1_4 kb-mod shift', 'lock'));
                 }
                 [...config.keys].forEach(key => row.append(this.letterKey(key)));
@@ -1360,6 +1355,8 @@
             const button = document.createElement('button');
             button.className = 'kb-key kb-wide-4';
             button.id = 'spaceKey';
+            // 长按空格拉起语音浮层（design §1.2）：右上角圆点标识可长按。
+            button.dataset.lp = 'voice-hold';
             button.setAttribute('aria-label', t("空格"));
             const mic = document.createElementNS(SVG_NS, 'svg');
             mic.setAttribute('viewBox', '0 0 24 24');
@@ -3270,7 +3267,7 @@
         }
 
         /** Quick settings grew sub-pages - complex features
-         * (quick-switch pairs, the double-pinyin key map, phrase management)
+         * (quick-switch pairs, phrase management)
          * get their own page with a back row instead of stacking inline
          * blocks that overflowed the screen. */
         renderSettingsPanel(page = this.settingsPage) {
@@ -3280,13 +3277,12 @@
                 // The sub-page header rides the TOOLBAR (left:
                 // back + title, right: close) instead of its own row.
                 this.showSettingsPageBar({ pair: t("输入法快捷切换"), menu: t("长按菜单"),
-                    schema: t("双拼键位 - 自然码"), custom: t("定制键盘") }[page] || '');
+                    custom: t("定制键盘") }[page] || '');
             } else {
                 this.hideSettingsPageBar();
             }
             if (page === 'pair') this.renderPairEditor(panel);
             else if (page === 'menu') this.renderMenuEditor(panel);
-            else if (page === 'schema') this.renderSchemaPage(panel);
             else if (page === 'custom') this.renderCustomPage(panel);
             else this.renderSettingsHome(panel);
         }
@@ -3388,10 +3384,9 @@
                 pushStores();
             });
 
-            // Only 自然码 exists; Moved its key map to a
-            // sub-page rendered as an actual key layout (#6).
-            addNav(t("双拼键位"), t("自然码"), 'schema');
-            // Quick switch supports ANY two keyboards. 
+            // The double-pinyin key map moved to the full settings app
+            // (低频展示需求, plus sogou/flypy now exist - one chart each).
+            // Quick switch supports ANY two keyboards.
             // the long-press menu list is a SEPARATE setting - not everyone
             // wants fr/ru/ja and both Chinese modes listed there.
             addNav(t("快捷切换"), this.quickPair.map(m => modeLabel(m)).join(' / '), 'pair');
@@ -3412,55 +3407,6 @@
         /** 自然码键位图（，重排，再调）：说明统一
          * 在示意图上方；每行独立居中（不再用 shift/⌫ 占位格凑宽度）；
          * 双韵母键内上下两行；V 的前两个短 candidate 并排一行（ui ü）。 */
-        renderSchemaPage(panel) {
-            const map = document.createElement('div');
-            map.id = 'schemaMap';
-            const notes = document.createElement('div');
-            notes.className = 'map-notes';
-            const initials = document.createElement('div');
-            initials.className = 'map-line';
-            initials.textContent = t("声母：zh=V ch=I sh=U，其余与拼音相同");
-            const zero = document.createElement('div');
-            zero.className = 'map-line';
-            // 自然码零声母：直接打全拼（引擎 algebra 同时派生了 首字母+韵母键
-            // 的 aa/al/aj 变体与搜狗式 o+韵母键，这里只宣传自然码主打法）。
-            zero.textContent =
-                t("零声母（a/e 开头）：直接打全拼，如 啊=aa、爱=ai、安=an、恩=en、二=er");
-            notes.append(initials, zero);
-            map.append(notes);
-            // [key, final1, final2|null, initial|null] - two finals stack
-            // inside the key . V's two short finals
-            // share one line ("ui ü") so all rows stay one key tall.
-            const rows = SCHEMA_MAP_ROWS;
-            rows.forEach(cells => {
-                const row = document.createElement('div');
-                row.className = 'kmap-row';
-                cells.forEach(([key, f1, f2, initial]) => {
-                    const cell = document.createElement('div');
-                    cell.className = 'kmap-key';
-                    const cap = document.createElement('b');
-                    cap.textContent = key.toUpperCase();
-                    cell.append(cap);
-                    const fin = document.createElement('span');
-                    fin.textContent = f1;
-                    cell.append(fin);
-                    if (f2) {
-                        const fin2 = document.createElement('span');
-                        fin2.textContent = f2;
-                        cell.append(fin2);
-                    }
-                    if (initial) {
-                        const ini = document.createElement('i');
-                        ini.textContent = initial;
-                        cell.append(ini);
-                    }
-                    row.append(cell);
-                });
-                map.append(row);
-            });
-            panel.append(map);
-        }
-
         /** The custom table is PASTED JSON now - one editor for
          * the whole table (validation errors are shown, never swallowed),
          * plus a template button for a quick start. */
@@ -3945,7 +3891,7 @@
             const segments = raw.split("'");
             const first = segments[0];
             if (first.length === 1 && segments.length > 1) {
-                const finals = DP_INITIAL_FINALS[first[0]] || '';
+                const finals = dpFinals()[first[0]] || '';
                 for (const final of finals) {
                     const keys = first + final + "'" + segments.slice(1).join("'");
                     // Only exact double-key syllables - the expansion exists
@@ -5043,7 +4989,17 @@
             const modeChanged = nextMode !== this.mode;
             this.mode = nextMode;
             this.ready = true;
+            // Scheme switch re-renders the letter layer: the wide sep key
+            // shows the sogou ing key instead of the 分词 label.
+            const nextScheme = payload.dpScheme && DP_INITIAL_FINALS[payload.dpScheme]
+                ? payload.dpScheme : 'ziranma';
+            const schemeChanged = nextScheme !== dpScheme;
+            dpScheme = nextScheme;
             if (modeChanged) this.renderMode();
+            if (schemeChanged && this.mode === 'double-pinyin') {
+                this.renderLetters((MODES[this.mode] || MODES.direct).layout);
+                this.updateLabels();
+            }
             if (localeChanged) {
                 this.renderLetters((MODES[this.mode] || MODES.direct).layout);
                 this.renderSymbolCats();
