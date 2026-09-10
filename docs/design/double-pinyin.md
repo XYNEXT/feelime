@@ -21,7 +21,9 @@ excludeFromRecents/finishOnTaskLaunch 维持；仍不用 noHistory（权限回�
   （iu=Q ei=W uan=R ue=T un=Y uo=O ie=P ong/iong=S ing/uai=K ai=D en=F
   eng=G uang/iang=L ang=H ian=M an=J ou=Z ia/ua=X iao=N ao=C ui=V in=B，
   zh=V ch=I sh=U；零声母=首字母双写，全拼形态同样入 prism）。
-  上游 xlit 两边都不含 A（25/25），xlit 错位会让 R→e 级联全错，改完必须重编。
+  deliberate diff：激活 `abbrev/^(.).+$/$1/`（上游注释掉，自然码在用，
+  首键出候选）。上游 xlit 两侧都是 24 字符（不含 A/E），曾错抄成 25/26
+  导致 R→e 级联全错——xlit 必须逐位核对，改完必须重编。
 - 搜狗：上游 double_pinyin_mspy 的 algebra 逐字搬运（搜狗与微软双拼同族）：
   Q iu W ia/ua R er/uan T ue/üe Y uai/ü S iong/ong D iang/uang J an K ao
   L ai Z ei X ie C iao V zh/ui B ou N in M ian，`;`=ing，
@@ -38,8 +40,10 @@ original-schemas/ 手写源 → build-cmake-native-engines.sh 用 host
 rime_deployer --build 编 prism.bin/txt → schema+prism 拷入 assets →
 MANIFEST.json 登记（hash 校验部署）。本机可用 ~/tmp/pinned 的缓存
 deployer 直编（shared+opencc+user/default.custom.yaml schema_list）；
-prism.txt 由 dump 脚本按 algebra 展开（trie 格式与 flat 格式两个 golden
-消费方都兼容）。ziranma 用同管线重编结果与 shipped 逐字节一致。
+prism.txt 由 dump 脚本按 algebra 展开（spelling/syllable 两列是 golden
+消费方唯一读取的列；类型/权重列按编译出的 .bin 实际值填：全两键拼式
+normal/0，一键缩写 abbrev/-0.693147）。ziranma 用同管线重编结果与
+shipped 逐字节一致，两新方案源（original-schemas）重编也与 assets 一致。
 
 ### 2.3 引擎与设置
 
@@ -52,7 +56,13 @@ prism.txt 由 dump 脚本按 algebra 展开（trie 格式与 flat 格式两个 g
   ACTION_DP_SCHEME_CHANGED：IME 若正处于双拼会话则 recreateEngineSession
   换 schema（同词库换入的卡点位），随后重推 hello；非双拼会话下次建会话
   自然取新值。
-- hello 新增 dpScheme；未知 id 键盘侧同样回落 ziranma。
+- 已知限制（与 userdata 词库换入同款时序）：recreateEngineSession 异步
+  重建期间键入的键会被旧会话以 STALE_STAMP 拒绝（丢键窗口，1.0.5 不改
+  coordinator 排队语义）；hello 先于新会话就绪，键盘已显示新方案但仍可能
+  吞掉切换瞬间的一两键。
+- hello 新增 dpScheme；键盘侧用 own-property 白名单校验，未知 id 回落
+  ziranma。变体重放的 `;` 键码需原生 setComposition 校验放行
+  （BridgeContract.isValidComposition，与 `'` 同列合法键码）。
 
 ### 2.4 键盘与键位图
 

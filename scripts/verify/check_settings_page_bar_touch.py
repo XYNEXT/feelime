@@ -15,11 +15,15 @@ assert kb, 'keyboard not up'
 ev = d.devtools_eval
 
 
-def open_schema():
-    ev("(() => { window.Feelime.toggleSettingsPanel(); return 1; })()")
-    time.sleep(0.6)
+def open_pair():
+    # Idempotent: only toggle when the panel is closed (a real back tap
+    # leaves it OPEN on the home page).
+    state = ev("document.getElementById('settingsPanel').classList.contains('open')")
+    if not state:
+        ev("(() => { window.Feelime.toggleSettingsPanel(); return 1; })()")
+        time.sleep(0.6)
     ev("(() => { const row = [...document.querySelectorAll('#settingsPanel .set-row')]"
-       ".find(r => r.querySelector('.set-label')?.textContent === '双拼键位');"
+       ".find(r => /^(快捷切换|Quick switch)$/.test(r.querySelector('.set-label')?.textContent.trim() || ''));"
        " row?.querySelector('.set-nav')?.click(); return 1; })()")
     time.sleep(0.6)
 
@@ -43,22 +47,24 @@ for attempt in range(2):
         ev("(() => { window.Feelime.closeSettingsPanel(); return 1; })()")
         time.sleep(0.5)
 
-open_schema()
+open_pair()
 title = ev("document.getElementById('settingsPageBar').children[1].textContent")
-print('schema title:', title)
-assert title == '双拼键位 - 自然码', title
+print('pair title:', title)
+assert title in ('输入法快捷切换', 'Quick switch'), title  # 双语环境都可能出现
 
 # real touch on ‹ back -> returns to the settings home
 tap_dom('#settingsPageBar .tool')  # first .tool in the bar is the back button
-home = ev("(() => ({ map: !!document.getElementById('schemaMap'),"
+home = ev("(() => ({ editor: !!document.getElementById('pairEditor'),"
           " rows: [...document.querySelectorAll('#settingsPanel .set-label')]"
           ".map(e => e.textContent) }))()")
 print('after real back tap:', home)
-assert home and not home.get('map') and '双拼键位' in home.get('rows', []), 'back tap failed'
+rows = home.get('rows', []) if home else []
+assert home and not home.get('editor') \
+    and ('快捷切换' in rows or 'Quick switch' in rows), 'back tap failed'
 
-# into schema again, real touch on × close -> panel closes, keys restored
-open_schema()
-tap_dom('#settingsPageBar .tool:nth-child(3)')
+# into the pair page again, real touch on × close -> panel closes, keys restored
+open_pair()
+tap_dom('#settingsPageBar .tool:nth-last-child(1)')  # the × is the LAST tool
 closed = ev("(() => ({ open: document.getElementById('settingsPanel')"
             ".classList.contains('open'),"
             " qwerty: !document.getElementById('qwertyLayer').hidden }))()")
@@ -66,7 +72,7 @@ print('after real close tap:', closed)
 assert closed and not closed.get('open') and closed.get('qwerty'), 'close tap failed'
 
 # tools hidden while a sub-page is up (body.settings-page)
-open_schema()
+open_pair()
 vis = ev("(() => { const s = getComputedStyle(document.getElementById('setupButton'));"
          " const bar = getComputedStyle(document.getElementById('settingsPageBar'));"
          " return { setup: s.display, bar: bar.display }; })()")

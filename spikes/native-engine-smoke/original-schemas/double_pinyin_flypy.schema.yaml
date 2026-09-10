@@ -322,6 +322,8 @@ selector:
     bindings: {ISO_Left_Tab: previous_candidate, "Shift+Tab": previous_candidate, Tab: next_candidate}
     linear: {bindings: {ISO_Left_Tab: previous_candidate, "Shift+Tab": previous_candidate, Tab: next_candidate}}
 speller:
+  # Upstream rime double_pinyin_flypy algebra, verbatim, plus
+  # abbrev/^(.).+$/$1/ (matches ziranma: candidates after the first key).
   algebra:
     - "erase/^xx$/"
     - "derive/^([jqxy])u$/$1v/"
@@ -352,6 +354,7 @@ speller:
     - "xform/(.)ao$/$1C/"
     - "xform/ui$/V/"
     - "xform/in$/B/"
+    - "abbrev/^(.).+$/$1/"
     - "xlit/QWRTYUIOPSDFGHJKLZXCVBNM/qwrtyuiopsdfghjklzxcvbnm/"
   alphabet: zyxwvutsrqponmlkjihgfedcba
   delimiter: " '"

@@ -6,6 +6,7 @@
 candidates size to content (no ellipsis at 3+ chars), #5 alt "," optical
 centering class, #6 favorites panel self-management (add/edit/delete),
 #7 flick feedback is a direction blob, never a character preview."""
+import json
 import os
 import sys
 import time
@@ -63,11 +64,43 @@ def has_none(texts, *labels):
     return not has_text(texts, *labels)
 
 
+def open_settings(wait_page=True):
+    """Open the full settings app and poll until its bridge is ready."""
+    d.shell("am start -n com.feelime.ime/.SetupActivity --ez com.feelime.ime.extra.SHOW_DEBUG_FIXTURES true")
+    time.sleep(1.8)
+    sev = lambda expr: d.devtools_eval_target("settings/index.html", expr)
+    if wait_page:
+        for _ in range(8):
+            if sev("!!window.FeelimeSettings && !!window.FeelimeSettings.showPage"):
+                break
+        time.sleep(0.5)
+    return sev
+
+
+def set_scheme(sev, scheme, wait=1.2):
+    """Switch the double-pinyin scheme like the page's own select does.
+
+    The change event goes through the REAL bridge: pref + ACTION_DP_SCHEME_CHANGED
+    broadcast -> IME recreates the double-pinyin session -> hello -> keyboard
+    sep key follows."""
+    sev(f"(() => {{ const s = document.getElementById('dpScheme');"
+        f" s.value = '{scheme}'; s.dispatchEvent(new Event('change')); }})()")
+    time.sleep(wait)
+
+
 def main():
     d.prepare()
     kb = d.fresh_kb(refocus=True)
     if not kb:
         raise SystemExit('keyboard geometry unavailable')
+    # The double-pinyin probes below assume 自然码: normalize the persisted
+    # scheme first (a previous run may have left sogou/flypy selected).
+    sev = open_settings()
+    sev("window.FeelimeSettings.showPage('input')")
+    time.sleep(0.6)
+    set_scheme(sev, 'ziranma')
+    d.shell("input keyevent 4")  # back: IME returns to the fixture editor
+    time.sleep(1.0)
     d.reset_shift(kb)
     d.devtools_click_mode("双拼")
     time.sleep(1.2)
@@ -100,27 +133,10 @@ def main():
                f"cands={cands[:6]}")
     d.clear_field(kb)
 
-    # ---- #1b the rendered key map labels R with er (was uan-only) ----
-    ev("window.Feelime.toggleSettingsPanel && window.Feelime.toggleSettingsPanel()")
-    time.sleep(0.5)
-    ev("(() => { const row = [...document.querySelectorAll('#settingsPanel .set-row')]"
-       ".find(r => ['双拼键位', 'Pinyin key map'].includes(r.querySelector('.set-label')?.textContent.trim()));"
-       " row?.querySelector('.set-nav')?.click(); return 1; })()")
-    time.sleep(0.5)
-    # R's two finals stack as separate spans; both notes live in
-    # .map-notes ABOVE the grid.
-    r_label = ev("(() => { const cell = [...document.querySelectorAll('#schemaMap .kmap-key')]"
-                 ".find(c => c.querySelector('b')?.textContent === 'R');"
-                 " return cell ? [...cell.querySelectorAll('span')].map(s => s.textContent).join('/') : ''; })()") or ""
-    hint = ev("[...document.querySelectorAll('#schemaMap .map-line')].map(e => e.textContent).join(' ')") or ""
-    notes_first = ev("document.querySelector('#schemaMap').children[0]?.className") or ""
-    record("key map labels R=uan+er, notes above the grid",
-           "uan" in r_label and "er" in r_label
-           and "爱=ai" in hint and "啊=aa" in hint and "先按" not in hint
-           and notes_first == "map-notes",
-           f"R={r_label!r} hint={hint!r} first={notes_first!r}")
-    ev("window.Feelime.closeSettingsPanel && window.Feelime.closeSettingsPanel()")
-    time.sleep(0.3)
+    # ---- #1b the key map chart lives in the SETTINGS app now ----
+    # (the quick-panel schema page was removed with sogou/flypy joining);
+    # asserted against the real generated dp-data.js in the settings section
+    # below, together with live scheme switching.
 
     # ---- #5 zh-punct class drives BOTH the 。main and ，alt optical shift ----
     zh_class = ev("!!document.querySelector('[data-key=\".\"]').classList.contains('zh-punct')")
@@ -229,14 +245,7 @@ def main():
     # 管理只在键盘面板（R5）；常用语添加仍在键盘编辑卡（A-1）。
     ev("document.getElementById('hide').click()")
     time.sleep(0.8)
-    d.shell("am start -n com.feelime.ime/.SetupActivity --ez com.feelime.ime.extra.SHOW_DEBUG_FIXTURES true")
-    time.sleep(1.8)
-    sev = lambda expr: d.devtools_eval_target("settings/index.html", expr)
-    # Cold WebView: poll for the page instead of trusting the fixed sleep.
-    for _ in range(8):
-        if sev("!!window.FeelimeSettings && !!window.FeelimeSettings.showPage"):
-            break
-        time.sleep(1.0)
+    sev = open_settings()
 
     def page_texts(name):
         sev(f"window.FeelimeSettings.showPage('{name}')")
@@ -254,7 +263,7 @@ def main():
         ("输入测试", "Input test"),
     )
     deep = (
-        ("当前方案：自然码", "Current scheme: Ziranma"),
+        ("小鹤双拼", "Flypy"),
         ("插入模板", "Insert template"),
         ("更新源地址", "Update source (metainfo.json)"),
         ("第三方许可与组件说明", "Third-party licenses & components"),
@@ -271,12 +280,75 @@ def main():
            f" fav_gone={fav_gone}")
 
     texts = page_texts("input")
-    record("键盘与输入 page groups 双拼 + 定制 (自然码 copy)",
-           has_text(texts, "双拼方案", "Double-pinyin scheme")
-           and has_text(texts, "当前方案：自然码", "Current scheme: Ziranma")
+    dp_options = sev("[...document.querySelectorAll('#dpScheme option')]"
+                     ".map(o => o.value).join(',')") or ""
+    dp_dom = sev("JSON.stringify({title: !!document.getElementById('dpTitle'),"
+                 " note: (document.getElementById('dpNote')?.textContent || '').slice(0, 40),"
+                 " chart: document.querySelectorAll('#dpKeymap .kmap-row').length})") or "{}"
+    try:
+        dp_dom = json.loads(dp_dom)
+    except ValueError:
+        dp_dom = {}
+    record("键盘与输入 page groups 双拼三方案 + 定制",
+           dp_dom.get("title") is True and dp_dom.get("chart") == 3
+           and dp_options == "ziranma,flypy,sogou"
            and has_text(texts, "插入模板", "Insert template")
+           and has_text(texts, "Takes effect when the keyboard", "切到「双拼」模式")
            and has_none(texts, "离线中英混合语音输入法", "Offline Chinese-English voice input"),
-           f"hit={[t[:24] for t in texts if '自然码' in t or 'Ziranma' in t][:1]}")
+           f"opts={dp_options} dom={dp_dom}")
+
+    # ---- #1b (settings side) the key map chart follows the scheme, live ----
+    sev("window.FeelimeSettings.showPage('input')")
+    time.sleep(0.8)
+    # The sep key only exists in the double-pinyin letter layer - switch the
+    # keyboard back there first (DOM clicks work behind the settings page).
+    ev("window.Feelime && window.Feelime.toggleModeMenu && window.Feelime.toggleModeMenu()")
+    time.sleep(0.4)
+    ev("[...document.querySelectorAll('#modeMenu button')]"
+       ".find(b => /双|Double/.test(b.textContent))?.click()")
+    time.sleep(1.0)
+
+    def kmap_state():
+        chart = sev("(() => { const cells = [...document.querySelectorAll('#dpKeymap .kmap-key')];"
+                    " const find = k => cells.find(c => c.querySelector('b')?.textContent === k);"
+                    " const fin = c => c ? [...c.querySelectorAll('span')].map(s => s.textContent).join('/') : '';"
+                    " return { rows: document.querySelectorAll('#dpKeymap .kmap-row').length,"
+                    "          cells: cells.length, v: fin(find('V')), r: fin(find('R')),"
+                    "          semi: fin(find(';')), k: fin(find('K')) }; })()") or {}
+        sep = ev("(() => { const s = document.querySelector('[data-role=sep]');"
+                 " return s ? s.textContent.trim() : ''; })()") or ""
+        return chart, sep
+
+    def scheme_probe(scheme, expect):
+        set_scheme(sev, scheme)
+        chart, sep = kmap_state()
+        ok = (expect['rows'][0] <= (chart.get('rows') or 0) <= expect['rows'][1]
+              and expect['cells'][0] <= (chart.get('cells') or 0) <= expect['cells'][1]
+              and all(token in chart.get(key, '') for key, tokens in expect['fin'].items()
+                      for token in tokens)
+              and (not expect.get('absent') or all(not chart.get(key) for key in expect['absent']))
+              and sep in expect['sep'])
+        record(f"key map + sep key follow the {scheme} scheme", ok, f"chart={chart} sep={sep!r}")
+
+    scheme_probe('ziranma', {
+        'rows': (3, 3), 'cells': (26, 26),
+        'fin': {'v': ['ui'], 'r': ['uan', 'er']}, 'absent': ['semi'],
+        'sep': ('分词', 'Split'),
+    })
+    scheme_probe('sogou', {
+        'rows': (3, 3), 'cells': (27, 27),
+        'fin': {'v': ['ui'], 'semi': ['ing']}, 'absent': [],
+        'sep': ('ing',),
+    })
+    scheme_probe('flypy', {
+        'rows': (3, 3), 'cells': (26, 26),
+        'fin': {'k': ['ing', 'uai'], 'r': ['uan', 'er']}, 'absent': ['semi'],
+        'sep': ('分词', 'Split'),
+    })
+    # restore the default so later suites start from a known state
+    set_scheme(sev, 'ziranma')
+    d.shell("input keyevent 4")  # back to the fixture editor
+    time.sleep(1.0)
 
     texts = page_texts("voice")
     record("语音识别 page merges voice models + asr settings",

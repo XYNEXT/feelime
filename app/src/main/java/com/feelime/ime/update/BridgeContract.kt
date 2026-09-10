@@ -41,6 +41,9 @@ object BridgeContract {
      * Validate the Unicode key sequence used by the atomic setComposition
      * bridge call.  Iterate by code point so supplementary-plane letters are
      * accepted as one key instead of being rejected as surrogate halves.
+     * ';' is a legal key code too: the sogou double-pinyin scheme puts its
+     * ing final on the wide key, and parse-variant replays then carry ';'
+     * (double-pinyin.md §2.1).
      */
     fun isValidComposition(value: String): Boolean {
         if (value.isEmpty() || value.codePointCount(0, value.length) > MAX_COMPOSITION_CODE_POINTS) {
@@ -56,7 +59,9 @@ object BridgeContract {
                 -> true
                 else -> false
             }
-            if (codePoint != '\''.code && !Character.isLetter(codePoint) && !mark) return false
+            if (codePoint != '\''.code && codePoint != ';'.code &&
+                !Character.isLetter(codePoint) && !mark
+            ) return false
             offset += Character.charCount(codePoint)
         }
         return true

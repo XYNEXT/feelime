@@ -106,6 +106,11 @@ class SettingsWorld {
         this.doc = loadDocument(fs.readFileSync(HTML_PATH, 'utf8'));
         sandbox.document = this.doc;
         const context = vm.createContext(sandbox);
+        // The REAL generated data file loads first, exactly as index.html
+        // orders it - the suite asserts against shipped data, not a copy.
+        vm.runInContext(
+            fs.readFileSync(path.join(path.dirname(HTML_PATH), 'dp-data.js'), 'utf8'),
+            context, { filename: 'dp-data.js' });
         vm.runInContext(fs.readFileSync(JS_PATH, 'utf8'), context, { filename: 'settings.js' });
         this.sandbox = sandbox;
         // First handshake, as SetupActivity does after onPageFinished.
@@ -639,18 +644,8 @@ test('Play app updates have their own store action while keyboard ZIP controls r
 
 // ------------------------------------------------- double-pinyin scheme (§2)
 
-const DP_DATA = {
-    schemes: ['ziranma', 'flypy', 'sogou'],
-    maps: {
-        ziranma: [[['q', 'iu', null, null]], [['v', 'ui ü', null, 'zh']], [['m', 'ian', null, null]]],
-        sogou: [[['q', 'iu', null, null]], [[';', 'ing', null, null]]],
-        flypy: [[['k', 'ing', 'uai', null]]],
-    },
-};
-
 test('double-pinyin selector reflects state and sends the change with the token', () => {
     const world = new SettingsWorld();
-    world.sandbox.FeelimeDp = DP_DATA;
     world.push({ ...BASE_STATE, dpScheme: 'flypy' });
     equal(world.$('dpScheme').value, 'flypy', 'state value wins');
     assert(world.$('dpNote').textContent.length > 0, 'per-scheme note rendered');
@@ -664,9 +659,10 @@ test('double-pinyin selector reflects state and sends the change with the token'
     equal(world.$('dpScheme').value, 'sogou', 'selection follows the state push');
 });
 
-test('double-pinyin key map renders the active scheme chart', () => {
+test('double-pinyin key map renders the active scheme chart from dp-data.js', () => {
     const world = new SettingsWorld();
-    world.sandbox.FeelimeDp = DP_DATA;
+    assert(world.sandbox.FeelimeDp && world.sandbox.FeelimeDp.maps,
+        'real dp-data.js loaded into the page');
     world.push({ ...BASE_STATE, dpScheme: 'sogou' });
     const cells = [...world.doc.querySelectorAll('#dpKeymap .kmap-key')];
     const semi = cells.find(el => el.querySelector('b').textContent === ';');
@@ -679,6 +675,11 @@ test('double-pinyin key map renders the active scheme chart', () => {
     const flypyCells = [...world.doc.querySelectorAll('#dpKeymap .kmap-key')];
     const k = flypyCells.find(el => el.querySelector('b').textContent === 'K');
     assert(k && k.textContent.includes('uai'), 'flypy chart shows K=ing/uai');
+    // 自然码 folds ui + ü onto one line in V.
+    world.push({ ...BASE_STATE, dpScheme: 'ziranma' });
+    const zCells = [...world.doc.querySelectorAll('#dpKeymap .kmap-key')];
+    const v = zCells.find(el => el.querySelector('b').textContent === 'V');
+    assert(v && v.textContent.includes('ü'), 'ziranma V carries ui ü');
 });
 
 // ---------------------------------------------------------------- runner

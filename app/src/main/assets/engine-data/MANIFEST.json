@@ -34,8 +34,8 @@
       "sha256": "04a75ce105632f16ecba378586aafdfeeffc65fbed59858a6ceb82cb3097f057"
     },
     "rime/double_pinyin_flypy.prism.txt": {
-      "bytes": 13537,
-      "sha256": "55ed1c8855d45e23e10600f99daf34861a3321c948c1208163c66f1c48481a4f"
+      "bytes": 13457,
+      "sha256": "f802f0f3d485e75bacc873cfd8601706cfbb186beddc9290869f8fbab7e0647b"
     },
     "rime/double_pinyin_flypy.schema.yaml": {
       "bytes": 39028,
@@ -46,8 +46,8 @@
       "sha256": "a476d44777327baf40a92ecace2cd4d63477ee13a0b901ef347b32fe3d78d586"
     },
     "rime/double_pinyin_sogou.prism.txt": {
-      "bytes": 13762,
-      "sha256": "4682a75378609836e75a0151c7fe11e3569fb074f6457521d9410865fdf9c2f1"
+      "bytes": 13722,
+      "sha256": "2f96a013c1973b7710c79689d8c8b61fb01e7140fc0661bcd2ff15ee76a3fc59"
     },
     "rime/double_pinyin_sogou.schema.yaml": {
       "bytes": 39089,

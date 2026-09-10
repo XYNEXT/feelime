@@ -149,26 +149,13 @@ def main():
     open_panel(kb)
     labels = ev("[...document.querySelectorAll('#settingsPanel .set-label')]"
                 ".map(el => el.textContent)") or []
-    record("home page rows (tools live on the toolbar)",
+    record("home page rows (tools live on the toolbar; key map moved to the settings app)",
            labels in (
-               ['色彩模式', '光标移动速度', '双拼键位', '快捷切换', '长按菜单', '键盘高度'],
-               ['Appearance', 'Cursor speed', 'Pinyin key map', 'Quick switch',
+               ['色彩模式', '光标移动速度', '快捷切换', '长按菜单', '键盘高度'],
+               ['Appearance', 'Cursor speed', 'Quick switch',
                 'Keyboard menu', 'Keyboard height'],
            ),
            repr(labels))
-
-    nav_to(kb, '双拼键位')
-    kmap = ev("(() => { const rows = [...document.querySelectorAll('#schemaMap .kmap-row')];"
-              " const cells = [...document.querySelectorAll('#schemaMap .kmap-key')];"
-              " const v = cells.find(el => el.querySelector('b')?.textContent === 'V');"
-              " return { rows: rows.length, cells: cells.length,"
-              " vIni: v?.querySelector('i')?.textContent || null }; })()") or {}
-    record("key map page renders a QWERTY layout with initials",
-           kmap.get('rows') == 3 and kmap.get('cells') == 26 and kmap.get('vIni') == 'zh',
-           repr(kmap))
-    # The back chevron rides the toolbar page bar (child 0).
-    ev("document.getElementById('settingsPageBar')?.children[0]?.click()")
-    time.sleep(0.4)
 
     nav_to(kb, '快捷切换')
     pair_rows = ev("[...document.querySelectorAll('#pairEditor .pair-row')].length") or 0

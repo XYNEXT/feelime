@@ -152,7 +152,9 @@ def main():
     expected = re.sub(pattern, lambda _: generated, source)
     if args.check:
         bad = source != expected
-        if SETTINGS_DATA.exists() and SETTINGS_DATA.read_text() != settings_data:
+        # A missing file must fail the gate too (a dropped or never-committed
+        # dp-data.js would otherwise blank the settings key map silently).
+        if not SETTINGS_DATA.exists() or SETTINGS_DATA.read_text() != settings_data:
             bad = True
         if bad:
             raise SystemExit('Key map differs from schema. Run scripts/generate-keyboard-data.py')

@@ -4990,8 +4990,10 @@
             this.mode = nextMode;
             this.ready = true;
             // Scheme switch re-renders the letter layer: the wide sep key
-            // shows the sogou ing key instead of the 分词 label.
-            const nextScheme = payload.dpScheme && DP_INITIAL_FINALS[payload.dpScheme]
+            // shows the sogou ing key instead of the 分词 label. Own-property
+            // check: inherited names like "constructor" must not pass.
+            const nextScheme = payload.dpScheme &&
+                Object.prototype.hasOwnProperty.call(DP_INITIAL_FINALS, payload.dpScheme)
                 ? payload.dpScheme : 'ziranma';
             const schemeChanged = nextScheme !== dpScheme;
             dpScheme = nextScheme;

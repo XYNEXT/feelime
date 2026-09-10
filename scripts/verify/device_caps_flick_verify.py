@@ -218,30 +218,15 @@ def main():
               " return getComputedStyle(b).borderStyle; })()")
     record("collapse button border removed", ring in ('none', None, ''), repr(ring))
 
-    # ---- #11 ziranma-only schema row + key map ----
+    # ---- #11 schema entry moved to the settings app (schemes joined) ----
     ev("(() => { window.Feelime.toggleSettingsPanel(); return 1; })()")
     time.sleep(0.5)
-    schema_texts = ev("[...document.querySelectorAll('#settingsPanel .set-opt')]"
-                      ".map(b => b.textContent)") or []
-    # The schema entry is a nav row ('自然码 ›') opening the key
-    # map sub-page.
-    ev("(() => { const b = [...document.querySelectorAll('#settingsPanel .set-opt')]"
-       ".find(x => ['自然码 ›', 'Ziranma ›'].includes(x.textContent.trim()));"
-       " if (b) b.click(); return 1; })()")
-    time.sleep(0.4)
-    # Notes sit above the grid, so scan the WHOLE map text (the
-    # first 60 chars are now the notes block).
-    map_line = ev("(() => { const m = document.getElementById('schemaMap');"
-                  " return m ? m.textContent : null; })()")
-    record("ziranma-only schema with reference map",
-           '即将支持' not in repr(schema_texts) and isinstance(map_line, str)
-           and any(label in map_line for label in ('声母', 'Initials:'))
-           and 'iu' in map_line,
-           f"opts={schema_texts} map={map_line!r}")
-    # The key map now lives on a sub-page - go back home so the
-    # next case finds the home rows again.
-    # The back chevron rides the toolbar page bar (child 0).
-    ev("document.getElementById('settingsPageBar')?.children[0]?.click()")
+    schema_labels = ev("[...document.querySelectorAll('#settingsPanel .set-label')]"
+                       ".map(b => b.textContent)") or []
+    record("quick panel carries no schema entry any more",
+           all('双拼键位' not in t and 'Pinyin key map' not in t for t in schema_labels),
+           f"labels={schema_labels}")
+    ev("(() => { window.Feelime.closeSettingsPanel(); return 1; })()")
     time.sleep(0.4)
 
     # ---- #12 pair editor: rows, tick, order save ----

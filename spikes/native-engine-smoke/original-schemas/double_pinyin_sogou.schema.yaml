@@ -322,40 +322,46 @@ selector:
     bindings: {ISO_Left_Tab: previous_candidate, "Shift+Tab": previous_candidate, Tab: next_candidate}
     linear: {bindings: {ISO_Left_Tab: previous_candidate, "Shift+Tab": previous_candidate, Tab: next_candidate}}
 speller:
+  # Upstream rime double_pinyin_mspy algebra (sogou-compatible chart),
+  # minus derive/T$/V/ (ue-on-V alias would double-map ue) and plus
+  # abbrev/^(.).+$/$1/ (matches ziranma). initials keeps ';' out so the
+  # ing key can never start a spelling.
   algebra:
     - "erase/^xx$/"
     - "derive/^([jqxy])u$/$1v/"
-    # 零声母=固定 O + 韵母键（搜狗方案）：啊=oa、爱=ol、昂=oh、恩=of、二=or。
-    - "derive/^([aoe].*)$/O$1/"
-    - "xform/^zh/V/"
-    - "xform/^ch/I/"
-    - "xform/^sh/U/"
+    - "derive/^([aoe].*)$/o$1/"
+    - "xform/^([ae])(.*)$/$1$1$2/"
     - "xform/iu$/Q/"
-    - "xform/(ia|ua)$/W/"
-    - "xform/uan$/R/"
+    - "xform/[iu]a$/W/"
+    - "xform/er$|[uv]an$/R/"
     - "xform/[uv]e$/T/"
-    - "xform/uai$/Y/"
+    - "xform/v$|uai$/Y/"
+    - "xform/^sh/U/"
+    - "xform/^ch/I/"
+    - "xform/^zh/V/"
     - "xform/uo$/O/"
-    - "xform/ie$/X/"
+    - "xform/[uv]n$/P/"
     - "xform/i?ong$/S/"
-    - "xform/ing$/;/"
-    - "xform/(.)ai$/$1L/"
+    - "xform/[iu]ang$/D/"
     - "xform/(.)en$/$1F/"
     - "xform/(.)eng$/$1G/"
-    - "xform/[iu]ang$/D/"
     - "xform/(.)ang$/$1H/"
     - "xform/ian$/M/"
     - "xform/(.)an$/$1J/"
+    - "xform/iao$/C/"
     - "xform/(.)ao$/$1K/"
-    - "xform/in$/N/"
+    - "xform/(.)ai$/$1L/"
+    - "xform/(.)ei$/$1Z/"
+    - "xform/ie$/X/"
     - "xform/ui$/V/"
-    - "xform/v$/Y/"
-    - "xform/un$/P/"
-    - "xform/ou$/B/"
-    - "abbrev/^([a-zVUIO]).+$/$1/"
-    - "xlit/QWERTYUIOPASDFGHJKLZXCVBNM;/qwertyuiopasdfghjklzxcvbnm;/"
-  alphabet: zyxwvutsrqponmlkjihgfedcba
+    - "xform/(.)ou$/$1B/"
+    - "xform/in$/N/"
+    - "xform/ing$/;/"
+    - "abbrev/^(.).+$/$1/"
+    - "xlit/QWRTYUIOPSDFGHMJCKLZXVBN/qwrtyuiopsdfghmjcklzxvbn/"
+  alphabet: "zyxwvutsrqponmlkjihgfedcba;"
   delimiter: " '"
+  initials: zyxwvutsrqponmlkjihgfedcba
 # Simplified-by-default switch for the simplifier filter above.
 switches:
   - {name: simplification, reset: 1}

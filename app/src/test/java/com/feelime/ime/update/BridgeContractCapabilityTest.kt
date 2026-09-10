@@ -36,6 +36,8 @@ class BridgeContractCapabilityTest {
         assertTrue(BridgeContract.isValidComposition("ête"))
         assertTrue(BridgeContract.isValidComposition("ё"))
         assertTrue(BridgeContract.isValidComposition("e\u0301"))
+        // sogou double pinyin puts ing on ';' - variant replays carry it.
+        assertTrue(BridgeContract.isValidComposition("x;'an"))
         assertFalse(BridgeContract.isValidComposition("e t"))
         assertFalse(BridgeContract.isValidComposition("e1"))
     }
