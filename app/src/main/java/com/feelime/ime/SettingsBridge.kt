@@ -41,6 +41,44 @@ const val ACTION_USERDATA_RESTORED = "com.feelime.ime.USERDATA_RESTORED"
  * 重建会话，并重推 hello 让键盘换解析表/sep 键，double-pinyin.md §2）。 */
 const val ACTION_DP_SCHEME_CHANGED = "com.feelime.ime.DP_SCHEME_CHANGED"
 
+/** 设置页改动键盘侧偏好（底部留白/手感参数）后通知 IME 重推 hello。 */
+const val ACTION_KEYBOARD_PREFS_CHANGED = "com.feelime.ime.KEYBOARD_PREFS_CHANGED"
+
+// 键盘侧偏好的键与合法档位（mode-fallback §3/§4）：设置页写入、IME 读取，
+// 双方共用同一份定义；非法持久值一律回落默认。
+const val KEYBOARD_PREFS_FILE = "feelime_keyboard"
+const val PREF_BOTTOM_PAD_DP = "bottom_pad_dp"
+val BOTTOM_PAD_STEPS = intArrayOf(0, 12, 24, 36, 48)
+const val PREF_FEEL_SCRUB_SPEED = "feel_scrub_speed"
+const val PREF_FEEL_HOLD_MS = "feel_hold_ms"
+val FEEL_HOLD_STEPS = intArrayOf(200, 300, 350, 450, 600)
+const val PREF_FEEL_POPUP_SNAP = "feel_popup_snap"
+
+/** 键盘侧偏好读取（非法持久值回落默认）；设置页 state 与 IME hello 共用。 */
+fun readBottomPadDp(context: Context): Int =
+    context.getSharedPreferences(KEYBOARD_PREFS_FILE, Context.MODE_PRIVATE)
+        .getInt(PREF_BOTTOM_PAD_DP, 0)
+        .takeIf { it in BOTTOM_PAD_STEPS }
+        ?: 0
+
+fun readFeelScrubSpeed(context: Context): Int =
+    context.getSharedPreferences(KEYBOARD_PREFS_FILE, Context.MODE_PRIVATE)
+        .getInt(PREF_FEEL_SCRUB_SPEED, 3)
+        .takeIf { it in 1..5 }
+        ?: 3
+
+fun readFeelHoldMs(context: Context): Int =
+    context.getSharedPreferences(KEYBOARD_PREFS_FILE, Context.MODE_PRIVATE)
+        .getInt(PREF_FEEL_HOLD_MS, 350)
+        .takeIf { it in FEEL_HOLD_STEPS }
+        ?: 350
+
+fun readFeelPopupSnap(context: Context): Int =
+    context.getSharedPreferences(KEYBOARD_PREFS_FILE, Context.MODE_PRIVATE)
+        .getInt(PREF_FEEL_POPUP_SNAP, 1)
+        .takeIf { it in 0..2 }
+        ?: 1
+
 /** The full-settings WebView bridge (design §6.2).
  *
  * Same handshake as the IME bridge (design §5.3): the activity mints a
@@ -253,6 +291,10 @@ class SettingsBridge(
                 .put("isDefault", hostIsDefaultIme()))
             .put("mic", JSONObject().put("granted", micGranted()))
             .put("dpScheme", com.feelime.ime.engine.DoublePinyinScheme.resolve(context))
+            .put("bottomPad", readBottomPadDp(context))
+            .put("scrubSpeed", readFeelScrubSpeed(context))
+            .put("holdMs", readFeelHoldMs(context))
+            .put("popupSnap", readFeelPopupSnap(context))
             .put("appVersion", BuildConfig.VERSION_NAME)
             .put("keyboardVersion", keyboardVersion())
             .put("device", JSONObject()
@@ -568,6 +610,56 @@ class SettingsBridge(
         }
         context.sendBroadcast(
             Intent(ACTION_DP_SCHEME_CHANGED).setPackage(context.packageName),
+        )
+        pushState()
+    }
+
+    /** 底部留白（mode-fallback §3）：档位离散，非法值报错不落盘。写完
+     *  广播让 IME 重推 hello，运行中的键盘即时采用新 pad。 */
+    @JavascriptInterface
+    fun setBottomPadding(dp: Int, token: String) = guarded(token) {
+        if (dp !in BOTTOM_PAD_STEPS) {
+            pushEvent(
+                JSONObject()
+                    .put("type", "bottomPadError")
+                    .put("code", "BAD_BOTTOM_PAD")
+                    .put("message", t(context, "底部留白选项无效", "Invalid bottom padding option")),
+            )
+            pushState()
+            return@guarded
+        }
+        context.getSharedPreferences(KEYBOARD_PREFS_FILE, Context.MODE_PRIVATE)
+            .edit().putInt(PREF_BOTTOM_PAD_DP, dp).apply()
+        context.sendBroadcast(
+            Intent(ACTION_KEYBOARD_PREFS_CHANGED).setPackage(context.packageName),
+        )
+        pushState()
+    }
+
+    /** 手感微调（mode-fallback §4）：三值一起提交，-1 表示不变。 */
+    @JavascriptInterface
+    fun setFeelOptions(scrubSpeed: Int, holdMs: Int, popupSnap: Int, token: String) = guarded(token) {
+        val valid = (scrubSpeed == -1 || scrubSpeed in 1..5) &&
+            (holdMs == -1 || holdMs in FEEL_HOLD_STEPS) &&
+            (popupSnap == -1 || popupSnap in 0..2)
+        if (!valid) {
+            pushEvent(
+                JSONObject()
+                    .put("type", "feelOptionsError")
+                    .put("code", "BAD_FEEL_OPTION")
+                    .put("message", t(context, "手感参数无效", "Invalid feel tuning option")),
+            )
+            pushState()
+            return@guarded
+        }
+        context.getSharedPreferences(KEYBOARD_PREFS_FILE, Context.MODE_PRIVATE)
+            .edit().apply {
+                if (scrubSpeed != -1) putInt(PREF_FEEL_SCRUB_SPEED, scrubSpeed)
+                if (holdMs != -1) putInt(PREF_FEEL_HOLD_MS, holdMs)
+                if (popupSnap != -1) putInt(PREF_FEEL_POPUP_SNAP, popupSnap)
+            }.apply()
+        context.sendBroadcast(
+            Intent(ACTION_KEYBOARD_PREFS_CHANGED).setPackage(context.packageName),
         )
         pushState()
     }

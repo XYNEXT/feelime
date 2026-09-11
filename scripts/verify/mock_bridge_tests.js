@@ -2119,8 +2119,11 @@ test('setup button opens the quick settings panel; full settings entry calls ope
     // Home page rows; complex features are sub-page nav entries. The
         // tools live on the toolbar; 定制键盘 moved to the app settings page.
     const rows = [...panel.querySelectorAll('.set-label')].map(el => el.textContent);
+    // 光标移动速度 moved to the full settings app at 3.30.0 (mode-fallback §4).
+    const speedRow = verAtLeast(KEYBOARD_VERSION, '3.30.0') ? []
+        : verAtLeast(KEYBOARD_VERSION, '3.22.0') ? ['光标移动速度'] : ['滑动跟手'];
     equal(JSON.stringify(rows),
-        JSON.stringify(['色彩模式', (verAtLeast(KEYBOARD_VERSION, '3.22.0') ? '光标移动速度' : '滑动跟手'),
+        JSON.stringify(['色彩模式', ...speedRow,
             ...(verAtLeast(KEYBOARD_VERSION, '3.29.0') ? [] : ['双拼键位']), '快捷切换', '长按菜单', '键盘高度']),
         'settings rows present (tools on the toolbar)');
     equal(world.native.of('openSetup').length, 0, 'no openSetup until the full-settings entry');
@@ -2157,7 +2160,7 @@ test('setup button opens the quick settings panel (3.20.0 form)', {until: '3.20.
     assert(world.$('fullSetupButton').hidden === true, 'gear hides again on close');
 });
 
-test('scrub speed setting changes the caret step unit', () => {
+test('scrub speed setting changes the caret step unit', {until: '3.29.0'}, () => {
     const world = fresh();
     const fixedThresholdAnchor = verAtLeast(KEYBOARD_VERSION, '3.23.0');
     world.tap(world.$('setupButton'));
@@ -2185,6 +2188,121 @@ test('scrub speed setting changes the caret step unit', () => {
         fixedThresholdAnchor ? 3 : 2,
         fixedThresholdAnchor ? '5x scrubs per 7.2px' : 'legacy 5x sampled anchor');
     world.touchUp(g, -34.4, 0);
+});
+
+test('scrub speed arrives through hello and changes the caret step unit', {since: '3.30.0'}, () => {
+    // 光标移动速度 moved to the full settings app; the keyboard only
+    // adopts the native pref value that rides hello (mode-fallback §4).
+    const world = fresh();
+    world.hello({scrubSpeed: 5});
+    const g = world.key('g');
+    world.touchDown(g, 20, 20);
+    world.move(g, -20, 0);
+    // 36/5 = 7.2px per step at 5x; fixed anchor engages on the first sample
+    equal(world.native.of('moveCursor').length, 1, 'engage steps once at 5x');
+    world.move(g, -34.4, 0); // +14.4px = exactly 2 more steps
+    equal(world.native.of('moveCursor').reduce((sum, c) => sum + Math.abs(c.args[0]), 0),
+        3, '5x scrubs per 7.2px');
+    world.touchUp(g, -34.4, 0);
+});
+
+test('degrade fallback announces once, badges the toggle, and recovery clears', {since: '3.30.0'}, () => {
+    const world = fresh();
+    // Start on a NON-direct mode so the degrade event's mode change really
+    // runs renderMode() - that re-render used to wipe the badge (device
+    // gate caught it; round-6 R6-3).
+    world.hello({mode: 'pinyin'});
+    // Degrade transition: toast + badge + status strip, once per seq.
+    world.engineState({phase: 'READY', revision: 1, mode: 'direct', composing: '',
+        degraded: true, degradedActive: true, failedMode: 'double-pinyin',
+        degradeReason: 'WARMUP_TIMEOUT', degradeSeq: 1});
+    assert(world.$('toast').classList.contains('open'), 'degrade toast shown');
+    assert(world.$('toast').textContent.includes('双拼'), 'toast names the failed mode');
+    assert(world.$('modeToggle').classList.contains('degraded'), 'toggle badge on');
+    assert(!world.$('engineStatus').hidden, 'status strip visible');
+    // Hello restore (WebView rebuild): badge stays, NO second toast.
+    const toastAfterRestore = world.$('toast').textContent;
+    world.hello({degraded: true, failedMode: 'double-pinyin', degradeReason: 'WARMUP_TIMEOUT', degradeSeq: 1});
+    assert(world.$('modeToggle').classList.contains('degraded'), 'badge restored from hello');
+    equal(world.$('toast').textContent, toastAfterRestore, 'hello restore never re-toasts');
+    // Retry that fails again: new seq → toast again.
+    world.engineState({phase: 'READY', revision: 2, mode: 'direct', composing: '',
+        degraded: true, degradedActive: true, failedMode: 'double-pinyin',
+        degradeReason: 'WARMUP_TIMEOUT', degradeSeq: 2});
+    assert(world.$('toast').textContent !== toastAfterRestore || world.$('toast').textContent.includes('重试'), 'refailure re-toasts');
+    // Recovery: cleared without toast.
+    world.engineState({phase: 'READY', revision: 3, mode: 'double-pinyin', composing: '',
+        degraded: true, degradedActive: false, failedMode: 'double-pinyin', degradeSeq: 2});
+    assert(!world.$('modeToggle').classList.contains('degraded'), 'badge cleared on recovery');
+    assert(world.$('engineStatus').hidden, 'status strip hidden on recovery');
+    // Healthy hello keeps it cleared.
+    world.hello({degraded: false, warming: false});
+    assert(!world.$('modeToggle').classList.contains('degraded'), 'stays cleared');
+});
+
+test('hello snapshot on a rebuilt page restores the badge silently and never re-toasts', {since: '3.30.0'}, () => {
+    // A FRESH world (WebView rebuild): the failure predates the page, the
+    // hello seq was never "seen" here — the snapshot must still be silent
+    // (codex P2: seq alone cannot tell snapshot from notification).
+    const world = fresh();
+    world.hello({degraded: true, failedMode: 'double-pinyin',
+        degradeReason: 'WARMUP_TIMEOUT', degradeSeq: 7});
+    assert(world.$('modeToggle').classList.contains('degraded'), 'badge restored');
+    assert(!world.$('toast').classList.contains('open'), 'snapshot never toasts');
+    // The event for the same failure (already announced before the rebuild)
+    // must not toast again either — the snapshot marked the seq seen.
+    world.engineState({phase: 'READY', revision: 1, mode: 'direct', composing: '',
+        degraded: true, degradedActive: true, failedMode: 'double-pinyin',
+        degradeReason: 'WARMUP_TIMEOUT', degradeSeq: 7});
+    assert(!world.$('toast').classList.contains('open'), 'seen seq stays silent');
+    assert(!world.$('engineStatus').hidden, 'status strip still serves');
+    assert(world.$('candidates').hidden, 'status strip takes the candidate slot');
+    // Recovery hands the slot back.
+    world.engineState({phase: 'READY', revision: 2, mode: 'double-pinyin', composing: '',
+        degraded: true, degradedActive: false, failedMode: 'double-pinyin', degradeSeq: 7});
+    assert(!world.$('candidates').hidden, 'candidate bar back after recovery');
+});
+
+test('degraded short-press retries the failed mode instead of the pair', {since: '3.30.0'}, () => {
+    const world = fresh();
+    world.engineState({phase: 'READY', revision: 1, mode: 'direct', composing: '',
+        degraded: true, degradedActive: true, failedMode: 'double-pinyin',
+        degradeReason: 'ENGINE_INIT_FAILED', degradeSeq: 1});
+    world.tap(world.$('modeToggle'));
+    equal(world.native.of('selectMode').slice(-1)[0].args[0], 'double-pinyin',
+        'short press retries the failed mode');
+    // After recovery the toggle returns to the saved pair behaviour
+    // (default pair 拼/En; mode=direct → partner is pinyin).
+    world.engineState({phase: 'READY', revision: 2, mode: 'double-pinyin', composing: '',
+        degraded: true, degradedActive: false, failedMode: 'double-pinyin', degradeSeq: 1});
+    world.tap(world.$('modeToggle'));
+    equal(world.native.of('selectMode').slice(-1)[0].args[0], 'pinyin',
+        'healthy toggle flips to the pair partner');
+});
+
+test('warming shows the preparing strip until the engine is ready', {since: '3.30.0'}, () => {
+    const world = fresh();
+    world.engineState({phase: 'LOADING', revision: 1, mode: 'pinyin', composing: ''});
+    assert(!world.$('engineStatus').hidden, 'warming strip visible');
+    assert(world.$('engineStatus').textContent.includes('准备'), 'preparing copy');
+    // The warmup-success READY lands with the engine's initial EMPTY state.
+    world.engineState({phase: 'READY', revision: 2, mode: 'pinyin', composing: ''});
+    assert(world.$('engineStatus').hidden, 'strip hidden once ready');
+});
+
+test('bottom pad rides hello into the CSS budget and is excluded from content', {since: '3.30.0'}, () => {
+    const world = fresh();
+    world.hello({});
+    const rowsBefore = world.document.documentElement.style['--kb-row-h'];
+    world.hello({bottomPad: 24});
+    equal(world.document.documentElement.style['--kb-bottom-pad'], '24px',
+        'pad mirrored into CSS var');
+    // Harness view height is fixed, so the row budget shrinks by exactly
+    // pad/4 per row (24/4 = 6) — the accounting that keeps rows unchanged
+    // on device, where the native window grows by the pad.
+    const before = parseInt(rowsBefore, 10);
+    const after = parseInt(world.document.documentElement.style['--kb-row-h'], 10);
+    equal(before - after, 6, 'row budget excludes exactly the pad');
 });
 
 test('quick-pair editor: tick 双拼 relabels the toggle and flips the pair', () => {
@@ -3946,10 +4064,10 @@ test('English UI preserves Chinese composition and switches back', {since: '3.22
     assert(world.$('candidates').textContent.includes('你好'), 'candidate text unchanged');
     equal(world.native.of('clearComposing').length, 0, 'no composition reset');
     world.tap(world.$('setupButton'));
-    assert([...world.$('settingsPanel').querySelectorAll('.set-label')].some(e => e.textContent === 'Cursor speed'), 'dynamic UI translated');
+    assert([...world.$('settingsPanel').querySelectorAll('.set-label')].some(e => e.textContent === 'Quick switch'), 'dynamic UI translated');
     world.hello({mode: 'pinyin', uiLocale: 'zh'});
     equal(world.$('heightCardSave').textContent, '保存', 'switch back');
-    assert([...world.$('settingsPanel').querySelectorAll('.set-label')].some(e => e.textContent === '光标移动速度'), 'open subview stays translated');
+    assert([...world.$('settingsPanel').querySelectorAll('.set-label')].some(e => e.textContent === '快捷切换'), 'open subview stays translated');
 });
 
 test('panel composition replaces spans and saves only after native flush', {since: '3.22.0'}, () => {

@@ -125,7 +125,7 @@ button { font: inherit; }
     right: 0;
     bottom: 0;
     height: calc(100% - var(--band, 0px));
-    padding: 14px 4px calc(5px + var(--safe-bottom, 0px));
+    padding: 14px 4px calc(5px + var(--safe-bottom, 0px) + var(--kb-bottom-pad, 0px));
     background: var(--bg);
     /* clip, not hidden: a focused editor-strip input auto-SCROLLS a
        hidden-overflow container (programmatic scroll), shoving every
@@ -142,7 +142,52 @@ button { font: inherit; }
 /* D: --safe-bottom (native gesture-nav inset, CSS px) lifts the
  * rows above the gesture strip in both orientations; the keyboard background
  * fills the gap. */
-body.landscape #softKeyboard { padding: 4px 4px calc(4px + var(--safe-bottom, 0px)); }
+body.landscape #softKeyboard { padding: 4px 4px calc(4px + var(--safe-bottom, 0px) + var(--kb-bottom-pad, 0px)); }
+
+/* Engine lifecycle notice (mode-fallback §2.3): fills the candidate
+ * slot while the engine warms up ("正在准备语言数据…") or a degrade
+ * fallback serves ("「双拼」暂以英文直出…"). Hidden otherwise. */
+/* The status strip REPLACES the candidate bar's slot while visible (the JS
+ * sets candidates.hidden in step) — two flex:1 strips side by side would
+ * squeeze and clip each other on narrow screens. */
+#engineStatus {
+    flex: 1;
+    min-width: 0;
+    min-height: 40px;
+    /* Block (not flex): text-overflow does not ellipsize a flex container's
+     * anonymous text child - the message clipped at both ends with no
+     * ellipsis (round-4 review). line-height centers it. */
+    display: block;
+    line-height: 40px;
+    text-align: center;
+    font-size: 14px;
+    color: var(--text);
+    opacity: .7;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+#engineStatus[hidden] { display: none; }
+#candidates[hidden] { display: none; }
+body.landscape #engineStatus { min-height: 40px; }
+/* Degraded fallback: a small '!' pinned to the mode toggle (persistent
+ * state comes from hello/events; tapping the toggle retries the failed
+ * mode). */
+#modeToggle.degraded::after {
+    content: '!';
+    position: absolute;
+    top: 1px;
+    right: 1px;
+    min-width: 14px;
+    height: 14px;
+    line-height: 14px;
+    border-radius: 7px;
+    background: #c62828;
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+    text-align: center;
+}
 /* The landscape bar grew (26 -> 40) and moved DOWN (margin-top
  * 2 -> 14) so the pinyin preedit line (0-14px) no longer overlaps the
  * candidates; applyHeight() reserves 78px for the landscape chrome. */

@@ -86,6 +86,9 @@
         "滑动跟手": "Cursor speed",
         "光标移动速度": "Cursor speed",
         "快捷切换": "Quick switch",
+        "正在准备语言数据…": "Preparing language data…",
+        "「{0}」引擎启动失败，暂时英文直出；点模式键重试": "{0} failed to start; English Direct is serving. Tap the mode key to retry",
+        "「{0}」暂以英文直出，点模式键重试": "{0} is temporarily serving as English Direct; tap the mode key to retry",
         "{0} 个键盘": "{0} keyboards",
         "键盘高度": "Keyboard height",
         "调节 ›": "Adjust ›",
@@ -202,7 +205,7 @@
         });
     }
 
-    const KEYBOARD_VERSION = '3.28.1';
+    const KEYBOARD_VERSION = '3.30.0';
     const MIN_NATIVE_API = 1;
     const REQUIRED_CAPABILITIES = [
         'candidate-revision-v1',
@@ -784,6 +787,24 @@
             // continuously, seeded at the fixed threshold crossing.
             // Steps-per-pixel is tunable (1x..5x, default 3x).
             this.scrubSpeed = 3;
+            // hello 已下发原生速度后置 true：旧 localStorage 镜像不再覆盖运行值。
+            this.scrubSpeedFromNative = false;
+            // Long-press trigger (ms) for popup/lock/mode-menu/numpad; the
+            // repeat interval rides it (hold + 40). Feel-tuned via the
+            // settings app, delivered through hello (mode-fallback §4).
+            this.holdMs = 350;
+            // Popup swipe selection range: 0=loose 1.4x, 1=standard 1.0x,
+            // 2=tight 0.7x of POPUP_CELL_REACH (cancellation radius only;
+            // cell switching stays nearest-center).
+            this.popupSnap = 1;
+            // Bottom blank strip (CSS px) below the rows - native window
+            // includes it; applyHeight/H budgets exclude it (mode-fallback §3).
+            this.bottomPad = 0;
+            // Degraded-engine state from events/hello (mode-fallback §2).
+            // Non-null while a Direct fallback serves for a failed mode.
+            this.degrade = null;
+            this.warming = false;
+            this.seenDegradeSeq = 0;
             // Quick keyboard pair for the space-adjacent toggle.
             this.quickPair = ['pinyin', 'direct'];
             try {
@@ -981,6 +1002,11 @@
                 this.heightObserver = new ResizeObserver(() => this.applyHeight());
                 this.heightObserver.observe(document.getElementById('softKeyboard'), { box: 'border-box' });
             }
+            // Hidden-window resizes produce no layout (and no observer
+            // callback); re-derive when the page becomes visible again.
+            document.addEventListener('visibilitychange', () => {
+                if (!document.hidden) this.applyHeight();
+            });
             // Candidate compose controls : × aborts the composition
             // and restores the toolbar; ˅ expands the candidate area over the
             // whole keyboard; inside, ˄ collapses (the
@@ -1207,6 +1233,9 @@
             this.renderLetters(config.layout);
             this.closeModeMenu();
             this.closeSettingsPanel();
+            // renderMode is invoked on every mode change INCLUDING the one a
+            // degrade/recovery event carries; the badge must survive it.
+            this.renderDegradeBadge();
         }
 
         renderLetters(layoutName) {
@@ -1295,8 +1324,14 @@
         }
 
         /** The saved pair alone determines the shortcut. A temporary mode
-         * selected from the long-press menu returns to the first pair entry. */
+         * selected from the long-press menu returns to the first pair entry.
+         * While a degrade fallback serves, the short press retries the
+         * FAILED mode instead of toggling the pair (mode-fallback §2.3). */
         toggleChineseEnglish() {
+            if (this.degrade && this.degrade.active && this.degrade.failedMode) {
+                this.call(() => Native.selectMode(this.degrade.failedMode, this.token));
+                return;
+            }
             const pair = this.quickPair;
             const target = this.mode === pair[0] ? pair[1] : pair[0];
             this.call(() => Native.selectMode(target, this.token));
@@ -1497,13 +1532,13 @@
                         id: touch.identifier, button };
                 }
                 if (button.dataset.lp === 'repeat') {
-                    holdTimer = setTimeout(() => { repeatTimer = setInterval(() => button.click(), 75); }, 390);
+                    holdTimer = setTimeout(() => { repeatTimer = setInterval(() => button.click(), 75); }, this.holdMs + 40);
                 } else if (button.dataset.lp === 'popup' && button.dataset.key) {
-                    holdTimer = setTimeout(() => { if (!this.swiping) this.openPopup(button); }, 350);
+                    holdTimer = setTimeout(() => { if (!this.swiping) this.openPopup(button); }, this.holdMs);
                 } else if (button.dataset.lp === 'lock') {
                     holdTimer = setTimeout(() => {
                         if (!this.swiping) { longFired = true; this.lockShift(); }
-                    }, 350);
+                    }, this.holdMs);
                 } else if (button.dataset.lp === 'mode-menu') {
                     // Long-press the toggle for the full keyboard mode list
                     // (the system IME picker replaced there; the
@@ -1511,13 +1546,13 @@
                     holdTimer = setTimeout(() => {
                         longFired = true;
                         this.toggleModeMenu();
-                    }, 350);
+                    }, this.holdMs);
                 } else if (button.dataset.lp === 'numpad') {
                     // Long-press 123 opens the nine-pad; the plain tap
                     // still opens the symbol layer (fired on touchend).
                     holdTimer = setTimeout(() => {
                         if (!this.swiping) { longFired = true; this.showNumpad(); }
-                    }, 350);
+                    }, this.holdMs);
                 }
             }, { passive: false });
             // A finger that slides off the key cancels the
@@ -1763,6 +1798,14 @@
             this.popup = { key, cells, selected, cancelled: false };
         }
 
+        /** Effective swipe-selection radius: the feel knob scales ONLY the
+         * cancellation reach (loose 1.4x / standard 1.0x / tight 0.7x);
+         * cell switching itself stays nearest-center (mode-fallback §4). */
+        popupReach() {
+            const scale = [1.4, 1, 0.7][this.popupSnap] || 1;
+            return Math.round(POPUP_CELL_REACH * scale);
+        }
+
         movePopup(touch) {
             if (!this.popup) return;
             // the reference parity: a finger that leaves every popup cell cancels the
@@ -1779,11 +1822,11 @@
                 if (d < best) { best = d; selected = cell; }
             });
             const k = Math.max(0, Math.min(1,
-                (best - POPUP_CELL_REACH) / (POPUP_GONE_RADIUS - POPUP_CELL_REACH)));
+                (best - this.popupReach()) / (POPUP_GONE_RADIUS - this.popupReach())));
             const inner = document.getElementById('keyPopupInner');
             inner.style.transform = k > 0 ? `scale(${(1 - k).toFixed(3)})` : '';
             inner.style.opacity = k > 0 ? (1 - 0.9 * k).toFixed(3) : '';
-            if (best > POPUP_CELL_REACH) {
+            if (best > this.popupReach()) {
                 if (!this.popup.cancelled) {
                     this.popup.cancelled = true;
                     this.popup.selected = null;
@@ -2907,17 +2950,33 @@
             const view = document.getElementById('softKeyboard');
             const measured = Number(view && view.clientHeight);
             const safe = this.safeBottomPx();
+            const pad = this.bottomPadPx();
             const total = Number.isFinite(measured) && measured > 0
                 ? measured
-                : Number(fallback) + safe;
-            return Math.max(0, Math.round(total - safe));
+                : Number(fallback) + safe + pad;
+            return Math.max(0, Math.round(total - safe - pad));
+        }
+
+        /** The bottom blank strip in CSS px (dp == px in this WebView);
+         * mirrored into CSS so #softKeyboard's bottom padding owns the
+         * exact same space the JS budgets exclude (mode-fallback §3). */
+        bottomPadPx() {
+            return Math.max(0, Number(this.bottomPad) || 0);
         }
 
         applyHeight() {
             const view = document.getElementById('softKeyboard');
             const total = (view && view.clientHeight) || window.innerHeight;
             const safe = this.safeBottomPx();
-            const available = Math.max(0, total - safe);
+            // The user's bottom blank strip rides INSIDE the view (CSS
+            // padding-bottom owns it); the row budget excludes it so rows
+            // keep their height and the strip stays blank (mode-fallback §3).
+            const pad = this.bottomPadPx();
+            const available = Math.max(0, total - safe - pad);
+            const root = document.documentElement;
+            if (root && root.style && typeof root.style.setProperty === 'function') {
+                root.style.setProperty('--kb-bottom-pad', pad + 'px');
+            }
             // The ctrl rows live INSIDE the bar slot again, so
             // the keyboard budget is orientation-only (no ctrl branch). The
             // height-edit card owns its own 36px slice: while
@@ -2933,13 +2992,28 @@
             // A short landscape screen can cap content below 78 + 4*32.
             // Honor the actual budget so the last row clears the safe area.
             const rowHeight = Math.max(this.landscape ? 1 : KB_ROW_MIN, fit);
-            const root = document.documentElement;
             if (root && root.style && typeof root.style.setProperty === 'function') {
                 root.style.setProperty('--kb-row-h', rowHeight + 'px');
                 // D: the keyboard stops above the gesture strip in
                 // both orientations; the background fills the inset.
                 root.style.setProperty('--safe-bottom', safe + 'px');
             }
+            // A clientHeight read mid-resize bakes a transient budget into
+            // the vars, and a var-only change re-fires nothing (the view's
+            // final size is already observed). Re-run one frame later when
+            // the derivation moved since the previous pass; layout settles,
+            // the values stop moving and the cascade ends. (device gate:
+            // --kb-row-h drifted 46→43→49 across a pad flip)
+            const signature = [total, pad, safe, rowHeight, this.landscape].join('/');
+            if (this._lastHeightSig !== undefined && signature !== this._lastHeightSig
+                && !this._heightConverging && typeof requestAnimationFrame === 'function') {
+                this._heightConverging = true;
+                requestAnimationFrame(() => {
+                    this._heightConverging = false;
+                    this.applyHeight();
+                });
+            }
+            this._lastHeightSig = signature;
             // Keep the floating card attached to the keyboard after the
             // native resize or a preview bridge changes its height.
             if (document.getElementById('heightCard').classList.contains('open')) {
@@ -3375,14 +3449,9 @@
                 pushStores();
             });
 
-            const speedRow = addRow(t("光标移动速度"));
-            addOptions(speedRow, [
-                [1, '1x'], [2, '2x'], [3, '3x'], [4, '4x'], [5, '5x'],
-            ], this.scrubSpeed, value => {
-                this.scrubSpeed = value;
-                try { localStorage.setItem('feelime_scrub_speed', String(value)); } catch (_) {}
-                pushStores();
-            });
+            // 光标移动速度 moved to the full settings app's 手感微调 group
+            // (mode-fallback §4): the quick panel keeps theme/quick-switch
+            // only, and the value now syncs through hello (native pref).
 
             // The double-pinyin key map moved to the full settings app
             // (低频展示需求, plus sogou/flypy now exist - one chart each).
@@ -4852,10 +4921,14 @@
             } catch (_) { /* storage unavailable */ }
             applyTheme();
             // 构造时缓存的运行时值一并刷新，否则恢复值只在下次冷启动生效。
-            try {
-                const speed = parseInt(localStorage.getItem('feelime_scrub_speed') || '3', 10);
-                if (speed >= 1 && speed <= 5) this.scrubSpeed = speed;
-            } catch (_) { /* keep current */ }
+            // Native 值到达后（hello 的 scrubSpeed）镜像是纯兼容遗留：运行值
+            // 以原生为准，旧镜像（如恢复备份刚写入的 rev）不得回写覆盖。
+            if (!this.scrubSpeedFromNative) {
+                try {
+                    const speed = parseInt(localStorage.getItem('feelime_scrub_speed') || '3', 10);
+                    if (speed >= 1 && speed <= 5) this.scrubSpeed = speed;
+                } catch (_) { /* keep current */ }
+            }
             if (quickPairRemoved) this.quickPair = ['pinyin', 'direct'];
             try {
                 const pair = JSON.parse(localStorage.getItem('feelime_quick_pair') || 'null');
@@ -4913,6 +4986,23 @@
             // D: bottom gesture-nav inset (CSS px) - the native
             // view carries this space in both orientations (see applyHeight).
             this.safeBottom = Math.max(0, Number(payload.safeBottom) || 0);
+            // Feel tuning + bottom blank strip (mode-fallback §3/§4). dp is
+            // CSS px in this WebView; hello is authoritative over the old
+            // localStorage scrub key (which stays as the pre-hello fallback).
+            this.bottomPad = Math.max(0, Number(payload.bottomPad) || 0);
+            if (Number(payload.holdMs) in { 200: 1, 300: 1, 350: 1, 450: 1, 600: 1 }) {
+                this.holdMs = Number(payload.holdMs);
+            }
+            if (Number(payload.scrubSpeed) >= 1 && Number(payload.scrubSpeed) <= 5) {
+                this.scrubSpeed = Number(payload.scrubSpeed);
+                // Once native has spoken, the legacy localStorage scrub key
+                // may no longer overwrite the runtime value (pullStores
+                // refresh, restored backup rev) — native owns it now.
+                this.scrubSpeedFromNative = true;
+            }
+            if (Number(payload.popupSnap) in { 0: 1, 1: 1, 2: 1 }) {
+                this.popupSnap = Number(payload.popupSnap);
+            }
             // The native float band above the keyboard - the
             // room every popup may float into (0 keeps everything inside
             // the IME view, e.g. the preview harness).
@@ -4998,6 +5088,11 @@
             const schemeChanged = nextScheme !== dpScheme;
             dpScheme = nextScheme;
             if (modeChanged) this.renderMode();
+            // Degraded/warming state arrives with every hello (mode-fallback
+            // §2.1): a rebuilt WebView restores its badge/notice silently.
+            // hello is a snapshot, never a notification — the flag is what
+            // keeps a rebuild from re-toasting the failure it reports.
+            this.applyEngineLifecycle({ ...payload, snapshot: true });
             if (schemeChanged && this.mode === 'double-pinyin') {
                 this.renderLetters((MODES[this.mode] || MODES.direct).layout);
                 this.updateLabels();
@@ -5024,11 +5119,108 @@
             // 再把本地镜像推给原生——两个方向都走一遍，导入与修改才收敛。
             pullStores(this.token);
             pushStores();
+            // The native view may still be (re)measuring while hello lands,
+            // and a resize that happened while the IME window was hidden
+            // never fires the ResizeObserver (no layout while hidden — the
+            // row budget then stale-read 272 on a 308 view). Re-derive the
+            // budget after the show settles (device-gate proven gap).
+            setTimeout(() => this.applyHeight(), 250);
+            setTimeout(() => this.applyHeight(), 900);
+        }
+
+        /** Degraded/warming state from engine events AND hello (mode-fallback
+         * §2.1): hello restores the persistent badge after a WebView rebuild
+         * but never toasts (degradedActive absent); each degrade transition
+         * carries a fresh seq so a retry that fails again toasts again. */
+        applyEngineLifecycle(payload) {
+            if (payload.warming !== undefined) this.warming = !!payload.warming;
+            if (payload.degraded) {
+                const seq = Number(payload.degradeSeq) || 0;
+                const failedMode = payload.failedMode || '';
+                // degradedActive absent (hello restore) means the fallback IS
+                // serving — restore the badge but never re-toast it.
+                const active = payload.degradedActive !== undefined
+                    ? !!payload.degradedActive : true;
+                const previous = this.degrade;
+                this.degrade = { failedMode, seq, active };
+                // hello is a SNAPSHOT, never a notification (mode-fallback
+                // §2.1): a WebView rebuild restores the badge silently and
+                // marks the seq seen, so a later event for the same failure
+                // cannot re-toast it either.
+                if (payload.snapshot) this.seenDegradeSeq = Math.max(this.seenDegradeSeq, seq);
+                // A degrade kills the engine session an in-flight variant
+                // replay depends on: abandon the wait instead of stranding
+                // the old parse's UI until the replay timer fires (§2.3).
+                if (active && this.variantReplaying) {
+                    clearTimeout(this.variantReplayTimer);
+                    this.variantReplayTimer = null;
+                    this.variantReplaying = false;
+                    this.variantTarget = null;
+                    const grid = document.getElementById('expandGrid');
+                    if (grid) grid.classList.remove('reloading');
+                    if (this.expanded) this.setExpanded(false);
+                }
+                if (active && !payload.snapshot && seq > this.seenDegradeSeq) {
+                    this.seenDegradeSeq = seq;
+                    // Full translated title (「双拼」), not the toggle shorthand (双).
+                    const modeName = MODES[failedMode] ? t(MODES[failedMode].title) : failedMode;
+                    this.showToast(
+                        t("「{0}」引擎启动失败，暂时英文直出；点模式键重试")
+                            .replace('{0}', modeName),
+                    );
+                }
+                this.renderDegradeBadge();
+            } else if (this.degrade) {
+                this.degrade = null;
+                this.renderDegradeBadge();
+            }
+            this.updateEngineStatus();
+        }
+
+        renderDegradeBadge() {
+            const toggle = document.getElementById('modeToggle');
+            if (!toggle) return;
+            toggle.classList.toggle('degraded', !!(this.degrade && this.degrade.active));
+        }
+
+        /** Warming wins over degraded: while language data is still
+         * preparing (including a user-initiated retry of the failed mode),
+         * that is the actionable state — the degrade text would keep telling
+         * the user to retry a retry already running. */
+        updateEngineStatus() {
+            const el = document.getElementById('engineStatus');
+            if (!el) return;
+            const degradedActive = !!(this.degrade && this.degrade.active);
+            const candidates = document.getElementById('candidates');
+            // The status strip takes the candidate bar's slot while visible:
+            // both flex:1 side by side would squeeze each other and clip the
+            // message instead (keyboard.css #engineStatus).
+            if (candidates) candidates.hidden = !!(this.warming || degradedActive);
+            if (this.warming) {
+                el.textContent = t("正在准备语言数据…");
+                el.hidden = false;
+            } else if (degradedActive) {
+                const modeName = MODES[this.degrade.failedMode]
+                    ? t(MODES[this.degrade.failedMode].title) : this.degrade.failedMode;
+                el.textContent = t("「{0}」暂以英文直出，点模式键重试").replace('{0}', modeName);
+                el.hidden = false;
+            } else {
+                el.hidden = true;
+            }
         }
 
         onEngineState(payload) {
             this.lastRevision = payload.revision || 0;
             this.lastEngineState = payload;
+            // Engine lifecycle (warming / degraded) is consumed BEFORE the
+            // variantReplaying early-return below — a replay in flight must
+            // never swallow a degrade or recovery notice (mode-fallback §2.3).
+            if (payload.phase === 'LOADING') this.warming = true;
+            if (payload.phase === 'READY' && !payload.composing) this.warming = false;
+            if (payload.degraded !== undefined) this.applyEngineLifecycle(payload);
+            else if (payload.phase === 'LOADING' || payload.phase === 'READY' || this.degrade) {
+                this.updateEngineStatus();
+            }
             // Replay completes when the echo carrying the target parse
             // arrives; the intermediate echoes (including the empty
             // composition) keep the auto-collapse suppressed until then.
@@ -5291,6 +5483,25 @@
         closeSettingsPanel: () => keyboard.closeSettingsPanel(),
         toggleControlView: () => keyboard.setControlView(!keyboard.ctrlView),
         showNumpad: () => keyboard.showNumpad(),
+        // Called by the native side on every IME show: hiding the IME can
+        // DETACH the input view, and a re-attach hands ResizeObserver the
+        // current size as its baseline (no callback) - a pad/height change
+        // made while hidden would then keep a stale row budget (device-gate
+        // proven). Re-derive from the live geometry at show time.
+        applyHeightNow: () => keyboard.applyHeight(),
+        // Read-only automation probe (device gates): the keyboard instance is
+        // a closure, so gates cannot reach runtime fields without this.
+        debugState: () => ({
+            mode: keyboard.mode,
+            holdMs: keyboard.holdMs,
+            scrubSpeed: keyboard.scrubSpeed,
+            popupSnap: keyboard.popupSnap,
+            bottomPad: keyboard.bottomPad,
+            // Copy: a hand-out reference would let automation mutate the
+            // live degrade state (active=false left a stale badge).
+            degraded: keyboard.degrade ? { ...keyboard.degrade } : null,
+            warming: keyboard.warming,
+        }),
         // Voice-overlay preview hooks: 长按空格的浮层（无按钮、上滑撤销）
         // 与 mic 浮层不同形；preview 页没有真实的按住手势，用钩子驱动。
         setVoiceSession: session => { keyboard.voiceSession = session; },

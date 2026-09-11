@@ -122,6 +122,61 @@
       <div id="dpKeymap"></div>
     </section>
 
+    <section class="card" id="sec-feel" aria-labelledby="feelTitle">
+      <div class="section-heading"><h2 id="feelTitle" data-i18n="input.feel.title">键盘手感</h2><span class="eyebrow" data-i18n="input.feel.badge">微调</span></div>
+      <div class="row language-row">
+        <span class="row-label">
+          <span data-i18n="input.feel.pad">底部留白</span>
+          <small data-i18n="input.feel.padHint">键盘下方的空白高度，0 保持贴底（终端场景）。</small>
+        </span>
+        <select id="bottomPad" class="select" aria-label="底部留白" data-i18n-aria="input.feel.pad">
+          <option value="0">0 dp</option>
+          <option value="12">12 dp</option>
+          <option value="24">24 dp</option>
+          <option value="36">36 dp</option>
+          <option value="48">48 dp</option>
+        </select>
+      </div>
+      <div class="row language-row">
+        <span class="row-label">
+          <span data-i18n="input.feel.hold">长按触发时长</span>
+          <small data-i18n="input.feel.holdHint">长按弹出选字、锁定大写、打开模式菜单的等待时间。</small>
+        </span>
+        <select id="holdMs" class="select" aria-label="长按触发时长" data-i18n-aria="input.feel.hold">
+          <option value="200">200 ms</option>
+          <option value="300">300 ms</option>
+          <option value="350">350 ms</option>
+          <option value="450">450 ms</option>
+          <option value="600">600 ms</option>
+        </select>
+      </div>
+      <div class="row language-row">
+        <span class="row-label">
+          <span data-i18n="input.feel.scrub">光标移动速度</span>
+          <small data-i18n="input.feel.scrubHint">光标拖拽时每个刻度移动的距离。</small>
+        </span>
+        <select id="scrubSpeed" class="select" aria-label="光标移动速度" data-i18n-aria="input.feel.scrub">
+          <option value="1">1x</option>
+          <option value="2">2x</option>
+          <option value="3">3x</option>
+          <option value="4">4x</option>
+          <option value="5">5x</option>
+        </select>
+      </div>
+      <div class="row language-row">
+        <span class="row-label">
+          <span data-i18n="input.feel.snap">滑动选字范围</span>
+          <small data-i18n="input.feel.snapHint">长按滑选时手指偏离多远取消选择：松=更远也有效，紧=更早取消。</small>
+        </span>
+        <select id="popupSnap" class="select" aria-label="滑动选字范围" data-i18n-aria="input.feel.snap">
+          <option value="0" data-i18n="input.feel.snapLoose">松</option>
+          <option value="1" data-i18n="input.feel.snapStandard">标准</option>
+          <option value="2" data-i18n="input.feel.snapTight">紧</option>
+        </select>
+      </div>
+      <p id="feelNote" class="hint block"></p>
+    </section>
+
     <section class="card" id="sec-custom" aria-labelledby="customTitle">
       <div class="section-heading"><h2 id="customTitle" data-i18n="input.custom.title">定制键盘</h2><span class="eyebrow" data-i18n="input.custom.badge">高级</span></div>
       <div class="rows">

@@ -2,6 +2,7 @@ package com.feelime.ime.engine
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -74,6 +75,9 @@ class FakeEngine : TextEngine {
         emit(state(request.stamp, Phase.LOADING))
         emit(state(request.stamp, Phase.READY))
     }
+    /** Scriptable Close (default: CLOSED + unbind). Tests inject an ERROR to
+     *  exercise swap-abort paths. */
+    var onClose: ((EngineRequest, (EngineEvent) -> Unit) -> Unit)? = null
 
     override fun dispatch(request: EngineRequest, emit: (EngineEvent) -> Unit): DispatchAck {
         requests.add(request)
@@ -122,8 +126,13 @@ class FakeEngine : TextEngine {
                 emit(state(request.stamp, Phase.READY, code = EngineCode.PAGE_BOUNDARY, consumed = false))
             }
             is EngineCommand.Close -> {
-                emit(EngineEvent(request.stamp, ++revision, Phase.CLOSED, emptyState(), true, EngineCode.ENGINE_CLOSED))
-                stamp = null
+                val hook = onClose
+                if (hook != null) {
+                    hook(request, emit)
+                } else {
+                    emit(EngineEvent(request.stamp, ++revision, Phase.CLOSED, emptyState(), true, EngineCode.ENGINE_CLOSED))
+                    stamp = null
+                }
             }
             is EngineCommand.EnterRaw -> {
                 val raw = composing
@@ -1531,5 +1540,430 @@ class TextInputCoordinatorTest {
         assertTrue(editorOps.contains("commitText:已粘贴"))
         // Exactly one fresh preedit after the paste (no stacked second span).
         assertEquals("setComposing:h", editorOps.last())
+    }
+
+    // ---- 统一降级（mode-fallback §2）：状态、通知、恢复、重试 ----
+
+    @Test
+    fun warmupTimeoutDegradesWithReasonAndReplaysQueueIntoDirect() {
+        var fireTimeout: (() -> Unit)? = null
+        val slow = FakeEngine()
+        slow.onStart = { _, _ -> }
+        events = mutableListOf()
+        val c = TextInputCoordinator(
+            editor = RecordingEditor().also { editor = it },
+            listener = { events.add(it) },
+            engineFactory = { mode ->
+                if (mode == InputMode.PINYIN) slow else DirectTextEngine()
+            },
+            asrGuard = {},
+            background = java.util.concurrent.Executor { },
+            delayPoster = { _, block -> fireTimeout = block },
+        )
+        c.selectMode(InputMode.PINYIN)
+        assertTrue(c.key('x'.code) == DispatchAck.Accepted)
+        assertFalse(editor.operations.any { it.startsWith("commitText") })
+        assertNull(c.engineDegrade)
+        // 超时触发：统一降级，seq=1、reason=WARMUP_TIMEOUT、单次通知事件。
+        fireTimeout?.invoke()
+        val notice = events.last { it.degrade != null }
+        assertTrue(notice.degradedActive)
+        assertEquals(DegradeReason.WARMUP_TIMEOUT, notice.degrade?.reason)
+        assertEquals(InputMode.PINYIN, notice.degrade?.failedMode)
+        assertEquals(InputMode.DIRECT, c.currentMode)
+        assertEquals(1L, c.engineDegrade?.seq)
+        // warmup 期间排队的键重放进 Direct = 字面 commit。
+        assertTrue(editor.operations.contains("commitText:x"))
+        // 降级 Direct 自己的 READY 不清除 degraded 状态。
+        assertEquals(InputMode.PINYIN, c.engineDegrade?.failedMode)
+    }
+
+    @Test
+    fun retriedModeReadyClearsDegradeAndEmitsRecovery() {
+        var throwForPinyin = true
+        events = mutableListOf()
+        val c = TextInputCoordinator(
+            editor = RecordingEditor().also { editor = it },
+            listener = { events.add(it) },
+            engineFactory = { mode ->
+                if (mode == InputMode.PINYIN && throwForPinyin) throw IllegalStateException("boom")
+                FakeEngine()
+            },
+            asrGuard = {},
+            // pending warmup 的 Start 在 background 里派发，必须同步执行
+            // 才能让 READY 在本次 selectMode 内落地。
+            background = java.util.concurrent.Executor { it.run() },
+        )
+        c.selectMode(InputMode.PINYIN)
+        assertEquals(DegradeReason.ENGINE_FACTORY_FAILED, c.engineDegrade?.reason)
+        // 重试：工厂恢复 → warmup → 引擎 READY 落地 → 清除 + 恢复通知。
+        throwForPinyin = false
+        c.selectMode(InputMode.PINYIN)
+        assertNull(c.engineDegrade)
+        val recovered = events.last { it.degrade != null && !it.degradedActive }
+        assertEquals(InputMode.PINYIN, recovered.degrade?.failedMode)
+        assertEquals(InputMode.PINYIN, c.currentMode)
+    }
+
+    @Test
+    fun factoryThrowDegradesThroughTheUnifiedTransition() {
+        events = mutableListOf()
+        val c = TextInputCoordinator(
+            editor = RecordingEditor().also { editor = it },
+            listener = { events.add(it) },
+            engineFactory = { mode ->
+                if (mode == InputMode.PINYIN) throw IllegalStateException("boom")
+                DirectTextEngine()
+            },
+            asrGuard = {},
+        )
+        c.selectMode(InputMode.PINYIN)
+        // 旧实现：静默用 Direct 服务且保留目标模式标签。新链：显式降级。
+        val notice = events.last { it.degrade != null }
+        assertTrue(notice.degradedActive)
+        assertEquals(DegradeReason.ENGINE_FACTORY_FAILED, notice.degrade?.reason)
+        assertEquals(InputMode.PINYIN, c.engineDegrade?.failedMode)
+        assertEquals(InputMode.DIRECT, c.currentMode)
+        assertTrue(c.key('x'.code) == DispatchAck.Accepted)
+        assertTrue(editor.operations.contains("commitText:x"))
+    }
+
+    @Test
+    fun queueOverflowDegradesWithOverflowReasonAndKeepsEveryKey() {
+        val slow = FakeEngine()
+        slow.onStart = { _, _ -> }
+        events = mutableListOf()
+        val c = TextInputCoordinator(
+            editor = RecordingEditor().also { editor = it },
+            listener = { events.add(it) },
+            engineFactory = { mode ->
+                if (mode == InputMode.PINYIN) slow else DirectTextEngine()
+            },
+            asrGuard = {},
+            background = java.util.concurrent.Executor { },
+        )
+        c.selectMode(InputMode.PINYIN)
+        repeat(257) { c.key('a'.code) }
+        val notice = events.last { it.degrade != null }
+        assertEquals(DegradeReason.QUEUE_OVERFLOW, notice.degrade?.reason)
+        assertEquals(InputMode.PINYIN, notice.degrade?.failedMode)
+        // 无键丢失：全部 257 个都重放进了 Direct。
+        assertEquals(257, editor.operations.count { it == "commitText:a" })
+    }
+
+    @Test
+    fun recreateDuringWarmupStillSwapsAndRestartsEngine() {
+        var swapRan = false
+        events = mutableListOf()
+        val slow = FakeEngine()
+        slow.onStart = { _, _ -> }
+        val executor = java.util.concurrent.Executor { it.run() }
+        val c = TextInputCoordinator(
+            editor = RecordingEditor().also { editor = it },
+            listener = { events.add(it) },
+            engineFactory = { mode ->
+                if (mode == InputMode.PINYIN) slow else DirectTextEngine()
+            },
+            asrGuard = {},
+            background = executor,
+        )
+        c.selectMode(InputMode.PINYIN) // warmup 挂起，interim Direct 未启动
+        c.recreateEngineSession { swapRan = true }
+        assertTrue(swapRan)
+        // 旧实现死链：swap 永不执行、closed=true、后续键全被拒。
+        // 新链：swap 执行、引擎按原模式重启、键入照常排队。
+        assertTrue(c.engineWarming)
+        assertEquals(InputMode.PINYIN, c.currentMode)
+        assertTrue(c.key('x'.code) == DispatchAck.Accepted)
+    }
+
+    @Test
+    fun passwordEntryClearsDegradeAndLeavingRetriesSavedMode() {
+        events = mutableListOf()
+        val c = TextInputCoordinator(
+            editor = RecordingEditor().also { editor = it },
+            listener = { events.add(it) },
+            engineFactory = { mode ->
+                if (mode == InputMode.PINYIN) throw IllegalStateException("boom")
+                DirectTextEngine()
+            },
+            asrGuard = {},
+        )
+        c.selectMode(InputMode.PINYIN)
+        assertEquals(InputMode.PINYIN, c.engineDegrade?.failedMode)
+        // 密码栏进入是主动 Direct：清除降级，不残留「点模式键重试」。
+        c.enterPasswordField()
+        assertNull(c.engineDegrade)
+        assertEquals(InputMode.DIRECT, c.currentMode)
+        // 离开密码栏回到 savedUserMode(PINYIN)：工厂仍抛 → 再次降级（新 seq）。
+        c.leavePasswordField()
+        assertEquals(InputMode.PINYIN, c.engineDegrade?.failedMode)
+        assertEquals(2L, c.engineDegrade?.seq)
+    }
+
+    // ---- codex round-4 评审吸收（重建竞态 / 在途键丢失 / 运行时死亡）----
+
+    /** 生产形态的测试世界：mainPoster 排队（事件与回调异步落地），
+     *  background 内联执行（引擎 Start/Close 立即派发）。 */
+    private fun queuedWorld(
+        slow: FakeEngine,
+        mainQueue: ArrayDeque<() -> Unit>,
+    ): TextInputCoordinator {
+        events = mutableListOf()
+        return TextInputCoordinator(
+            editor = RecordingEditor().also { editor = it },
+            listener = { events.add(it) },
+            engineFactory = { mode ->
+                if (mode == InputMode.PINYIN) slow else DirectTextEngine()
+            },
+            asrGuard = {},
+            background = java.util.concurrent.Executor { task -> task.run() },
+            mainPoster = { block -> mainQueue.add(block) },
+        )
+    }
+
+    private fun drain(queue: ArrayDeque<() -> Unit>) {
+        while (queue.isNotEmpty()) queue.removeFirst()()
+    }
+
+    @Test
+    fun doubleRecreateStillSwapsAndRestartsEngine() {
+        val slow = FakeEngine()
+        slow.onStart = { _, _ -> }
+        val queue = ArrayDeque<() -> Unit>()
+        val c = queuedWorld(slow, queue)
+        c.onEditorStarted(sensitive = false)
+        c.selectMode(InputMode.PINYIN)
+        drain(queue) // warmup READY 落地 → 拼音 live
+        assertEquals(InputMode.PINYIN, c.currentMode)
+        var swapRan = false
+        c.recreateEngineSession { swapRan = true } // #1：Close 已派发、结果在途
+        c.recreateEngineSession { swapRan = true } // #2：必须继承 #1 未完成的关闭
+        drain(queue)
+        assertTrue(swapRan)
+        drain(queue) // beginSession → startEngine 的 LOADING 事件
+        // 旧实现：#2 的 Close 拒绝后无回调，swap 永不执行且整链死锁。
+        assertTrue(c.key('x'.code) == DispatchAck.Accepted)
+        assertEquals(InputMode.PINYIN, c.currentMode)
+        drain(queue)
+    }
+
+    @Test
+    fun newEditorStartInvalidatesAnInFlightRecreate() {
+        val slow = FakeEngine()
+        slow.onStart = { _, _ -> }
+        val queue = ArrayDeque<() -> Unit>()
+        val c = queuedWorld(slow, queue)
+        c.onEditorStarted(sensitive = false)
+        c.selectMode(InputMode.PINYIN)
+        drain(queue)
+        var swapRan = false
+        c.recreateEngineSession { swapRan = true } // Close 回调在途
+        // 焦点跳到新编辑器：在途 recreate 必须整链作废，不得在新会话下换目录。
+        c.onEditorStarted(sensitive = false)
+        drain(queue)
+        assertFalse(swapRan)
+        // 协调器保持健康：新会话引擎照常服务键入。
+        assertTrue(c.key('x'.code) == DispatchAck.Accepted)
+        drain(queue)
+    }
+
+    @Test
+    fun pendingCloseErrorAbortsSwapButRestartsEngine() {
+        val slow = FakeEngine()
+        slow.onStart = { _, _ -> }
+        val queue = ArrayDeque<() -> Unit>()
+        val c = queuedWorld(slow, queue)
+        c.onEditorStarted(sensitive = false)
+        c.selectMode(InputMode.PINYIN) // warmup 挂起：live 是未启动的 interim Direct
+        drain(queue)
+        // warmup 引擎的 Close 失败：引擎可能仍握着 userdb 目录 → 放弃 swap。
+        slow.onClose = { request, emit ->
+            emit(
+                EngineEvent(
+                    request.stamp, 9L, Phase.ERROR,
+                    EngineState("", "", emptyList(), false, false, null),
+                    false, EngineCode.ENGINE_RUNTIME_FAILED,
+                ),
+            )
+        }
+        var swapRan = false
+        c.recreateEngineSession { swapRan = true }
+        drain(queue)
+        assertFalse(swapRan)
+        // 引擎仍按原模式重启（不换目录），键入照常。
+        drain(queue)
+        assertTrue(c.key('x'.code) == DispatchAck.Accepted)
+        assertEquals(InputMode.PINYIN, c.currentMode)
+        drain(queue)
+    }
+
+    @Test
+    fun failedCloseBlocksLaterSwapsForThatEngine() {
+        val slow = FakeEngine()
+        slow.onStart = { _, _ -> }
+        val queue = ArrayDeque<() -> Unit>()
+        val c = queuedWorld(slow, queue)
+        c.onEditorStarted(sensitive = false)
+        c.selectMode(InputMode.PINYIN)
+        drain(queue)
+        // 第一次 recreate：Close 失败 → 放弃 swap（round-4 R4-2）。
+        slow.onClose = { request, emit ->
+            emit(
+                EngineEvent(
+                    request.stamp, 9L, Phase.ERROR,
+                    EngineState("", "", emptyList(), false, false, null),
+                    false, EngineCode.ENGINE_RUNTIME_FAILED,
+                ),
+            )
+        }
+        var swapRan = false
+        c.recreateEngineSession { swapRan = true }
+        drain(queue)
+        assertFalse(swapRan)
+        // 第二次 recreate：Close 被已关闭（但关闭失败过的）引擎拒绝。
+        // 「拒绝」不等于「安全关闭」——同一引擎不得再换目录。
+        slow.onClose = null
+        var swapRan2 = false
+        c.recreateEngineSession { swapRan2 = true }
+        drain(queue)
+        drain(queue)
+        assertFalse(swapRan2)
+        assertTrue(c.key('x'.code) == DispatchAck.Accepted)
+        drain(queue)
+    }
+
+    @Test
+    fun overflowDuringReplayKeepsTheInFlightKey() {
+        val queue = ArrayDeque<() -> Unit>()
+        events = mutableListOf()
+        val c = TextInputCoordinator(
+            editor = RecordingEditor().also { editor = it },
+            listener = { events.add(it) },
+            engineFactory = { DirectTextEngine() },
+            asrGuard = {},
+            background = java.util.concurrent.Executor { },
+            mainPoster = { block -> queue.add(block) },
+        )
+        c.onEditorStarted(sensitive = false)
+        // 'x' 已派发、其提交事件还在 main 队列里；随后 257 键打满队列上限。
+        c.key('x'.code)
+        repeat(257) { c.key('a'.code) }
+        drain(queue)
+        // codex 探针：旧实现溢出即降级 → 换 stamp → 'x' 的提交事件被 stamp
+        // 检查丢弃（丢键）。修复后降级推迟到在途事件落地之后。
+        assertEquals(1, editor.operations.count { it == "commitText:x" })
+        assertEquals(257, editor.operations.count { it == "commitText:a" })
+    }
+
+    @Test
+    fun unexpectedEngineCloseDegradesWithRuntimeReason() {
+        val dying = FakeEngine()
+        events = mutableListOf()
+        val c = TextInputCoordinator(
+            editor = RecordingEditor().also { editor = it },
+            listener = { events.add(it) },
+            engineFactory = { mode ->
+                if (mode == InputMode.PINYIN) dying else DirectTextEngine()
+            },
+            asrGuard = {},
+            background = java.util.concurrent.Executor { task -> task.run() },
+        )
+        c.onEditorStarted(sensitive = false)
+        c.selectMode(InputMode.PINYIN) // 内联 poster：warmup READY 同步落地
+        assertEquals(InputMode.PINYIN, c.currentMode)
+        // 组合中的键：preedit 只在协调器/键盘 UI，未提交。
+        assertTrue(c.key('x'.code) == DispatchAck.Accepted)
+        assertTrue(editor.operations.none { it.startsWith("commitText") })
+        // 引擎自灭（进程内崩溃/abort）：一条没人请求的 CLOSED。revision
+        // 接续在途组合事件（=3），否则被 revision 门提前丢弃，测不到
+        // closed 提前赋值的同步重入路径（round-6 R6-2）。降级是强制切模式：
+        // 未确认组合按原串落盘（IN-04），不随引擎消失。
+        c.onEngineEvent(
+            EngineEvent(
+                dying.stamp!!, 4L, Phase.CLOSED,
+                EngineState("", "", emptyList(), false, false, null),
+                true, EngineCode.ENGINE_RUNTIME_FAILED,
+            ),
+        )
+        assertEquals(DegradeReason.ENGINE_RUNTIME_FAILED, c.engineDegrade?.reason)
+        assertEquals(InputMode.PINYIN, c.engineDegrade?.failedMode)
+        assertEquals(InputMode.DIRECT, c.currentMode)
+        assertTrue(editor.operations.contains("commitText:x"))
+        assertTrue(c.key('x'.code) == DispatchAck.Accepted)
+        assertEquals(2, editor.operations.count { it == "commitText:x" })
+        // 内联 mainPoster + 内联 background：降级自身发起的 Close 同步回
+        // CLOSED，不得被当成「意外死亡」再次降级（round-5 R5-4）。
+        assertEquals(
+            1,
+            events.count { it.degrade != null && it.degradedActive },
+        )
+        assertEquals(1L, c.engineDegrade?.seq)
+    }
+
+    @Test
+    fun liveCloseErrorRestartsInTheUserModeWithoutDegrading() {
+        val slow = FakeEngine() // 默认 onStart：READY 落地，拼音引擎真正 live
+        val queue = ArrayDeque<() -> Unit>()
+        val c = queuedWorld(slow, queue)
+        c.onEditorStarted(sensitive = false)
+        c.selectMode(InputMode.PINYIN)
+        drain(queue)
+        assertEquals(InputMode.PINYIN, c.currentMode)
+        assertFalse(c.engineWarming)
+        // live 引擎的 Close 失败：swap 放弃，但引擎必须按用户模式（拼音）
+        // 原地重启——ERROR 事件是「关闭失败」，不是「引擎运行失败」，
+        // 不得触发降级把模式掀成 Direct（round-5 R5-2）。
+        slow.onClose = { request, emit ->
+            emit(
+                EngineEvent(
+                    request.stamp, 9L, Phase.ERROR,
+                    EngineState("", "", emptyList(), false, false, null),
+                    false, EngineCode.ENGINE_RUNTIME_FAILED,
+                ),
+            )
+        }
+        var swapRan = false
+        c.recreateEngineSession { swapRan = true }
+        drain(queue)
+        drain(queue)
+        assertFalse(swapRan)
+        assertNull(c.engineDegrade)
+        assertEquals(InputMode.PINYIN, c.currentMode)
+        assertTrue(c.key('x'.code) == DispatchAck.Accepted)
+        drain(queue)
+    }
+
+    @Test
+    fun runtimeErrorDegradeLandsSpanCompositionExactlyOnce() {
+        val fr = FakeEngine()
+        events = mutableListOf()
+        val c = TextInputCoordinator(
+            editor = RecordingEditor().also { editor = it },
+            listener = { events.add(it) },
+            engineFactory = { mode ->
+                if (mode == InputMode.FRENCH) fr else DirectTextEngine()
+            },
+            asrGuard = {},
+            background = java.util.concurrent.Executor { task -> task.run() },
+        )
+        c.onEditorStarted(sensitive = false)
+        c.selectMode(InputMode.FRENCH)
+        assertTrue(c.key('x'.code) == DispatchAck.Accepted)
+        // 法语是编辑器 span 模式：组合文本已在宿主 span 里。
+        assertTrue(c.currentStamp != null)
+        // 引擎运行时失败 → 降级。span 经 finishComposing 落地一次；
+        // 不得再 commitText(raw) 把同一个词第二次写进编辑器（round-5 R5-3）。
+        c.onEngineEvent(
+            EngineEvent(
+                c.currentStamp, 50L, Phase.ERROR,
+                EngineState("", "x", emptyList(), true, false, null),
+                false, EngineCode.ENGINE_RUNTIME_FAILED,
+            ),
+        )
+        assertEquals(DegradeReason.ENGINE_RUNTIME_FAILED, c.engineDegrade?.reason)
+        assertEquals(InputMode.DIRECT, c.currentMode)
+        assertEquals(0, editor.operations.count { it.startsWith("commitText") })
+        assertEquals(1, editor.operations.count { it == "finishComposing" })
     }
 }

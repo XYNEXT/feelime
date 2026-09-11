@@ -81,16 +81,43 @@ def ensure_fixture(kb):
     return kb
 
 
+def popup_hold_window():
+    """How long to hold before reading the popup: the long-press timer is
+    user-tunable now (feel settings), so the read window follows the LIVE
+    holdMs instead of the default 350ms — a device left at 600ms must not
+    read the previous case's stale popup DOM."""
+    feel = d.devtools_eval(
+        "window.Feelime && Feelime.debugState && Feelime.debugState()")
+    hold = feel.get("holdMs") if isinstance(feel, dict) else 350
+    return max(0.55, (hold or 350) / 1000.0 + 0.25)
+
+
 def popup_items_and_select(kb, key, selected_text):
     x, y = kb[key]
     if d.synth_touch("start", x, y) != "ok":
         raise RuntimeError("popup start failed - keyboard not up?")
     try:
-        time.sleep(0.55)
+        time.sleep(popup_hold_window())
         items = d.devtools_eval(
             "[...document.querySelectorAll('#keyPopup .kp-item')].map(e=>e.textContent)"
         ) or []
         selector = f"#keyPopup .kp-item:nth-child({items.index(selected_text) + 1})" if selected_text in items else ""
+        if selector == "":
+            # Failure forensics: the popup belongs to a different key or never
+            # opened. Dump the live layout so the stale-geometry question is
+            # answerable from the log.
+            forensics = d.devtools_eval(
+                "(()=>{const live=k=>{const r=document.querySelector(`[data-key='${k}']`)"
+                "?.getBoundingClientRect();return r?[Math.round(r.x),Math.round(r.y)]:null};"
+                "const rows=[...document.querySelectorAll('#softKeyboard > *')].map(el=>({id:el.id||el.className,"
+                "h:Math.round(el.getBoundingClientRect().height)}));"
+                "return JSON.stringify({kbLive:{l:live('l'),e:live('e')},rows,"
+                "kbCss:Math.round(document.getElementById('softKeyboard')"
+                "?.getBoundingClientRect().height||0),"
+                "pad:getComputedStyle(document.getElementById('softKeyboard')).paddingBottom})})()")
+            print(f"  [popup-forensics] key={key} want={selected_text!r} items={items} screen=({x},{y})")
+            print(f"  [popup-forensics] {forensics}")
+            d.screenshot("/tmp/fv-popup-forensics.png")
         target = dom_center(selector, kb) if selector else None
         if target:
             d.synth_touch("move", target[0], target[1])

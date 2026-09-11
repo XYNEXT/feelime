@@ -1,5 +1,11 @@
 package com.feelime.ime.backup
 
+import com.feelime.ime.BOTTOM_PAD_STEPS
+import com.feelime.ime.FEEL_HOLD_STEPS
+import com.feelime.ime.PREF_BOTTOM_PAD_DP
+import com.feelime.ime.PREF_FEEL_HOLD_MS
+import com.feelime.ime.PREF_FEEL_POPUP_SNAP
+import com.feelime.ime.PREF_FEEL_SCRUB_SPEED
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -214,6 +220,13 @@ class UserdataBackup(
      * - BOOL_KEYS 的键必须是 Boolean（读侧 getBoolean）；
      * - 其余键只接受 String/Boolean/Int——Long/浮点/嵌套结构一律拒绝。 */
     private fun checkValue(prefsName: String, key: String, value: Any): Any? {
+        val allowed = DISCRETE_INT_KEYS[prefsName]?.get(key)
+        if (allowed != null) {
+            if (value !is Int || !allowed.contains(value)) {
+                throw RestoreException("SCHEMA", "$prefsName/$key")
+            }
+            return value
+        }
         val range = INT_KEYS[prefsName]?.get(key)
         if (range != null) {
             if (value !is Int || value < range.first || value > range.last) {
@@ -317,6 +330,17 @@ class UserdataBackup(
             "feelime_keyboard" to mapOf(
                 "keyboard_height_portrait" to (0..100000),
                 "keyboard_height_landscape" to (0..100000),
+            ),
+        )
+
+        /** 读侧 getInt 且档位离散的键（mode-fallback §3/§4：底部留白/手感
+         *  参数）。范围校验会放过 1/13 这类非法档位，必须逐一比对。 */
+        private val DISCRETE_INT_KEYS = mapOf(
+            "feelime_keyboard" to mapOf(
+                PREF_BOTTOM_PAD_DP to BOTTOM_PAD_STEPS,
+                PREF_FEEL_SCRUB_SPEED to intArrayOf(1, 2, 3, 4, 5),
+                PREF_FEEL_HOLD_MS to FEEL_HOLD_STEPS,
+                PREF_FEEL_POPUP_SNAP to intArrayOf(0, 1, 2),
             ),
         )
 

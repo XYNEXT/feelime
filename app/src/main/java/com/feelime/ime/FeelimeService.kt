@@ -45,6 +45,14 @@ class FeelimeService : InputMethodService(), AsrEngine.Listener {
     private lateinit var clipboardStore: com.feelime.ime.panel.ClipboardStore
     private lateinit var favoritesStore: com.feelime.ime.panel.FavoritesStore
     private var keyboardView: WebView? = null
+    /** Host of [keyboardView]; re-measured when keyboard-side prefs change
+     *  while the keyboard is already visible (bottom pad, mode-fallback §3). */
+    private var inputViewHost: FixedHeightInputView? = null
+    /** Bumped by keyboard-pref changes; the next show re-measures (a
+     *  requestLayout issued while the input view is hidden has no effect —
+     *  the height stale-read until this epoch check fires on show). */
+    private var keyboardPrefsEpoch = 0
+    private var appliedKeyboardPrefsEpoch = 0
     private var assetStore: KeyboardAssetStore? = null
     private var state = VoiceState.IDLE
     private var acceptAsrResults = false
@@ -115,10 +123,17 @@ class FeelimeService : InputMethodService(), AsrEngine.Listener {
     private var overlayOpen = false
     // Last notified bottom safe area; never used as the current measurement.
     private var lastSafeBottom = -1
+    // Last bottom inset observed while the keyboard view was actually laid
+    // out; the hidden-state fallback reports this instead of guessing.
+    private var lastShownSafeBottom = 0
+    // JS notified once per settled height value (see FixedHeightInputView).
+    private var lastMeasuredHeight = -1
     /** Resolved once per process - navigation_bar_height
      * capped at 32dp, -1 = not resolved yet (see effectiveBottomInset). */
     private var navInsetFallback = -1
     private var insetWatcherInstalled = false
+    // Set while an inset change is pending its settle re-read.
+    private var insetChangeConfirmed = false
     private val flushHeightPref = Runnable {
         val px = pendingHeightWrite
         if (px > 0) {
@@ -160,6 +175,21 @@ class FeelimeService : InputMethodService(), AsrEngine.Listener {
                     coordinator.recreateEngineSession { }
                 }
                 pushBridgeHello()
+            }
+        }
+    }
+
+    /** 设置页改动键盘侧偏好（底部留白/手感参数，mode-fallback §3/§4）：
+     *  值已由设置页落盘，这里重推 hello（运行中的键盘即时采用），并让
+     *  FixedHeightInputView 按新留白重新测量——否则键盘可见时 JS 立刻把
+     *  现有总高扣掉 pad，键行先缩、总高却没变。 */
+    private val keyboardPrefsReceiver = object : android.content.BroadcastReceiver() {
+        override fun onReceive(context: android.content.Context?, intent: android.content.Intent?) {
+            if (intent?.action != ACTION_KEYBOARD_PREFS_CHANGED) return
+            onMain {
+                pushBridgeHello()
+                keyboardPrefsEpoch += 1
+                inputViewHost?.requestLayout()
             }
         }
     }
@@ -270,6 +300,11 @@ class FeelimeService : InputMethodService(), AsrEngine.Listener {
             androidx.core.content.ContextCompat.RECEIVER_NOT_EXPORTED,
         )
         registerReceiver(
+            keyboardPrefsReceiver,
+            android.content.IntentFilter(ACTION_KEYBOARD_PREFS_CHANGED),
+            androidx.core.content.ContextCompat.RECEIVER_NOT_EXPORTED,
+        )
+        registerReceiver(
             voicePermissionReceiver,
             android.content.IntentFilter(VoicePermissionActivity.ACTION_VOICE_PERMISSION_GRANTED).apply {
                 addAction(VoicePermissionActivity.ACTION_VOICE_PERMISSION_DENIED)
@@ -349,6 +384,21 @@ class FeelimeService : InputMethodService(), AsrEngine.Listener {
                     )
                     .put("hasPreviousPage", event.state.hasPreviousPage)
                     .put("hasNextPage", event.state.hasNextPage)
+                event.degrade?.let {
+                    payload
+                        .put("degraded", true)
+                        .put("degradedActive", event.degradedActive)
+                        .put("failedMode", it.failedMode.wireName)
+                        .put("degradeReason", it.reason.name)
+                        .put("degradeSeq", it.seq)
+                }
+                if (event.degrade != null && event.degradedActive) {
+                    android.util.Log.w(
+                        "FeelimeEngine",
+                        "engine degraded: failedMode=${event.degrade.failedMode.wireName} " +
+                            "reason=${event.degrade.reason} seq=${event.degrade.seq}",
+                    )
+                }
                 evaluate("window.Feelime && window.Feelime.onEngineState && window.Feelime.onEngineState($payload)")
             },
             engineFactory = { mode -> EngineFactory.create(applicationContext, mode) },
@@ -434,7 +484,7 @@ class FeelimeService : InputMethodService(), AsrEngine.Listener {
             onBottomInsetChanged()
         }
         installBottomInsetWatcher()
-        return FixedHeightInputView(keyboardHeight).apply {
+        val host = FixedHeightInputView(keyboardHeight).apply {
             setBackgroundColor(Color.TRANSPARENT)
             minimumHeight = keyboardHeight
             addView(
@@ -445,6 +495,8 @@ class FeelimeService : InputMethodService(), AsrEngine.Listener {
                 ),
             )
         }
+        inputViewHost = host
+        return host
     }
 
     override fun onEvaluateInputViewShown(): Boolean = true
@@ -587,6 +639,24 @@ class FeelimeService : InputMethodService(), AsrEngine.Listener {
     override fun onStartInputView(editorInfo: EditorInfo?, restarting: Boolean) {
         super.onStartInputView(editorInfo, restarting)
         onBottomInsetChanged()
+        // A pref change while the keyboard was hidden cannot re-measure
+        // (its requestLayout landed on a non-visible view) — re-measure once
+        // on the next show so the pad/height read fresh prefs (mode-fallback
+        // §3).
+        if (appliedKeyboardPrefsEpoch != keyboardPrefsEpoch) {
+            appliedKeyboardPrefsEpoch = keyboardPrefsEpoch
+            inputViewHost?.requestLayout()
+            // Belt and suspenders: a measure that lands while the window is
+            // still coming up can be pre-empted; re-run once visible.
+            inputViewHost?.post { inputViewHost?.requestLayout() }
+        }
+        // Hiding the IME can detach the input view; on re-attach the JS
+        // ResizeObserver takes the current size as its baseline and never
+        // fires, so prefs changed while hidden would keep a stale row
+        // budget. Re-derive from live geometry on every show.
+        inputViewHost?.post {
+            keyboardView?.evaluateJavascript(HEIGHT_SETTLED_JS, null)
+        }
         // Showing the same editor after hiding may skip onStartInput.
         // Restore collection disabled by onFinishInputView and capture copies
         // made while hidden, except for sensitive editors.
@@ -611,6 +681,7 @@ class FeelimeService : InputMethodService(), AsrEngine.Listener {
         unregisterReceiver(updateReceiver)
         unregisterReceiver(userdataReceiver)
         unregisterReceiver(dpSchemeReceiver)
+        unregisterReceiver(keyboardPrefsReceiver)
         unregisterReceiver(voicePermissionReceiver)
         UiLanguage.preferences(this)
             .unregisterOnSharedPreferenceChangeListener(uiLanguageListener)
@@ -624,6 +695,7 @@ class FeelimeService : InputMethodService(), AsrEngine.Listener {
             destroy()
         }
         keyboardView = null
+        inputViewHost = null
         super.onDestroy()
     }
 
@@ -1199,6 +1271,19 @@ class FeelimeService : InputMethodService(), AsrEngine.Listener {
             .put("pageGenerationToken", pageToken)
             .put("mode", coordinator.currentMode.wireName)
             .put("dpScheme", com.feelime.ime.engine.DoublePinyinScheme.resolve(this))
+            // Degraded-engine state survives WebView rebuilds via hello
+            // (mode-fallback §2.1); hello NEVER fires the toast itself.
+            .put("degraded", coordinator.engineDegrade != null)
+            .put("failedMode", coordinator.engineDegrade?.failedMode?.wireName ?: "")
+            .put("degradeReason", coordinator.engineDegrade?.reason?.name ?: "")
+            .put("degradeSeq", coordinator.engineDegrade?.seq ?: 0L)
+            .put("warming", coordinator.engineWarming)
+            // Keyboard-side preference values (mode-fallback §3/§4). dp == CSS
+            // px inside this WebView; numbers pass through as-is.
+            .put("bottomPad", bottomPadDp())
+            .put("scrubSpeed", feelScrubSpeed())
+            .put("holdMs", feelHoldMs())
+            .put("popupSnap", feelPopupSnap())
             .put(
                 "engineDataReady",
                 JSONObject().apply {
@@ -2030,19 +2115,16 @@ class FeelimeService : InputMethodService(), AsrEngine.Listener {
                 return@guarded
             }
             // Push only after the mutation lands, or the panel re-renders the
-            // pre-removal list .
-            background.execute {
-                clipboardStore.remove(id)
-                main.post { pushClipboard() }
-            }
+            // pre-removal list . The store serializes its mutations onto the
+            // main thread itself (same thread as the capture paths).
+            clipboardStore.remove(id)
+            main.post { pushClipboard() }
         }
 
         @JavascriptInterface
         fun clearClipboard(token: String) = guarded(token, limited = true) {
-            background.execute {
-                clipboardStore.clear()
-                main.post { pushClipboard() }
-            }
+            clipboardStore.clear()
+            main.post { pushClipboard() }
         }
 
         @JavascriptInterface
@@ -2151,6 +2233,27 @@ class FeelimeService : InputMethodService(), AsrEngine.Listener {
         return prefs.getInt(if (landscape) "keyboard_height_landscape" else "keyboard_height_portrait", 0)
     }
 
+    // ===== Keyboard-side prefs (mode-fallback §3/§4). Values live in the
+    // feelime_keyboard prefs file; the settings app writes them through
+    // SettingsBridge and broadcasts ACTION_KEYBOARD_PREFS_CHANGED. Invalid
+    // persisted values fall back to the defaults (the backup whitelist
+    // validates on restore too). =====
+
+    private fun keyboardPrefs() = getSharedPreferences(KEYBOARD_PREFS_FILE, MODE_PRIVATE)
+
+    /** Bottom blank strip below the key rows, in dp (== CSS px in this
+     *  WebView). Default 0 keeps the rows flush with the screen bottom. */
+    private fun bottomPadDp(): Int = readBottomPadDp(this)
+
+    private fun bottomPadPx(): Int =
+        (bottomPadDp() * resources.displayMetrics.density).toInt()
+
+    fun feelScrubSpeed(): Int = readFeelScrubSpeed(this)
+
+    fun feelHoldMs(): Int = readFeelHoldMs(this)
+
+    fun feelPopupSnap(): Int = readFeelPopupSnap(this)
+
     /** Current system area overlapped by the keyboard. WindowMetrics avoids
      * decor insets already consumed by InputMethodService; layout callbacks
      * recheck overlap after the window has moved or changed orientation. */
@@ -2168,13 +2271,26 @@ class FeelimeService : InputMethodService(), AsrEngine.Listener {
                 // Decor insets may already be consumed by InputMethodService.
                 // Reserve only the part our actual WebView overlaps; windows
                 // already placed above the system area need no second padding.
+                // Read only while the keyboard is actually shown: mid-animation
+                // the view's on-screen position is transient and every read is
+                // garbage (device gate: a show/hide flip briefly reported the
+                // full reserve and hello budgeted 11px the view never grows).
                 val view = keyboardView
-                val bottom = if (view != null && view.isLaidOut && view.height > 0) {
+                if (isInputViewShown && view != null && view.isLaidOut && view.height > 0) {
                     val location = IntArray(2)
                     view.getLocationOnScreen(location)
-                    location[1] + view.height
-                } else metrics.bounds.bottom
-                return (bottom - (metrics.bounds.bottom - reserved)).coerceIn(0, reserved)
+                    val bottom = location[1] + view.height
+                    val overlap = (bottom - (metrics.bounds.bottom - reserved)).coerceIn(0, reserved)
+                    lastShownSafeBottom = overlap
+                    return overlap
+                }
+                // Hidden or not yet laid out: the overlap cannot be measured
+                // now, and the old full-reserve guess here reported an inset
+                // the shown-state measure never grows the view by - hello
+                // then budgets safe rows the view doesn't have (device gate:
+                // a pad flip moved --safe-bottom 0→11px and shrank rows
+                // 46→43). Report the last value observed while visible.
+                return lastShownSafeBottom.coerceIn(0, reserved)
             }
         }
         val insets = window?.window?.decorView?.rootWindowInsets
@@ -2221,6 +2337,14 @@ class FeelimeService : InputMethodService(), AsrEngine.Listener {
     private fun onBottomInsetChanged() {
         val effective = navBottomInset()
         if (effective == lastSafeBottom) return
+        // Re-read once after the window settles: a mid-animation read can
+        // transiently disagree, and adopting it re-budges the JS rows.
+        if (!insetChangeConfirmed) {
+            insetChangeConfirmed = true
+            keyboardView?.postDelayed({ insetChangeConfirmed = false; onBottomInsetChanged() }, 300)
+            return
+        }
+        insetChangeConfirmed = false
         lastSafeBottom = effective
         (keyboardView?.parent as? View)?.requestLayout()
         pushBridgeHello()
@@ -2259,15 +2383,28 @@ class FeelimeService : InputMethodService(), AsrEngine.Listener {
  // Review P2-6: navBottomInset resolves the -1
                 // "not observed yet" sentinel through the fallback chain;
                 // the raw field could subtract a pixel from the first frame.
+                // bottomPad rides OUTSIDE the content clamp (mode-fallback
+                // §3): the user's bottom blank strip adds on top of the
+                // clamped content height in every branch.
                 landscape && screenH > 0 ->
-                    minOf(base, realHeightPixels() / 2) + navBottomInset()
-                screenH > 0 -> minOf(base, (screenH * 45) / 100) + navBottomInset()
-                else -> base + navBottomInset()
+                    minOf(base, realHeightPixels() / 2) + navBottomInset() + bottomPadPx()
+                screenH > 0 -> minOf(base, (screenH * 45) / 100) + navBottomInset() + bottomPadPx()
+                else -> base + navBottomInset() + bottomPadPx()
             }
  // The view carries the transparent popup band on
             // top; onComputeInsets keeps the app sized to the keyboard
             // alone (contentTopInsets = band).
             val total = height + floatBandPx()
+            // Height settled at a new value: tell the JS once more AFTER the
+            // layout. Hello's deferred re-derives land at arbitrary offsets
+            // from this measure and can bake a mid-flight row budget that
+            // nothing later corrects (device gate: rows stuck at 37/55 after
+            // a bottom-pad flip). The post-measure notify is authoritative:
+            // it reads the final geometry by construction.
+            if (total != lastMeasuredHeight) {
+                lastMeasuredHeight = total
+                post { keyboardView?.evaluateJavascript(HEIGHT_SETTLED_JS, null) }
+            }
             super.onMeasure(
                 widthMeasureSpec,
                 View.MeasureSpec.makeMeasureSpec(total, View.MeasureSpec.EXACTLY),
@@ -2285,6 +2422,9 @@ class FeelimeService : InputMethodService(), AsrEngine.Listener {
 
     private companion object {
         const val LOCAL_HOST = "feelime.local"
+        /** Re-derive the JS row budget from the settled view geometry. */
+        const val HEIGHT_SETTLED_JS =
+            "window.Feelime && window.Feelime.applyHeightNow && window.Feelime.applyHeightNow()"
         const val KEYBOARD_URL = "https://$LOCAL_HOST/keyboard/index.html"
         const val BRIDGE_NAME = "FeelimeNative"
  // The control layer's palette - Esc/Tab/Home/End, the

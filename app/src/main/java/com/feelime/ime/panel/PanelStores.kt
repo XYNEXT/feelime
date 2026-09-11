@@ -19,10 +19,55 @@ import java.util.concurrent.atomic.AtomicLong
  *   corrupted data). The 2000-code-point commit limit is enforced at the UI
  *   layer, where over-long items render disabled.
  */
+/**
+ * Pure decision core for the clipboard suppression marker (mode-fallback §5):
+ * after a clear/remove, the system clipboard still holds the wiped text — a
+ * re-capture must not re-import it, and any recording of a DIFFERENT text
+ * lifts the marker. Same-text captures stay suppressed on every path: a late
+ * clip-changed notification for a copy made before the clear is
+ * indistinguishable from the wiped clip itself, and the user asked for the
+ * text to stay gone either way. Operates on fingerprints only, never clip
+ * text, so a sensitive clip can never leak into prefs through this path.
+ * JVM-tested.
+ */
+class ClipSuppressPolicy(private val onMarkerChanged: (String?) -> Unit = {}) {
+    var marker: String? = null
+        private set
+
+    /** Process restart: reload the persisted marker (fingerprint or null). */
+    fun restore(saved: String?) {
+        marker = saved
+    }
+
+    /** clear()/remove(): snapshot the fingerprint of the clip the system
+     *  still holds (null = nothing usable to suppress). */
+    fun snapshot(currentFingerprint: String?) {
+        marker = currentFingerprint
+        onMarkerChanged(marker)
+    }
+
+    fun shouldSuppress(fingerprint: String): Boolean =
+        marker != null && fingerprint.isNotEmpty() && fingerprint == marker
+
+    /** Any recorded entry is a real capture — the marker has served its purpose. */
+    fun onRecorded() {
+        if (marker == null) return
+        marker = null
+        onMarkerChanged(null)
+    }
+}
+
 class ClipboardStore(private val context: Context) {
     private val prefs = context.applicationContext
         .getSharedPreferences("feelime_clipboard", Context.MODE_PRIVATE)
     private val idCounter = AtomicLong(System.currentTimeMillis())
+
+    /** Suppression marker lives in prefs (fingerprint only) so it survives
+     *  process death alongside the history it protects. */
+    private val suppress = ClipSuppressPolicy { marker ->
+        if (marker == null) prefs.edit().remove(SUPPRESS_KEY).apply()
+        else prefs.edit().putString(SUPPRESS_KEY, marker).apply()
+    }.also { it.restore(prefs.getString(SUPPRESS_KEY, null)) }
 
     /** Mirrors the service's current editor sensitivity; false = never record. */
     @Volatile
@@ -37,7 +82,7 @@ class ClipboardStore(private val context: Context) {
     /** Runs on the main thread; reads the volatile sensitivity flag once. */
     private fun onClipChanged() {
         if (!collectEnabled) return
-        captureCurrent()
+        captureCurrent(fromFocus = false)
     }
 
     /**
@@ -45,8 +90,16 @@ class ClipboardStore(private val context: Context) {
      * and once when an editor gains focus : copies made while the
      * keyboard was hidden never fired the listener with collectEnabled=true,
      * so the first thing the user pastes would otherwise be missing.
+     *
+     * The suppression fingerprint is honoured on BOTH paths (mode-fallback
+     * §5): right after the user cleared the history, the system clip still
+     * holds the wiped text, and a focus re-capture must not re-import it.
+     * The listener path is included because a copy notification may arrive
+     * AFTER the clear (the copy itself was queued before it) — recording it
+     * would resurrect the just-wiped entry and lift the marker. Only a clip
+     * that differs from the suppressed fingerprint is a REAL new recording.
      */
-    fun captureCurrent() {
+    fun captureCurrent(fromFocus: Boolean = true) {
         val clip = clipboard(context)?.primaryClip ?: return
         if (clip.itemCount == 0) return
         // The flag is also used for version reports copied by Settings.
@@ -54,7 +107,10 @@ class ClipboardStore(private val context: Context) {
         if (clip.description.extras?.getBoolean("android.content.extra.IS_SENSITIVE", false) == true) return
         val text = clip.getItemAt(0).coerceToText(context)?.toString() ?: return
         if (text.isEmpty()) return
+        val fingerprint = fingerprintOf(text)
+        if (suppress.shouldSuppress(fingerprint)) return
         record(text)
+        suppress.onRecorded()
     }
 
     private var registered = false
@@ -86,18 +142,61 @@ class ClipboardStore(private val context: Context) {
         PanelCodec.parse(prefs.getString(KEY, "").orEmpty())
     }
 
+    /** Mutations are serialized onto the main thread WITH the listener/focus
+     *  capture paths (the panel bridge posts to main; the service used to
+     *  call these from a background executor): clear()/remove() ordering
+     *  against captures is what keeps a just-wiped history from being
+     *  resurrected by a capture that lands between the wipe and the
+     *  suppression marker (mode-fallback §5). */
     fun remove(id: String) {
-        synchronized(prefs) {
-            val next = PanelStoreOps.remove(items(), id)
+        mainHandler.post { removeNow(id) }
+    }
+
+    private fun removeNow(id: String) {
+        val removed = synchronized(prefs) {
+            val items = PanelCodec.parse(prefs.getString(KEY, "").orEmpty())
+            val next = PanelStoreOps.remove(items, id)
             prefs.edit().putString(KEY, PanelCodec.serialize(next)).apply()
+            items.firstOrNull { it.id == id }
+        }
+        // Removing the entry that IS the current system clip would be undone
+        // at the next editor focus (captureCurrent) — suppress it too.
+        if (removed != null && currentClipText() == removed.text) {
+            suppress.snapshot(fingerprintOf(removed.text))
         }
     }
 
+    /** See [remove] for the threading note. */
     fun clear() {
+        mainHandler.post { clearNow() }
+    }
+
+    private fun clearNow() {
         synchronized(prefs) {
             prefs.edit().putString(KEY, "").apply()
         }
+        // Suppress whatever the system clipboard still holds so a focus
+        // re-capture cannot resurrect the wiped history. Only the fingerprint
+        // is stored — sensitive clips never persist their text (§5).
+        suppress.snapshot(currentClipText()?.let { fingerprintOf(it) })
     }
+
+    /** Runs on the main thread; null when there is no usable clip text. */
+    private fun currentClipText(): String? {
+        val clip = clipboard(context)?.primaryClip ?: return null
+        if (clip.itemCount == 0) return null
+        if (clip.description.extras?.getBoolean("android.content.extra.IS_SENSITIVE", false) == true) {
+            return null
+        }
+        return clip.getItemAt(0).coerceToText(context)?.toString()?.takeIf { it.isNotEmpty() }
+    }
+
+    /** SHA-256, hex, first 16 chars — never store the clip text itself. */
+    private fun fingerprintOf(text: String): String = runCatching {
+        val digest = java.security.MessageDigest.getInstance("SHA-256")
+            .digest(text.toByteArray(Charsets.UTF_8))
+        digest.take(8).joinToString("") { "%02x".format(it) }
+    }.getOrDefault("")
 
     private fun nextId(): String = "%012x".format(idCounter.incrementAndGet())
 
@@ -106,6 +205,7 @@ class ClipboardStore(private val context: Context) {
 
     private companion object {
         const val KEY = "items"
+        const val SUPPRESS_KEY = "suppress_fingerprint"
         // Design budget: 64KiB total minus ~8KiB metadata headroom, counting
         // text UTF-8 bytes only.
         const val TEXT_BUDGET_BYTES = 56 * 1024

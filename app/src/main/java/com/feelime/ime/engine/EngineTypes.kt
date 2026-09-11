@@ -61,6 +61,25 @@ enum class EngineCode {
 
 enum class Phase { LOADING, READY, CLOSED, ERROR }
 
+/** Why the coordinator settled on the Direct engine (design: mode-fallback §2).
+ *  The reason rides the degrade notification and diagnostics logs — never the
+ *  user's input text. */
+enum class DegradeReason {
+    WARMUP_TIMEOUT, QUEUE_OVERFLOW, ENGINE_FACTORY_FAILED,
+    ENGINE_INIT_FAILED, ENGINE_DATA_MISMATCH, ENGINE_RUNTIME_FAILED,
+}
+
+/** Persistent degraded state: which user mode failed and why. `seq` advances
+ *  on EVERY degrade transition so each failure can notify once (a retry that
+ *  fails again must toast again). Cleared when a real engine for the failed
+ *  mode lands, or when the user/an editor lifecycle picks a mode deliberately
+ *  (transition table in mode-fallback §2.2). */
+data class DegradeState(
+    val failedMode: InputMode,
+    val reason: DegradeReason,
+    val seq: Long,
+)
+
 sealed interface DispatchAck {
     data object Accepted : DispatchAck
     data class Rejected(val code: EngineCode) : DispatchAck
@@ -73,6 +92,13 @@ data class EngineEvent(
     val state: EngineState,
     val consumed: Boolean,
     val code: EngineCode,
+    /** Set only on the coordinator's synthetic degrade/recover notification
+     *  events; engines never produce these. */
+    val degrade: DegradeState? = null,
+    /** True when the degrade is (still) serving — the degrade notification
+     *  and the hello restore both carry it; false only on the recovery
+     *  notification. */
+    val degradedActive: Boolean = false,
 )
 
 fun interface TextEngine {

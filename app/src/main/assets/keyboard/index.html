@@ -121,6 +121,10 @@
             </svg>
         </button>
         <div id="candidates"></div>
+ <!-- Engine lifecycle notice (mode-fallback §2.3): overlays the
+             candidate strip while the engine warms up or a degrade fallback
+             serves. Pointer-transparent; hidden otherwise. -->
+        <div id="engineStatus" hidden></div>
         <button id="clipboardButton" data-role="clipboard" class="tool" aria-label="剪贴板" data-i18n-aria-label="剪贴板">
             <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true">
                 <path d="M19 2h-4.18C14.4.84 13.3 0 12 0c-1.3 0-2.4.84-2.82 2H5c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-7 0c.55 0 1 .45 1 1s-.45 1-1 1-1-.45-1-1 .45-1 1-1zm7 18H5V4h2v3h10V4h2v16z"/>

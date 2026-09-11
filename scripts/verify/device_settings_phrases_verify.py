@@ -150,10 +150,11 @@ def main():
     labels = ev("[...document.querySelectorAll('#settingsPanel .set-label')]"
                 ".map(el => el.textContent)") or []
     record("home page rows (tools live on the toolbar; key map moved to the settings app)",
+           # UI-19: the cursor-speed row moved into the settings app's feel
+           # card, so the panel home page keeps four rows.
            labels in (
-               ['色彩模式', '光标移动速度', '快捷切换', '长按菜单', '键盘高度'],
-               ['Appearance', 'Cursor speed', 'Quick switch',
-                'Keyboard menu', 'Keyboard height'],
+               ['色彩模式', '快捷切换', '长按菜单', '键盘高度'],
+               ['Appearance', 'Quick switch', 'Keyboard menu', 'Keyboard height'],
            ),
            repr(labels))
 

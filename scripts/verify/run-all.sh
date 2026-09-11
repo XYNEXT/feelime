@@ -175,6 +175,9 @@ run_suite "9l editor-modes" python3 "$HERE/device_editor_modes_verify.py"
 echo "== 9m/11 Verification (stable parses/quick pair/Fn/control height) =="
 run_suite "9m replay-geometry" python3 "$HERE/device_replay_geometry_verify.py"
 
+echo "== 9n/11 Verification (degrade retry/bottom pad/feel/clipboard marker) =="
+run_suite "9n feel-degrade" python3 "$HERE/device_feel_degrade_verify.py"
+
 echo "== 10/11 height/resource verification =="
 run_suite "10/11 resource" python3 "$HERE/device_resource_verify.py" --apk "$FEELIME_VERIFY_APK"
 

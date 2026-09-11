@@ -215,6 +215,20 @@ const I18N = {
         "custom.count": "已定制 {count} 个键",
         "error.INVALID_CUSTOM_JSON": "定制 JSON 格式不正确。",
         "error.INVALID_DP_SCHEME": "双拼方案选项无效。",
+        "input.feel.title": "键盘手感",
+        "input.feel.badge": "微调",
+        "input.feel.pad": "底部留白",
+        "input.feel.padHint": "键盘下方的空白高度，0 保持贴底（终端场景）。",
+        "input.feel.hold": "长按触发时长",
+        "input.feel.holdHint": "长按弹出选字、锁定大写、打开模式菜单的等待时间。",
+        "input.feel.scrub": "光标移动速度",
+        "input.feel.scrubHint": "光标拖拽时每个刻度移动的距离。",
+        "input.feel.snap": "滑动选字范围",
+        "input.feel.snapHint": "长按滑选时手指偏离多远取消选择：松=更远也有效，紧=更早取消。",
+        "input.feel.snapLoose": "松",
+        "input.feel.snapStandard": "标准",
+        "input.feel.snapTight": "紧",
+        "error.INVALID_FEEL_OPTION": "手感参数无效，已还原为原值。",
         "error.EMPTY_SOURCE": "请先填入更新源地址（metainfo.json）。",
         "error.EMPTY_URL": "请先填入键盘包地址。",
         "error.INVALID_SOURCE": "更新源地址无效。",
@@ -468,6 +482,20 @@ const I18N = {
         "custom.count": "{count} custom keys",
         "error.INVALID_CUSTOM_JSON": "The custom JSON format is invalid.",
         "error.INVALID_DP_SCHEME": "Invalid double-pinyin scheme.",
+        "input.feel.title": "Keyboard feel",
+        "input.feel.badge": "Tuning",
+        "input.feel.pad": "Bottom padding",
+        "input.feel.padHint": "Blank strip under the keys; 0 keeps the keyboard flush with the screen (terminal use).",
+        "input.feel.hold": "Long-press trigger",
+        "input.feel.holdHint": "How long a press waits before popup selection, caps lock, or the mode menu opens.",
+        "input.feel.scrub": "Cursor speed",
+        "input.feel.scrubHint": "Distance the caret moves per drag step.",
+        "input.feel.snap": "Swipe selection range",
+        "input.feel.snapHint": "How far the finger may drift during popup swipe before the pick cancels: loose = forgiving, tight = early cancel.",
+        "input.feel.snapLoose": "Loose",
+        "input.feel.snapStandard": "Standard",
+        "input.feel.snapTight": "Tight",
+        "error.INVALID_FEEL_OPTION": "Invalid feel option; the previous value was kept.",
         "error.EMPTY_SOURCE": "Enter an update source (metainfo.json) first.",
         "error.EMPTY_URL": "Enter a keyboard package URL first.",
         "error.INVALID_SOURCE": "The update source URL is invalid.",
@@ -696,6 +724,10 @@ window.FeelimeSettings = {
             case "dpSchemeError":
                 setNote("dpNote", eventText(event, "error.INVALID_DP_SCHEME"));
                 break;
+            case "bottomPadError":
+            case "feelOptionsError":
+                setNote("feelNote", eventText(event, "error.INVALID_FEEL_OPTION"));
+                break;
             case "asrNote":
                 setNote("asrNote", eventText(event, "note.saved", {
                     count: event.count, max: event.max || event.maxLines, chars: event.chars || event.maxChars,
@@ -741,11 +773,28 @@ function render(state) {
     renderHero(state);
     renderIme(state);
     renderDoublePinyin(state);
+    renderFeel(state);
     renderVoice(state);
     renderAsr(state);
     renderCustom(state);
     renderUpdate(state);
     renderAbout(state);
+}
+
+/** 键盘手感（mode-fallback §3/§4）：底部留白 + 长按/滑动/光标微调。
+ *  值来自桥接 state（与 IME hello 同一份 prefs 回落逻辑）；取值先对
+ *  合法档位白名单校验，避免把 state 里的野值灌进 select。 */
+function renderFeel(state) {
+    const setSelect = (id, value, allowed) => {
+        const node = $(id);
+        if (!node) return;
+        const text = String(value);
+        if (allowed.includes(text) && document.activeElement !== node) node.value = text;
+    };
+    setSelect("bottomPad", state.bottomPad ?? 0, ["0", "12", "24", "36", "48"]);
+    setSelect("holdMs", state.holdMs ?? 350, ["200", "300", "350", "450", "600"]);
+    setSelect("scrubSpeed", state.scrubSpeed ?? 3, ["1", "2", "3", "4", "5"]);
+    setSelect("popupSnap", state.popupSnap ?? 1, ["0", "1", "2"]);
 }
 
 /** 双拼方案 + 键位图（dp-data.js 的 window.FeelimeDp 提供各方案键位）。 */
@@ -1154,6 +1203,21 @@ $("btnAddTile").addEventListener("click", () => call("addImeTile"));
 $("btnMic").addEventListener("click", () => call("requestMic"));
 $("uiLanguage").addEventListener("change", event => setUiLanguage(event.target.value));
 $("dpScheme").addEventListener("change", event => call("setDoublePinyinScheme", event.target.value));
+
+// 键盘手感（mode-fallback §3/§4）：任一下拉变更即提交三值（-1=不变的是
+// 原生侧约定；这里三值总是全部上报，省一次「哪个变了」的状态跟踪）。
+function submitFeelOptions() {
+    call(
+        "setFeelOptions",
+        parseInt($("scrubSpeed").value, 10),
+        parseInt($("holdMs").value, 10),
+        parseInt($("popupSnap").value, 10),
+    );
+}
+$("bottomPad").addEventListener("change", event => call("setBottomPadding", parseInt(event.target.value, 10)));
+$("holdMs").addEventListener("change", submitFeelOptions);
+$("scrubSpeed").addEventListener("change", submitFeelOptions);
+$("popupSnap").addEventListener("change", submitFeelOptions);
 $("modelBackend").addEventListener("change", event => call("setModelBackend", event.target.value));
 $("modelDownloadSource").addEventListener("change", event => {
     const visible = event.target.value === "custom";

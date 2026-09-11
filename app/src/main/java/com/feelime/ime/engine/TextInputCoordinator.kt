@@ -47,10 +47,41 @@ class TextInputCoordinator(
     private var stamp: EngineStamp = EngineStamp(editorGeneration, engineSessionGeneration, mode)
     private var lastAppliedRevision = 0L
     private var closed = false
+    /** Whether [engine] ever got a Start. The warmup's interim Direct is
+     *  created un-started — its Close would be rejected WITHOUT a callback,
+     *  which the recreate chain once deadlocked on (mode-fallback §2.4). */
+    private var liveEngineStarted = true
 
     private var pendingEngine: TextEngine? = null
     private var pendingStamp: EngineStamp? = null
     private var pendingLastRevision = 0L
+
+    /** Close bookkeeping for swap gating (mode-fallback §2.4): a recreate's
+     *  swap must wait for EVERY close in flight when it starts — its own,
+     *  a superseded recreate's, a degrade's — plus inherit engines whose
+     *  close ever FAILED. A rejected re-close proves nothing (the engine may
+     *  still hold the userdb dir), so those block swaps for good. */
+    private class CloseState {
+        var dispatched = false
+    }
+    private val closeStates = HashMap<TextEngine, CloseState>()
+    private val closeFailed = java.util.Collections.newSetFromMap(
+        java.util.concurrent.ConcurrentHashMap<TextEngine, Boolean>(),
+    )
+    /** (watched closes, decision) pairs — see recreateEngineSession. */
+    private val swapWaits = mutableListOf<
+        Pair<MutableMap<TextEngine, Boolean?>, (Boolean) -> Unit>>()
+
+    /** Set while the live engine is a degraded Direct standing in for a failed
+     *  target (mode-fallback §2). One notification per transition; `seq`
+     *  advances on every degrade so a retry that fails again notifies again. */
+    private var degraded: DegradeState? = null
+    private var degradeSeq = 0L
+    /** Identifies one recreateEngineSession operation end-to-end (mode-fallback
+     *  §2.4): late callbacks from a superseded recreate must not run its swap.
+     *  @Volatile: the close/swap chain re-checks it on a background thread. */
+    @Volatile
+    private var recreateGeneration = 0L
 
     private sealed interface QueuedInput {
         data class Command(val value: EngineCommand) : QueuedInput
@@ -61,6 +92,12 @@ class TextInputCoordinator(
     private val warmupQueue = ArrayDeque<QueuedInput>()
     private var warmupReplayGeneration = 0L
     private var replaying = false
+    /** Queue cap hit while a dispatched command is still in flight: degrading
+     *  immediately would re-stamp the session and orphan that command's event
+     *  (its commit would be dropped by the stamp check = a lost keystroke).
+     *  The degrade is deferred to the next quiescent point of the replay
+     *  (mode-fallback §2.5) instead. */
+    private var overflowPending = false
     private var composingActive = false
     /** The raw pinyin no longer enters the editor, so the
      * coordinator keeps the buffer here - it must be landable when a literal
@@ -96,6 +133,9 @@ class TextInputCoordinator(
     val currentStamp: EngineStamp get() = stamp
     val engineWarming: Boolean get() = pendingEngine != null
     val enterConsumedComposing: Boolean get() = lastEnterConsumedComposing
+
+    /** Persistent degraded state for hello/event payloads (null = healthy). */
+    val engineDegrade: DegradeState? get() = degraded
 
     /** Host selection/caret changed outside a coordinator operation. */
     fun onEditorSelectionChanged(
@@ -158,6 +198,12 @@ class TextInputCoordinator(
         predictedSelectionStart = initialSelectionStart
         predictedSelectionEnd = initialSelectionEnd
         warmupQueue.clear()
+        overflowPending = false
+        // A new editor session supersedes any in-flight recreate (mode-fallback
+        // §2.4): its close/swap chain re-checks recreateGeneration at every
+        // step, so bumping it here strands the old operation before it can
+        // swap the userdb under the freshly opened session.
+        recreateGeneration += 1
         abandonPending()
         if (sensitive) {
             // The production password-field entry must perform the same
@@ -209,7 +255,7 @@ class TextInputCoordinator(
         invalidateWordUndo()
 
         if (pendingEngine != null || replaying) {
-            warmupQueue.addLast(QueuedInput.Mode(next))
+            enqueueQueued(QueuedInput.Mode(next))
             savedUserMode = next
             modeStore?.save(next)
             return ModeSelectionResult.ACCEPTED
@@ -235,46 +281,149 @@ class TextInputCoordinator(
      *
      * 与 selectMode 的同步链不同，这里必须「等旧引擎 Close 真正执行完」
      * 再换目录：Close 是排进引擎线程的异步命令，不等就会和旧引擎的
-     * 收尾写入赛跑。所以链路是 主线程 accept → dispatch Close →
-     * （引擎线程上）Close 完成 → 换目录 → 回主线程开新会话。
-     * 须在主线程调用。
+     * 收尾写入赛跑。
+     *
+     * 串行协议（mode-fallback §2.4，修「warmup 中 recreate 死链」）：
+     * 主线程一次性捕获全部身份并**先摘除 pending**（此后迟到的超时/READY
+     * 回调身份检查必然失配，无法插进本链）；live 引擎按捕获的启动生命
+     * 周期决定是否需要 Close——warmup 的 interim Direct 未启动，其 Close
+     * 会被 STALE_STAMP **拒绝且不回调**（旧实现恰死在这里），直接续接；
+     * Close 回调 ERROR → 放弃 swap（引擎可能仍握着目录），在原目录重启。
+     * recreateGeneration 让被新编辑器/新 recreate 取代的旧链全部丢弃
+     * （swap 一旦发生无法撤销，只能如实记日志）。须在主线程调用。
      */
     fun recreateEngineSession(swapUserdb: () -> Unit) {
         acceptCurrentComposition()
-        val liveEngine = engine
+        recreateGeneration += 1
+        val gen = recreateGeneration
+        val live = engine
         val liveStamp = stamp
+        val liveWasStarted = liveEngineStarted
+        val warmupEngine = pendingEngine
+        val warmupStamp = pendingStamp
+        pendingEngine = null
+        pendingStamp = null
+        pendingLastRevision = 0
         closed = true
 
         fun beginSession() = mainPoster {
+            if (gen != recreateGeneration) return@mainPoster
             abandonPending()
             newSession()
             startEngine(mode)
         }
 
-        fun closePendingThenSwap() {
-            val warmupEngine = pendingEngine
-            val warmupStamp = pendingStamp
-            pendingEngine = null
-            pendingStamp = null
-            pendingLastRevision = 0
-            if (warmupEngine == null || warmupStamp == null) {
-                runCatching { swapUserdb() }
-                beginSession()
-                return
-            }
-            background?.execute {
-                warmupEngine.dispatch(EngineRequest(warmupStamp, EngineCommand.Close)) { }
-                runCatching { swapUserdb() }
-                beginSession()
-            } ?: run {
-                runCatching { swapUserdb() }
+        fun swapAndBegin() {
+            // Background-thread guard: a stale read at worst lets one
+            // redundant swap run; beginSession re-checks on the main thread.
+            if (gen != recreateGeneration) return
+            runCatching { swapUserdb() }
+                .onFailure { android.util.Log.w("FeelimeEngine", "userdb swap failed", it) }
+            beginSession()
+        }
+
+        fun decide(allOk: Boolean) {
+            if (gen != recreateGeneration) return
+            if (allOk) {
+                // The decision fires from settleClose on the MAIN thread;
+                // the swap walks and deletes user directories — keep it off
+                // the main thread (round-5 review).
+                if (background != null) background.execute { swapAndBegin() }
+                else swapAndBegin()
+            } else {
+                println("FeelimeEngine: recreate close failed; swap aborted")
                 beginSession()
             }
         }
 
-        liveEngine.dispatch(EngineRequest(liveStamp, EngineCommand.Close)) { _ ->
-            background?.execute { closePendingThenSwap() } ?: closePendingThenSwap()
+        // The swap renames the userdb directory ANY closing engine may still
+        // hold open, so it waits for every close this recreate concerns AND
+        // every close already in flight (a superseded recreate's, a degrade's)
+        // — plus every engine whose close ever failed. A mere Rejected ack
+        // never counts as a safe close (mode-fallback §2.4, round-4 review).
+        val watch = LinkedHashMap<TextEngine, Boolean?>()
+        if (liveWasStarted) watch[live] = null
+        if (warmupEngine != null && warmupStamp != null) watch[warmupEngine] = null
+        for (failedEngine in closeFailed) watch.putIfAbsent(failedEngine, false)
+        for ((busyEngine, state) in closeStates) {
+            if (state.dispatched) watch.putIfAbsent(busyEngine, null)
         }
+        if (watch.isEmpty()) {
+            decide(true)
+            return
+        }
+        swapWaits.add(watch to { allOk -> decide(allOk) })
+
+        if (liveWasStarted) beginClose(live, liveStamp, background)
+        if (warmupEngine != null && warmupStamp != null) {
+            beginClose(warmupEngine, warmupStamp, background)
+        }
+        scanSwapWaits()
+    }
+
+    /** Initiate a close of [engine]; later calls for the same engine join the
+     *  in-flight one instead of re-dispatching. The outcome reaches swap
+     *  decisions through [settleClose] updating every watch map. */
+    private fun beginClose(
+        engine: TextEngine,
+        stamp: EngineStamp,
+        executor: java.util.concurrent.Executor?,
+    ) {
+        if (engine in closeFailed) return
+        val state = closeStates.getOrPut(engine) { CloseState() }
+        if (state.dispatched) return
+        state.dispatched = true
+        val dispatch = Runnable {
+            val ack = engine.dispatch(EngineRequest(stamp, EngineCommand.Close)) { event ->
+                mainPoster {
+                    // Ordinary close semantics first (generation bump,
+                    // listener) — stamp checks drop events that no longer
+                    // belong to the current session. The command tag keeps
+                    // the ERROR arm from degrading on a failed CLOSE: the
+                    // engine did not fail while serving; the bookkeeping
+                    // owns that consequence (round-5 review).
+                    onEngineEvent(event, EngineCommand.Close)
+                    settleClose(engine, event.phase != Phase.ERROR)
+                }
+            }
+            if (ack != DispatchAck.Accepted) {
+                mainPoster { settleClose(engine, true) }
+            }
+        }
+        if (executor != null) executor.execute(dispatch) else dispatch.run()
+    }
+
+    private fun settleClose(engine: TextEngine, ok: Boolean) {
+        if (!ok) closeFailed.add(engine)
+        if (closeStates.remove(engine) == null) return
+        // Central watch update: a recreate watching an engine it does not
+        // own (inherited in-flight close) has no waiter here — the watch map
+        // is the only channel (round-4 review probe).
+        swapWaits.forEach { (watch, _) -> if (engine in watch) watch[engine] = ok }
+        scanSwapWaits()
+    }
+
+    /** Fire every recreate decision whose watched closes are all settled —
+     *  or any of which failed (a failure aborts the swap immediately). */
+    private fun scanSwapWaits() {
+        if (swapWaits.isEmpty()) return
+        val decided = mutableListOf<Pair<(Boolean) -> Unit, Boolean>>()
+        val iterator = swapWaits.iterator()
+        while (iterator.hasNext()) {
+            val (watch, decide) = iterator.next()
+            when {
+                watch.values.any { it == false } -> {
+                    iterator.remove()
+                    decided.add(decide to false)
+                }
+                watch.values.all { it != null } -> {
+                    iterator.remove()
+                    decided.add(decide to true)
+                }
+                else -> {}
+            }
+        }
+        decided.forEach { (decide, ok) -> decide(ok) }
     }
 
     /**
@@ -298,8 +447,7 @@ class TextInputCoordinator(
     fun acceptCurrentComposition(after: () -> Unit): DispatchAck {
         invalidateWordUndo()
         if (pendingEngine != null || replaying) {
-            warmupQueue.addLast(QueuedInput.Accept(after))
-            return DispatchAck.Accepted
+            return enqueueQueued(QueuedInput.Accept(after))
         }
         val ack = acceptCurrentCompositionNow()
         after()
@@ -463,8 +611,7 @@ class TextInputCoordinator(
     fun pasteExternal(text: String): DispatchAck {
         asrGuard()
         if (pendingEngine != null || replaying) {
-            warmupQueue.addLast(QueuedInput.Literal(text))
-            return DispatchAck.Accepted
+            return enqueueQueued(QueuedInput.Literal(text))
         }
         return pasteExternalNow(text)
     }
@@ -525,14 +672,52 @@ class TextInputCoordinator(
 
     private fun engineIsActive(): Boolean = !closed
 
+    /** Single queue entrance for every user-input path (mode-fallback §2.5):
+     *  the item is ALWAYS enqueued (nothing is lost); overflowing the cap
+     *  settles on Direct with the overflow as the reason — during warmup the
+     *  failed mode is the pending session's, during a live replay it is the
+     *  mode being replayed. */
+    private fun enqueueQueued(item: QueuedInput): DispatchAck {
+        warmupQueue.addLast(item)
+        if (warmupQueue.size > MAX_WARMUP_QUEUE) {
+            if (replaying) {
+                // A command is dispatched but its event has not been applied
+                // yet; degrading now would re-stamp and drop it (P1: typed
+                // key lost). Degrade when the replay reaches a quiescent
+                // point instead — the queue keeps every key until then.
+                overflowPending = true
+            } else {
+                degradeToDirect(overflowFailedMode(), DegradeReason.QUEUE_OVERFLOW)
+            }
+        }
+        return DispatchAck.Accepted
+    }
+
+    /** The mode an overflow degrade blames: the pending warmup's target, or
+     *  the mode being replayed. Direct itself overflowing (event backpressure
+     *  on a plain Direct session) is nobody's failure — no degrade badge. */
+    private fun overflowFailedMode(): InputMode? {
+        val failed = pendingStamp?.mode ?: mode
+        return if (failed == InputMode.DIRECT) null else failed
+    }
+
+    /** Run the deferred overflow degrade at a replay quiescent point.
+     *  Returns true when it fired: the caller must STOP — degradeToDirect
+     *  started its own replay chain, and continuing the caller's loop would
+     *  run two chains against one queue (round-4 review). */
+    private fun takeOverflowDegrade(): Boolean {
+        if (!overflowPending) return false
+        overflowPending = false
+        degradeToDirect(overflowFailedMode(), DegradeReason.QUEUE_OVERFLOW)
+        return true
+    }
+
     private fun dispatch(command: EngineCommand): DispatchAck {
         if (closed && command != EngineCommand.Start) {
             return DispatchAck.Rejected(EngineCode.STALE_STAMP)
         }
         if (pendingEngine != null || replaying) {
-            warmupQueue.addLast(QueuedInput.Command(command))
-            if (pendingEngine != null && warmupQueue.size > MAX_WARMUP_QUEUE) fallbackFromWarmup()
-            return DispatchAck.Accepted
+            return enqueueQueued(QueuedInput.Command(command))
         }
         // Live events are posted too. Keep subsequent keys and mode/session
         // changes behind the applied event, just like warmup replay.
@@ -619,6 +804,7 @@ class TextInputCoordinator(
      * Android main looper instead of running inline.
      */
     private fun replayWarmupQueue() {
+        if (takeOverflowDegrade()) return
         replaying = true
         val generation = ++warmupReplayGeneration
         fun next() {
@@ -626,6 +812,10 @@ class TextInputCoordinator(
             val item = warmupQueue.removeFirstOrNull()
             if (item == null) {
                 replaying = false
+                // Drain finished: a deferred overflow degrade re-enters the
+                // unified transition from a genuinely quiescent point. The
+                // degrade starts its own replay chain and owns the queue.
+                takeOverflowDegrade()
                 return
             }
             when (item) {
@@ -652,25 +842,110 @@ class TextInputCoordinator(
         next()
     }
 
-    /** Warmup failed or overflowed: settle on the Direct engine and replay. */
-    private fun fallbackFromWarmup() {
-        val stalled = pendingEngine
-        val pending = pendingStamp
+    /** Unified degrade transition (mode-fallback §2.1): dispose the old live
+     *  AND pending engines, settle on a real Direct engine, record WHY (with a
+     *  fresh seq — a retry that fails again notifies again), emit exactly one
+     *  notification, then replay whatever was typed into Direct. */
+    private fun degradeToDirect(failedMode: InputMode?, reason: DegradeReason) {
+        val live = engine
+        val liveStamp = stamp
+        val liveWasStarted = liveEngineStarted
+        val warmupEngine = pendingEngine
+        val warmupStamp = pendingStamp
         pendingEngine = null
         pendingStamp = null
         pendingLastRevision = 0
-        if (stalled != null && pending != null && background != null) {
-            background.execute {
-                stalled.dispatch(EngineRequest(pending, EngineCommand.Close)) { }
+        // Mark the old session closed BEFORE the closes: with an inline
+        // mainPoster the close's CLOSED event lands during the dispatch call,
+        // and a still-false `closed` would re-enter the unexpected-death
+        // branch — one failure, two degrade notifications (round-5 review).
+        closed = true
+        // A degrade is a forced mode switch: the unconfirmed composition
+        // lands exactly once, with the mode family's own semantics — pinyin
+        // commits the raw input (IN-04 回车上原串), span modes finish the
+        // host span (same as an explicit mode switch, IN-08). Committing the
+        // raw for span modes too double-landed the word (round-5 review).
+        if (composingActive) {
+            if (mode == InputMode.PINYIN || mode == InputMode.DOUBLE_PINYIN) {
+                val raw = composingRaw.replace(" ", "")
+                if (raw.isNotEmpty()) editor.commitText(raw)
+            } else {
+                editor.finishComposing()
+            }
+            composingActive = false
+            composingRaw = ""
+        }
+        if (liveWasStarted) beginClose(live, liveStamp, background)
+        if (warmupEngine != null && warmupStamp != null) {
+            beginClose(warmupEngine, warmupStamp, background)
+        }
+        mode = InputMode.DIRECT
+        engineSessionGeneration += 1
+        stamp = EngineStamp(editorGeneration, engineSessionGeneration, mode)
+        lastAppliedRevision = 0
+        closed = false
+        engine = DirectTextEngine()
+        liveEngineStarted = true
+        engineMatchesMode = false
+        startDirect()
+        degradeSeq += 1
+        degraded = failedMode?.let { DegradeState(it, reason, degradeSeq) }
+        // println (not android.util.Log): this class is JVM-unit-tested and
+        // must stay android-free; System.out lands in logcat regardless.
+        println(
+            "FeelimeEngine: engine degraded failedMode=$failedMode reason=$reason " +
+                "seq=$degradeSeq queue=${warmupQueue.size} mode=$mode",
+        )
+        notifyDegrade()
+        replayWarmupQueue()
+    }
+
+    /** Synthetic degrade notification — the ONLY payload carrying
+     *  [EngineEvent.degrade] with degradedActive=true; engines never produce
+     *  these. Emitted after the transition has settled, never before. */
+    private fun notifyDegrade() {
+        val state = degraded ?: return
+        mainPoster {
+            listener(
+                EngineEvent(
+                    stamp,
+                    1L,
+                    Phase.READY,
+                    EngineState("", "", emptyList(), false, false, null),
+                    false,
+                    EngineCode.OK,
+                    degrade = state,
+                    degradedActive = true,
+                ),
+            )
+        }
+    }
+
+    private fun clearDegrade(notify: Boolean) {
+        val previous = degraded ?: return
+        degraded = null
+        if (notify) {
+            mainPoster {
+                listener(
+                    EngineEvent(
+                        stamp,
+                        1L,
+                        Phase.READY,
+                        EngineState("", "", emptyList(), false, false, null),
+                        false,
+                        EngineCode.OK,
+                        degrade = previous,
+                        degradedActive = false,
+                    ),
+                )
             }
         }
-        fallbackToDirect()
-        replayWarmupQueue()
     }
 
     private fun newSession() {
         warmupReplayGeneration += 1
         replaying = false
+        overflowPending = false
         engineSessionGeneration += 1
         stamp = EngineStamp(editorGeneration, engineSessionGeneration, mode)
         lastAppliedRevision = 0
@@ -678,23 +953,35 @@ class TextInputCoordinator(
     }
 
     private fun startEngine(next: InputMode) {
+        // Transition table (mode-fallback §2.2): a deliberate start clears the
+        // degraded state — EXCEPT the retry of the very mode that failed,
+        // which stays degraded until the real engine's READY lands (or the
+        // warmup fails again, degrading anew with a fresh seq).
+        if (degraded != null && next != degraded?.failedMode) clearDegrade(notify = true)
         mode = next
         stamp = EngineStamp(editorGeneration, engineSessionGeneration, mode)
         lastAppliedRevision = 0
         closed = false
         val target = runCatching { engineFactory(next) }.getOrElse {
-            engine = DirectTextEngine()
-            startDirect()
+            // The old branch silently served a started Direct under the
+            // TARGET mode's label with no event and no flag — the exact
+            // invisible-degradation shape reported in the field. Route it
+            // through the unified transition (mode-fallback §1).
+            degradeToDirect(next, DegradeReason.ENGINE_FACTORY_FAILED)
             return
         }
         engineMatchesMode = next == InputMode.DIRECT || background == null
         if (next == InputMode.DIRECT || background == null) {
             engine = target
+            liveEngineStarted = true
             val ack = target.dispatch(EngineRequest(stamp, EngineCommand.Start)) { event ->
                 mainPoster { onEngineEvent(event) }
             }
             if (ack != DispatchAck.Accepted) {
-                fallbackToDirect()
+                // Direct itself failed to start (test engines only); settle on
+                // a fresh Direct WITHOUT recording a degrade — this is not a
+                // failed Chinese mode.
+                degradeToDirect(null, DegradeReason.ENGINE_INIT_FAILED)
             }
             return
         }
@@ -702,12 +989,15 @@ class TextInputCoordinator(
         // NOT started and publishes nothing — READY would be a lie. Keys
         // typed during warmup are queued and replayed into the winner.
         engine = DirectTextEngine()
+        liveEngineStarted = false
         val targetStamp = EngineStamp(editorGeneration, engineSessionGeneration + 1, mode)
         pendingStamp = targetStamp
         pendingLastRevision = 0
         pendingEngine = target
-        delayPoster?.invoke(5_000L) {
-            if (pendingEngine === target && pendingStamp == targetStamp) fallbackFromWarmup()
+        delayPoster?.invoke(15_000L) {
+            if (pendingEngine === target && pendingStamp == targetStamp) {
+                degradeToDirect(targetStamp.mode, DegradeReason.WARMUP_TIMEOUT)
+            }
         }
         mainPoster {
             listener(
@@ -750,26 +1040,19 @@ class TextInputCoordinator(
         )
 
     private fun startDirect() {
+        liveEngineStarted = true
         engine.dispatch(EngineRequest(stamp, EngineCommand.Start)) { event ->
             mainPoster { onEngineEvent(event) }
         }
     }
 
-    private fun fallbackToDirect() {
-        engineMatchesMode = mode == InputMode.DIRECT
-        engineSessionGeneration += 1
-        mode = InputMode.DIRECT
-        stamp = EngineStamp(editorGeneration, engineSessionGeneration, mode)
-        lastAppliedRevision = 0
-        engine = DirectTextEngine()
-        startDirect()
-    }
-
     private fun closeEngineSession() {
-        engine.dispatch(EngineRequest(stamp, EngineCommand.Close)) { event ->
-            mainPoster { onEngineEvent(event) }
-        }
+        // `closed` MUST be set before the dispatch: an inline mainPoster (the
+        // JVM tests, and any engine that answers synchronously) delivers the
+        // CLOSED event during the dispatch call itself, and a late assignment
+        // would make the initiated close look like an unexpected engine death.
         closed = true
+        beginClose(engine, stamp, executor = null)
     }
 
     private fun abandonPending() {
@@ -779,9 +1062,10 @@ class TextInputCoordinator(
         pendingStamp = null
         pendingLastRevision = 0
         if (engine == null || pending == null) return
-        background?.execute {
-            engine.dispatch(EngineRequest(pending, EngineCommand.Close)) { }
-        }
+        // Through the bookkeeping: a FAILED pending close must block later
+        // swaps around this engine just like a failed recreate close
+        // (round-5 review).
+        beginClose(engine, pending, background)
     }
 
     fun onEngineEvent(event: EngineEvent, command: EngineCommand? = null) {
@@ -796,6 +1080,23 @@ class TextInputCoordinator(
         lastAppliedRevision = event.revision
         when (event.phase) {
             Phase.CLOSED -> {
+                if (!closed) {
+                    // We set `closed` synchronously around every initiated
+                    // Close, so an un-closed CLOSED means the engine died on
+                    // its own — settle on a fresh Direct and record why
+                    // (mode-fallback §2.2). The trailing re-stamp of the
+                    // initiated path must NOT run: degradeToDirect already
+                    // opened a new session and started an engine. Composition
+                    // state stays untouched here — degradeToDirect lands the
+                    // pending pinyin raw itself.
+                    lastWordCommit = null
+                    listener(event)
+                    degradeToDirect(
+                        if (mode == InputMode.DIRECT) null else mode,
+                        DegradeReason.ENGINE_RUNTIME_FAILED,
+                    )
+                    return
+                }
                 closed = true
                 lastWordCommit = null
                 listener(event)
@@ -806,17 +1107,24 @@ class TextInputCoordinator(
             Phase.ERROR -> {
                 lastWordCommit = null
                 listener(event)
-                if (event.code == EngineCode.ENGINE_INIT_FAILED ||
-                    event.code == EngineCode.ENGINE_DATA_MISMATCH ||
-                    event.code == EngineCode.ENGINE_RUNTIME_FAILED
-                ) {
-                    if (composingActive) editor.finishComposing()
+                // A Close's ERROR is a failed teardown, not a failed engine:
+                // degrading here would ALSO flip the user's mode while the
+                // recreate's swap decision restarts in the original mode
+                // (round-5 review) — the close bookkeeping handles it.
+                val reason = if (command is EngineCommand.Close) null
+                else degradeReasonFor(event.code)
+                if (reason != null) {
+                    // Composition landing is degradeToDirect's job (mode
+                    // family semantics); finishing here TOO double-landed
+                    // span-mode words (round-5 R5-3).
+                    // failedMode = the mode the failing engine was serving.
                     if (pendingEngine != null) {
-                        fallbackFromWarmup()
+                        degradeToDirect(
+                            pendingStamp?.mode ?: event.stamp.mode,
+                            reason,
+                        )
                     } else {
-                        val resumeQueue = replaying
-                        fallbackToDirect()
-                        if (resumeQueue) replayWarmupQueue()
+                        degradeToDirect(event.stamp.mode, reason)
                     }
                 }
             }
@@ -866,6 +1174,18 @@ class TextInputCoordinator(
         }
     }
 
+    /** EngineCode → why-we-degraded; null for ordinary request rejections
+     *  (STALE_STAMP etc.), which are not engine failures. Shared by the live
+     *  and pending ERROR paths so warmup failures are attributed the same
+     *  way as running ones (a data mismatch must not be logged as an init
+     *  failure — the field report needs the true reason). */
+    private fun degradeReasonFor(code: EngineCode): DegradeReason? = when (code) {
+        EngineCode.ENGINE_INIT_FAILED -> DegradeReason.ENGINE_INIT_FAILED
+        EngineCode.ENGINE_DATA_MISMATCH -> DegradeReason.ENGINE_DATA_MISMATCH
+        EngineCode.ENGINE_RUNTIME_FAILED -> DegradeReason.ENGINE_RUNTIME_FAILED
+        else -> null
+    }
+
     private fun onPendingEvent(event: EngineEvent) {
         if (event.revision <= pendingLastRevision) return
         when (event.phase) {
@@ -880,12 +1200,23 @@ class TextInputCoordinator(
                 engineMatchesMode = true
                 engine = pendingEngine!!
                 stamp = pendingStamp!!
+                // Restore the stamp/counter invariant: pending stamps are
+                // minted at sessionGeneration+1, and a later newSession()
+                // must not mint a colliding generation (a voice takeover's
+                // close then looks like an unexpected engine death —
+                // round-4 review).
+                engineSessionGeneration = stamp.engineSessionGeneration
+                liveEngineStarted = true
                 pendingEngine = null
                 pendingStamp = null
                 lastAppliedRevision = event.revision
                 composingActive = false
                 replaying = true
                 listener(event)
+                // The retried failed mode actually landed: recovery (the
+                // fallback Direct's own READY never clears the state — it IS
+                // the degradation; mode-fallback §2.2).
+                if (degraded?.failedMode == event.stamp.mode) clearDegrade(notify = true)
                 replayWarmupQueue()
             }
             Phase.ERROR -> {
@@ -893,7 +1224,12 @@ class TextInputCoordinator(
                 listener(event)
                 // the live engine is an unstarted interim Direct —
                 // settle on a real Direct engine and replay the queue.
-                fallbackFromWarmup()
+                // Same attribution as a running engine's ERROR (P2: a data
+                // mismatch during warmup used to be logged as init failure).
+                degradeToDirect(
+                    event.stamp.mode,
+                    degradeReasonFor(event.code) ?: DegradeReason.ENGINE_INIT_FAILED,
+                )
             }
             Phase.CLOSED -> Unit
         }
@@ -997,6 +1333,6 @@ class TextInputCoordinator(
     }
 
     private companion object {
-        const val MAX_WARMUP_QUEUE = 128
+        const val MAX_WARMUP_QUEUE = 256
     }
 }
