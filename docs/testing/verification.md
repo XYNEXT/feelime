@@ -25,7 +25,7 @@
   在发布字节上跑过（`device_upgrade_verify.py` /
   `device_firstlaunch_verify.py`），且装机 SHA 与发布产物一致。
 - **环境全部注入**：仓库内没有硬编码的设备序列号/主机名/路径；一次性
-  探针放 `scripts/verify/check_*.py`，同样只读环境变量。
+  诊断探针放 `scripts/verify/archive/check_*.py`，同样只读环境变量。
 
 ## 1. 本地门禁（无设备）
 
@@ -48,7 +48,8 @@ ANDROID_HOME=… ./gradlew testDebugUnitTest   # 应用 JVM 套件（direct/play
 - **mock 基线**：`test-fixtures/keyboard-<旧版本>/` 内是与发布 APK 内嵌
   逐字节一致的键盘源码，套件按 `{since, until}` 键盘版本门控双代
   同跑，钉精确的 passed/failed/skipped 计数——harness 变更导致旧形态
-  用例腐烂时在这里暴露。
+  用例腐烂时在这里暴露。2026-09 起 baseline 只锁 failed=0 与通过数下限，
+  让 skip 计数随 `since:` 门自然浮动（精确 pin 变成了每批次的复盘仪式）。
 - **滚动模型**：mock harness 对滚动容器有 clientWidth/scrollWidth/
   scrollLeft 模型与 `world.drag()`（preventDefault 即 cancelled）——
   「拖到底弹回最左」「横滑被 touchstart 杀掉」这类缺陷在本地可复现。
@@ -71,21 +72,64 @@ bash scripts/verify/run-all.sh             # 全量门禁
 单跑某套件：`FEELIME_ADB_SERIAL=<serial> python3 scripts/verify/device_<name>_verify.py`
 （环境变量见各脚本头部注释）。
 
+### run-all 的段选择、续跑与 profiles
+
+2026-09 评审落地：设备持久状态是假失败的第一来源，gate 开头做一次
+**基线复位**（`pm clear` + 重授权 + 重选 IME + 关旋转），设备段之间做
+轻量清扫（force-stop + 删套件可写的 prefs 文件）。同一设备同时只允许
+一个 gate（`/tmp/feelime-gate-<serial>.lock`，并发第二个直接拒绝）。
+
+```bash
+bash scripts/verify/run-all.sh --list        # 列出段与 profiles
+bash scripts/verify/run-all.sh 9n 9j         # 只跑指定段（前缀匹配）
+bash scripts/verify/run-all.sh --from 9g     # 从某段跑到尾
+bash scripts/verify/run-all.sh --resume      # 跳过状态文件里已绿的段
+bash scripts/verify/run-all.sh --profile quick   # 按改动面选段
+FEELIME_GATE_NO_RESET=1 bash scripts/verify/run-all.sh  # 调试：跳过基线复位
+```
+
+段选择按 label 前缀匹配，可选中包括本地段在内的任意段，未知段名
+直接报错退出；`--resume` 对所有段生效。状态文件
+`/tmp/feelime-gate-state-<serial>.json` 记录 APK sha + git sha + 工作区
+指纹，换 APK/换 commit/改工作区自动作废（已绿的段重新验才算数）。
+qemu 死亡或单段重试耗尽时 gate 响亮退出，修复/重启后用 `--resume`
+续跑，不再整跑报废。
+
+profiles（按改动面选层，普通批次用 quick ≈ 30min，全量留给发版前）：
+
+| profile | 段 |
+| --- | --- |
+| quick | base、extended、feel-degrade、panel、height-card |
+| keyboard-js | base、extended、caps-flick、keymap、pool |
+| native-engine | base、extended、backspace、delete |
+| kotlin-service | base、editor、feel-degrade、resource |
+| voice | gesture、voice-hold、fn-voice、asr |
+| resources | resource |
+
 ### run-all 步骤
 
 | 步骤 | 内容 |
 | --- | --- |
 | 1 | css lint + 两个生成器 `--check` |
-| 2/2b | mock 桥接 / mock 设置页 + 旧代基线 |
-| 3/4 | 应用 JVM + 引擎冒烟 JVM |
+| 2 | mock 桥接 / mock 设置页 + 旧代基线（锁 failed=0 且通过数不低于下限） |
+| 3 | 应用 JVM + 引擎冒烟 JVM |
 | 5 | `device_verify`：基础输入、中文全拼/双拼候选、模式持久化 |
-| 6 | `device_gesture_verify`：真实手势（连删、上滑、长按弹层、录音浮层、光标滑动） |
+| 6/6b | `device_gesture_verify`：纯物理手势（连删、上滑、长按弹层、光标滑动）；`device_voice_hold_verify`：空格长按语音（含模型预热与浮层收尾） |
 | 7 | `device_extended_verify`：扩展语言/UI（法/俄/日、符号、候选翻页、主题） |
 | 8 | `device_editor_verify`：宿主编辑器（多行、密码框、imeOptions、日语转换） |
 | 9 | `device_panel_verify`：剪贴板/常用语面板与敏感编辑器行为 |
-| 9a–9m | 各交互专项回归（见 §3 套件清单） |
+| 9a–9n | 各交互专项回归（见 §3 套件清单） |
 | 10 | `device_resource_verify`：高度/资源预算（APK 体积、数据目录、PSS 增量） |
-| 11 | ASR 五跑回归（见下） |
+| 11 | ASR 回归：AVD 单次正确性 smoke（性能门只在真机成立）；真机五跑严格门限（见下） |
+
+### 共享助手与新套件
+
+共享的键盘/设置页触摸助手、模式标签表、PASS/FAIL 记录器统一放在
+`scripts/verify/fv_common.py`（`new_recorder()` / `ev` / `sev` /
+`wait_until` / `keyboard_*` / `settings_*` / `launch_settings` /
+`switch_mode_real`）。新套件从这里导入，不要再复制私有副本，也不要
+import 其它套件当库（历史教训：height_card 曾被 6 个套件当库用，
+改一处坏一片）。
 
 ### ASR 门禁
 
@@ -95,8 +139,8 @@ bash scripts/verify/run-all.sh             # 全量门禁
 注意：
 
 - x86_64 模拟器比物理设备慢一个量级，**跨设备类别的性能比较不可复现**：
-  AVD 上自动 `--waive-perf-gate`（保留五跑 + 关键词检查），真机严格
-  门限。
+  AVD 日常门只跑**单次正确性 smoke**（`--runs 1 --waive-perf-gate`），
+  性能结论必须来自冷真机的五跑严格门限。
 - 设备热状态直接决定性能结果（外壳温热即可使推理慢数倍）；性能门限
   必须在冷设备上跑。
 - 该步的隔离 harness 会覆盖安装设备上的主应用，跑完必须重装主 debug
@@ -107,7 +151,7 @@ bash scripts/verify/run-all.sh             # 全量门禁
 | 套件 | 覆盖点 |
 | --- | --- |
 | `device_verify` | 基础输入/布局/持久化（英文、全拼、双拼候选与确认、模式记忆） |
-| `device_gesture_verify` | 退格连删、上滑/下滑、长按弹层与拖远取消、光标滑动、录音浮层 |
+| `device_gesture_verify` | 退格连删、上滑/下滑、长按弹层与拖远取消、光标滑动（语音长按在 `device_voice_hold_verify`） |
 | `device_extended_verify` | 法/俄/日、符号层、候选翻页与展开区真实滑动、主题切换 |
 | `device_editor_verify` | 多行 Enter、密码框、imeOptions、日语转换、宿主动作 |
 | `device_panel_verify` | 剪贴板显示/粘贴/删除、常用语增删、敏感编辑器置空 |
@@ -128,7 +172,7 @@ bash scripts/verify/run-all.sh             # 全量门禁
 | `device_upgrade_verify` / `device_firstlaunch_verify` | 发布冒烟：覆盖安装 / 真正首启 |
 | `device_model_import_verify` | 模型本地导入（SAF 选择器 → 校验 → 安装 → 麦克风） |
 | `device_asr_production_verify` | 生产录音链路（模拟器音频注入 → 真实 InputConnection） |
-| `check_*.py` | 一次性探针（诊断用，不进 run-all） |
+| `archive/check_*.py` | 一次性探针（0.17.6 终端时代遗产，诊断用，不进 run-all） |
 
 新增用户可见行为时：先补 mock/JVM 用例，再加对应设备套件用例，并把
 新套件接进 `run-all.sh` 的步骤序列。

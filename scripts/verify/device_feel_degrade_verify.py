@@ -23,7 +23,7 @@ from xml.etree import ElementTree
 sys.path.insert(0, __file__.rsplit("/", 1)[0])
 
 import device_verify as d
-import device_height_card_verify as shared
+import fv_common as shared
 import device_panel_verify as panel
 
 RESULTS = []

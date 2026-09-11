@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Nine physical-gesture assertions for the Feelime keyboard on one device.
+"""Pure physical-gesture assertions for the Feelime keyboard on one device.
+
+Voice hold (J3) lives in device_voice_hold_verify.py: the streaming model's
+cold load dominated this suite, and a failed voice case used to leak the
+overlay into every following suite.
 
 Requires FEELIME_ADB_SERIAL. Reuses device_verify's DevTools and native
 EditText oracles, but every gesture itself is injected as a real touchscreen
@@ -35,21 +39,6 @@ def swipe(x1, y1, x2, y2, dur_ms=160):
         f"{int(x2)} {int(y2)} {int(dur_ms)}"
     )
     time.sleep(0.06)
-
-
-def tap_dom(selector, keyboard):
-    """Read a DOM element's CSS center, then tap it through ADB."""
-    center = d.devtools_eval(
-        "(() => { const e = document.querySelector(" + repr(selector) + ");"
-        " if (!e) return null; const r = e.getBoundingClientRect();"
-        " return [r.left + r.width / 2, r.top + r.height / 2]; })()"
-    )
-    if not center:
-        return False
-    offset_x, offset_y = d._DT_OFFSET
-    scale = keyboard["<density>"]
-    d.tap(center[0] * scale + offset_x, center[1] * scale + offset_y, wait=0.2)
-    return True
 
 
 def clear(kb):
@@ -196,92 +185,6 @@ def main():
     d.press(kb, "x", 0.4)
     text = d.field_text_retry()
     record("R303 scrub moves caret to start for insertion", text == "xabc", repr(text))
-
-    # 8-9: J3 space hold enters native listening + overlay, release exits.
-    clear(kb)
-    # Cold-model warmup: the FIRST startVoice loads the streaming model
-    # (102s observed on SwiftScaler/AVD cold boot) - far past any hold the
-    # gesture can keep. Start one session through the mic tap path, wait for
-    # listening (bounded), stop it; the recognizer stays warm and J3 keeps
-    # testing the GESTURE, not the model-load latency.
-    warmup_started = tap_dom("#mic", kb)
-    if warmup_started:
-        for _ in range(80):
-            time.sleep(1.5)
-            state = d.devtools_eval(
-                "(() => { const overlay = document.getElementById('voiceOverlay');"
-                " return overlay && overlay.classList.contains('open')"
-                " ? overlay.textContent : null; })()")
-            if state and any(label in state for label in ("聆听", "Listening")):
-                break
-            if state is None and _ > 8:
-                # The overlay never opened; J3's own polling remains the
-                # authoritative result for the actual space gesture.
-                break
-        tap_dom("#mic", kb)
-    # The stop is async (stopping -> idle); a startVoice fired while still
-    # stopping is swallowed and J3's overlay never opens (observed as
-    # overlayOpen=False). Wait the session ALL the way out before J3.
-    for _ in range(20):
-        still_open = d.devtools_eval(
-            "(() => { const o = document.getElementById('voiceOverlay');"
-            " return !!(o && o.classList.contains('open')); })()")
-        if still_open is False:
-            break
-        time.sleep(1.0)
-    time.sleep(1.0)
-    sx, sy = kb["<space>"]
-    # A silent process death mid-hold (sherpa EncodeHotwords
-    # exit(-1) on an unset modeling_unit; AVD additionally memory-bound)
-    # leaves every DevTools eval returning None for the rest of the case -
-    # surface the pid so "[None]" is self-explanatory.
-    pid_before = d.shell(f"pidof {d.PKG}").strip()
-    motion("DOWN", sx, sy)
-    listening = None
-    try:
-        # Loading can legitimately take 20s+ on a cold or slow device (AVD
-        # CPU translation); 'listening' breaks early on real hardware.
-        # The toolbar mic button moved into the quick panel
-        # (no #mic in the live DOM) - the durable listening oracle is the
-        # overlay itself: open + the 聆听 state label.
-        for _ in range(60):
-            time.sleep(0.5)
-            listening = d.devtools_eval(
-                "(() => { const overlay = document.getElementById('voiceOverlay');"
-                " return { overlayOpen: overlay && overlay.classList.contains('open'),"
-                " text: overlay ? overlay.textContent : null }; })()"
-            )
-            if listening and any(label in (listening.get("text") or "")
-                                 for label in ("聆听", "Listening")):
-                break
-        pid_after = d.shell(f"pidof {d.PKG}").strip()
-        detail = repr(listening)
-        if pid_after != pid_before:
-            detail += f" [IME process {pid_before} -> {pid_after}: died mid-hold]"
-        record(
-            "J3 space hold starts listening overlay",
-            bool(listening) and listening.get("overlayOpen") is True and
-                any(label in (listening.get("text") or "")
-                    for label in ("聆听", "Listening")),
-            detail,
-        )
-    finally:
-        motion("UP", sx, sy)
-
-    released = None
-    for _ in range(12):
-        time.sleep(0.5)
-        released = d.devtools_eval(
-            "(() => { const overlay = document.getElementById('voiceOverlay');"
-            " return { overlayOpen: overlay && overlay.classList.contains('open') }; })()"
-        )
-        if released and released.get("overlayOpen") is False:
-            break
-    record(
-        "J3 space release stops listening overlay",
-        bool(released) and released.get("overlayOpen") is False,
-        repr(released),
-    )
 
     failed = [name for name, ok, _ in RESULTS if not ok]
     print(f"\n== {len(RESULTS) - len(failed)}/{len(RESULTS)} passed ==")

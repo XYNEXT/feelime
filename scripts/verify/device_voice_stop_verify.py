@@ -16,7 +16,7 @@ import time
 import wave
 
 import device_asr_production_verify as asr
-import device_height_card_verify as shared
+import fv_common as shared
 import device_verify as d
 
 

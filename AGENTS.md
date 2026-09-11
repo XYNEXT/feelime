@@ -111,7 +111,8 @@ export FEELIME_ADB_SERIAL=<serial>
 export FEELIME_VERIFY_APK=$PWD/app/build/outputs/apk/direct/debug/app-direct-debug.apk
 export FEELIME_ASR_FIXTURE=$PWD/mixed-zh-en.wav   # 本地自备 16kHz wav，不入库
 # 可选：FEELIME_BUILDER_SSH 可把 JVM 套件放到远端跑；仅本机构建时无需设置
-bash scripts/verify/run-all.sh    # 全量门禁
+bash scripts/verify/run-all.sh    # 全量门禁（--list/--resume/--from/--profile 选段；
+                                  #  开头 pm clear 基线复位，段间清扫，flock 单设备锁）
 ```
 
 ## 词典引擎数据（engine-data）
@@ -176,7 +177,7 @@ DevTools 合成 TouchEvent 切到符号层（`<123>`）时会触发 qemu **静�
   （静默 no-op）；观察桥调用要换通道（引擎事件 / 宿主编辑器 / native
   日志）。
 - **环境变量注入**：仓库内不落设备序列号/主机名/绝对路径；一次性探针
-  放 `scripts/verify/check_*.py`，同样只读环境变量。
+  放 `scripts/verify/archive/check_*.py`，同样只读环境变量。
 - **发布前**：敏感信息扫描（主机名/IP/绝对路径/私有项目引用/私人内容
   不得入库，测试数据放 .gitignore 并在文档说明自备方式）。
 

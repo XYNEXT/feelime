@@ -28,7 +28,7 @@ import time
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import device_fn_custom_verify as b21
-import device_height_card_verify as shared
+import fv_common as shared
 import device_verify as d
 
 
