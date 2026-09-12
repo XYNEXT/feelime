@@ -18,6 +18,10 @@
 #                                   kotlin-service/voice/resources/full）
 #   FEELIME_GATE_RETRIES            单段额外整跑重试次数（默认 2）
 #   FEELIME_GATE_NO_RESET=1         跳过开头基线复位（调试用；不保证套件间隔离）
+#   FEELIME_EMU_LOG                 模拟器日志路径（可选；开启图形通道病态检测，
+#                                   SwiftShader 死亡前会刷 bad color buffer）
+#   FEELIME_EMU_RESTART_CMD         重启模拟器的命令（可选；配合上一项在段边界
+#                                   计划内重启，命令需自行后台化）
 set -euo pipefail
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
@@ -298,6 +302,33 @@ sweep_device() {
     adb -s "$FEELIME_ADB_SERIAL" shell settings put global hide_error_dialogs 1 >/dev/null 2>&1 || true
 }
 
+# 模拟器图形通道病态检测（2026-09-12 qemu 定位结论）：SwiftShader 死亡前
+# 几十分钟持续刷 "bad color buffer handle"，且病态期 WebView 渲染已失败
+# （套件假失败的最大来源：settings 打不开/几何读不到都不是产品回归）。
+# FEELIME_EMU_LOG 指向模拟器日志时，每个设备段后检查计数；涨了就响亮
+# 警告；再配 FEELIME_EMU_RESTART_CMD 时在段边界计划内重启（比死在段中
+# 间 + --resume 便宜得多）。
+EMU_ERR_COUNT=0
+graphics_health_check() {
+    [[ -n "${FEELIME_EMU_LOG:-}" && -f "$FEELIME_EMU_LOG" ]] || return 0
+    local n
+    n=$(grep -c "bad color buffer" "$FEELIME_EMU_LOG" 2>/dev/null) || n=0
+    if [[ "$n" -gt "$EMU_ERR_COUNT" ]]; then
+        echo "WARNING: emulator graphics channel is degrading (bad-color-buffer ${EMU_ERR_COUNT} -> ${n})." >&2
+        echo "         Suite failures from here on are suspect: WebView rendering breaks before the emulator dies." >&2
+        if [[ -n "${FEELIME_EMU_RESTART_CMD:-}" ]]; then
+            echo "         restarting the emulator at this segment boundary..." >&2
+            adb -s "$FEELIME_ADB_SERIAL" emu kill >/dev/null 2>&1 || true
+            sleep 4
+            bash -c "$FEELIME_EMU_RESTART_CMD" \
+                || { echo "emulator restart command failed" >&2; exit 2; }
+            settle_device
+            echo "         emulator restarted (graphics state fresh)."
+        fi
+    fi
+    EMU_ERR_COUNT=$n
+}
+
 run_suite() {
     local label="$1"
     shift
@@ -424,6 +455,7 @@ for entry in "${SEGMENTS[@]}"; do
                 *) echo "unknown device segment: $label" >&2; exit 2 ;;
             esac
             sweep_device
+            graphics_health_check
             ;;
         asr)
             echo "== $label =="

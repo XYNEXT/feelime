@@ -66,6 +66,8 @@ export FEELIME_AAPT2=/path/to/aapt2         # 可选（x86_64 主机构建）
 export FEELIME_BUILDER_SSH=<user@host>      # 可选（远端 x86_64 构建机跑 JVM 门禁）
 export FEELIME_BUILDER_DIR=<远端仓库路径>    # 可选，默认 ~/code/feelime
 export FEELIME_BUILDER_SDK=<远端 SDK 路径>   # 可选，默认 /opt/android-sdk
+export FEELIME_EMU_LOG=<模拟器日志路径>      # 可选（AVD：开启图形通道病态检测）
+export FEELIME_EMU_RESTART_CMD=<重启命令>    # 可选（病态时在段边界计划内重启）
 bash scripts/verify/run-all.sh             # 全量门禁
 ```
 
@@ -183,6 +185,13 @@ import 其它套件当库（历史教训：height_card 曾被 6 个套件当库�
 
 - 模拟器（SwiftShader/ART 常驻开销）PSS 增量预算放宽；WebView 冷启动
   慢，几何/面板用例放宽轮询窗口。
+- **SwiftShader 图形通道会逐渐腐坏**（2026-09-12 定位）：qemu 死亡前几十
+  分钟持续刷 `bad color buffer handle`，且病态期 WebView 渲染已失败——
+  「settings 打不开/几何读不到」先查模拟器日志再怀疑代码。把
+  `FEELIME_EMU_LOG` 指向模拟器日志即可让 gate 在段间检测并警告，配
+  `FEELIME_EMU_RESTART_CMD` 可在段边界计划内重启（2026-09 根因：
+  36.4.10 的 SwiftShader 绘制任务在 buffer churn 下命中 JIT 断言 →
+  SIGABRT）。
 - 部分 OEM 的密码输入框被系统安全键盘整体接管，IME 收不到 EditorInfo：
   设备断言记「平台接管」，敏感判定矩阵由 JVM `InputSensitivityTest`
   覆盖。
