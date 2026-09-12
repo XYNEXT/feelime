@@ -102,6 +102,7 @@ profiles（按改动面选层，普通批次用 quick ≈ 30min，全量留给�
 | profile | 段 |
 | --- | --- |
 | quick | base、extended、feel-degrade、input-prefs、panel、height-card |
+| input | base、feel-degrade、input-prefs、t9 |
 | keyboard-js | base、extended、caps-flick、keymap、pool |
 | native-engine | base、extended、backspace、delete |
 | kotlin-service | base、editor、feel-degrade、resource |
@@ -120,7 +121,7 @@ profiles（按改动面选层，普通批次用 quick ≈ 30min，全量留给�
 | 7 | `device_extended_verify`：扩展语言/UI（法/俄/日、符号、候选翻页、主题） |
 | 8 | `device_editor_verify`：宿主编辑器（多行、密码框、imeOptions、日语转换） |
 | 9 | `device_panel_verify`：剪贴板/常用语面板与敏感编辑器行为 |
-| 9a–9o | 各交互专项回归（见 §3 套件清单；9o = 候选字号/模糊音输入偏好） |
+| 9a–9p | 各交互专项回归（见 §3 套件清单；9o = 候选字号/模糊音/联想输入偏好，9p = T9 九宫格） |
 | 10 | `device_resource_verify`：高度/资源预算（APK 体积、数据目录、PSS 增量） |
 | 11 | ASR 回归：AVD 单次正确性 smoke（性能门只在真机成立）；真机五跑严格门限（见下） |
 
@@ -170,7 +171,8 @@ import 其它套件当库（历史教训：height_card 曾被 6 个套件当库�
 | `device_phrase_codes` | 常用语自动输入码、法语卡内编辑、光标快慢一致性 |
 | `device_editor_modes` | 编辑器级模式限制、全拼展开、触摸状态清理、收起重开 |
 | `device_replay_geometry` | 稳定展开列表、快捷切换目标、Fn 键面、横屏槽位预算 |
-| `device_input_prefs` | 输入偏好全链路：候选字号三档到真实候选文字、模糊音开关切 prism（nian→lian、zan→zhan）与复原 |
+| `device_t9_verify` | T9 九宫格：数字键面、94664→中族候选、9426 歧义切分、空格上屏、回全拼复原 |
+| `device_input_prefs` | 输入偏好全链路：候选字号三档到真实候选文字、模糊音五组独立开关切 prism（nian→lian、zan→zhan、fu→hu、le→re、zhon→zhong）与复原、联想 bigram 上屏出接续词 + 连续联想 + 关闭复原 |
 | `device_resource_verify` | 高度顶沿、APK/数据/PSS 预算 |
 | `device_upgrade_verify` / `device_firstlaunch_verify` | 发布冒烟：覆盖安装 / 真正首启 |
 | `device_model_import_verify` | 模型本地导入（SAF 选择器 → 校验 → 安装 → 麦克风） |

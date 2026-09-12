@@ -149,8 +149,8 @@ def main():
     cols = ev("getComputedStyle(document.getElementById('modeMenu'))"
               ".gridTemplateColumns.split(' ').length")
     items = ev("document.getElementById('modeMenu').children.length") or 0
-    record("mode menu is single-column with all 6 modes",
-           cols == 1 and items == 6, f"cols={cols} items={items}")
+    record("mode menu is single-column with all 7 modes",
+           cols == 1 and items == 7, f"cols={cols} items={items}")
     ev("window.Feelime.closeModeMenu && window.Feelime.closeModeMenu()")
     time.sleep(0.2)
 

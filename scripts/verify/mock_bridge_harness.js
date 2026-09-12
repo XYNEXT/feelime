@@ -572,6 +572,9 @@ class MockNative {
     keyboardReady(version, minApi, caps, token) {
         this._record('keyboardReady', [version, minApi, caps, token]);
     }
+    commitAssoc(text, token) {
+        this._record('commitAssoc', [text, token]);
+    }
     setKeyboardHeight(totalCssPx, token) {
         this._record('setKeyboardHeight', [totalCssPx, token]);
     }
@@ -853,6 +856,10 @@ class KeyboardWorld {
 
     engineState(payload) {
         this.context.window.Feelime.onEngineState(payload);
+    }
+
+    assoc(words) {
+        this.context.window.Feelime.onAssoc({ words });
     }
 
     nativeState(payload) {

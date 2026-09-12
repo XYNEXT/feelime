@@ -202,6 +202,11 @@ class FeelimeService : InputMethodService(), AsrEngine.Listener {
             if (intent?.action != ACTION_KEYBOARD_PREFS_CHANGED) return
             onMain {
                 pushBridgeHello()
+                if (readAssociation(this@FeelimeService)) {
+                    com.feelime.ime.engine.AssociationStore.prewarm(this@FeelimeService)
+                } else {
+                    clearAssociation()
+                }
                 keyboardPrefsEpoch += 1
                 inputViewHost?.requestLayout()
             }
@@ -419,6 +424,18 @@ class FeelimeService : InputMethodService(), AsrEngine.Listener {
                     )
                 }
                 evaluate("window.Feelime && window.Feelime.onEngineState && window.Feelime.onEngineState($payload)")
+                // 中文联想（docs/design/association.md §3）：只在 commit 事件
+                // 上计算并推送，键盘保留现有联想直到组合开始。
+                val committed = event.state.commit
+                if (committed != null && readAssociation(this@FeelimeService) &&
+                    (
+                        event.stamp.mode == com.feelime.ime.engine.InputMode.PINYIN ||
+                            event.stamp.mode == com.feelime.ime.engine.InputMode.DOUBLE_PINYIN ||
+                            event.stamp.mode == com.feelime.ime.engine.InputMode.T9
+                        )
+                ) {
+                    pushAssoc(com.feelime.ime.engine.AssociationStore.next(applicationContext, committed))
+                }
             },
             engineFactory = { mode -> EngineFactory.create(applicationContext, mode) },
             asrGuard = { stopVoice(discardResults = true) },
@@ -584,6 +601,8 @@ class FeelimeService : InputMethodService(), AsrEngine.Listener {
         panelInputRequested = false
         panelRouteGeneration += 1
         coordinator.onEditorStarted(sensitive, terminalLike, hostSelectionStart, hostSelectionEnd)
+        // 编辑器切换，上一字段末尾的联想词失效（association.md §3）。
+        clearAssociation()
         main.post { pushEditorInfo() }
     }
 
@@ -1253,6 +1272,10 @@ class FeelimeService : InputMethodService(), AsrEngine.Listener {
 
     private fun pushBridgeHello() {
         installBottomInsetWatcher()
+        // 联想开着就趁 hello 预热 bigram 表（后台线程，不占输入链路）
+        if (readAssociation(this)) {
+            com.feelime.ime.engine.AssociationStore.prewarm(this)
+        }
         val landscape =
             resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
         val payload = JSONObject()
@@ -1305,10 +1328,11 @@ class FeelimeService : InputMethodService(), AsrEngine.Listener {
             .put("holdMs", feelHoldMs())
             .put("popupSnap", feelPopupSnap())
             .put("candidateFont", candidateFont())
+            .put("associationOn", readAssociation(this))
             .put(
                 "engineDataReady",
                 JSONObject().apply {
-                    listOf("pinyin", "double-pinyin", "japanese", "french", "russian").forEach { mode ->
+                    listOf("pinyin", "double-pinyin", "t9", "japanese", "french", "russian").forEach { mode ->
                         put(mode, engineDataReady(mode))
                     }
                 },
@@ -1375,6 +1399,14 @@ class FeelimeService : InputMethodService(), AsrEngine.Listener {
     private fun evaluate(script: String) = onMain {
         keyboardView?.evaluateJavascript(script, null)
     }
+
+    /** 推送/清空联想词（docs/design/association.md §3）。 */
+    private fun pushAssoc(words: List<String>) {
+        val payload = JSONObject().put("words", JSONArray(words))
+        evaluate("window.Feelime && window.Feelime.onAssoc && window.Feelime.onAssoc($payload)")
+    }
+
+    private fun clearAssociation() = pushAssoc(emptyList())
 
     /** Redirect editor writes into the focused panel input . */
     private fun panelCommit(text: String) {
@@ -1965,6 +1997,21 @@ class FeelimeService : InputMethodService(), AsrEngine.Listener {
                     panelInputActive = active
                     if (active) coordinator.onInputTargetSelection(-1, -1)
                     else coordinator.onInputTargetSelection(hostSelectionStart, hostSelectionEnd)
+                }
+            }
+        }
+
+        /** 中文联想点击（docs/design/association.md §3）：写入编辑器，
+         * 然后以该词为前词给出连续联想。 */
+        @JavascriptInterface
+        fun commitAssoc(text: String, token: String) = guarded(token, limited = false) {
+            if (text.isEmpty() || text.length > 32) return@guarded
+            onMain {
+                if (panelInputActive) return@onMain
+                coordinator.pasteExternal(text)
+                if (readAssociation(applicationContext)) {
+                    // 表在 commit 路径已预热，这里是暖读
+                    pushAssoc(com.feelime.ime.engine.AssociationStore.next(applicationContext, text))
                 }
             }
         }

@@ -81,7 +81,8 @@ class MockSettingsNative {
     setBottomPadding(...a) { this._rec('setBottomPadding', a); }
     setFeelOptions(...a) { this._rec('setFeelOptions', a); }
     setCandidateFont(...a) { this._rec('setCandidateFont', a); }
-    setFuzzyPinyin(...a) { this._rec('setFuzzyPinyin', a); }
+    setFuzzyPinyinMask(...a) { this._rec('setFuzzyPinyinMask', a); }
+    setAssociation(...a) { this._rec('setAssociation', a); }
     // /R8: page reporting (BACK returns home first) + about-page
     // one-tap copy.
     reportPage(...a) { this._rec('reportPage', a); }
@@ -731,19 +732,49 @@ test('feel card defaults when state omits the values and never adopts off-whitel
     equal(world.$('candidateFont').value, '0', 'off-list candidate font ignored');
 });
 
-test('fuzzy-pinyin toggle reflects state and commits with the token', () => {
+test('fuzzy-pinyin group toggles reflect the state mask and commit the combined mask', () => {
     const world = new SettingsWorld();
-    world.push({ ...BASE_STATE, fuzzyPinyin: true });
-    equal(world.$('fuzzyPinyin').checked, true, 'fuzzy on from state');
+    const boxes = () => [...world.doc.querySelectorAll('input[data-fuzzy-bit]')];
+    world.push({ ...BASE_STATE, fuzzyPinyinMask: 3 });
+    equal(boxes().map(box => box.checked), [true, true, false, false, false],
+        'bits 1|2 checked from state mask 3');
     world.push({ ...BASE_STATE });
-    equal(world.$('fuzzyPinyin').checked, false, 'fuzzy default off');
+    equal(boxes().some(box => box.checked), false, 'default mask 0 leaves all off');
 
-    const box = world.$('fuzzyPinyin');
+    // 只点第 5 组：change 组合所有已勾选位（已有 1）→ 17。
+    world.push({ ...BASE_STATE, fuzzyPinyinMask: 1 });
+    const nasal = world.$('fuzzyBit16');
+    const change = nasal.listeners.find(listener => listener.type === 'change');
+    assert(change, '#fuzzyBit16 has a change listener');
+    nasal.checked = true;
+    change.handler({ target: nasal });
+    equal(world.lastCall('setFuzzyPinyinMask').args, [17, world.token],
+        'combined mask + token');
+
+    // 焦点所在的组不被异步 state 推送回写（连续点按不丢）。
+    nasal.checked = true;
+    world.doc.activeElement = nasal;
+    world.push({ ...BASE_STATE, fuzzyPinyinMask: 1 });
+    equal(nasal.checked, true, 'focused box keeps user state');
+    world.doc.activeElement = null;
+    world.push({ ...BASE_STATE, fuzzyPinyinMask: 1 });
+    equal(nasal.checked, false, 'unfocused box follows state again');
+});
+
+test('association toggle reflects state and commits with the token', () => {
+    const world = new SettingsWorld();
+    world.push({ ...BASE_STATE, associationOn: true });
+    equal(world.$('associationOn').checked, true, 'association on from state');
+    world.push({ ...BASE_STATE });
+    equal(world.$('associationOn').checked, false, 'association default off');
+
+    const box = world.$('associationOn');
     const change = box.listeners.find(listener => listener.type === 'change');
-    assert(change, '#fuzzyPinyin has a change listener');
+    assert(change, '#associationOn has a change listener');
     box.checked = true;
     change.handler({ target: box });
-    equal(world.lastCall('setFuzzyPinyin').args, [true, world.token], 'fuzzy toggle + token');
+    equal(world.lastCall('setAssociation').args, [true, world.token],
+        'association toggle + token');
 });
 
 test('bridge validation errors surface on the feel note', () => {

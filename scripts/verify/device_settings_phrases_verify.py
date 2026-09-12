@@ -166,7 +166,7 @@ def main():
                 " return { oy: getComputedStyle(p).overflowY,"
                 " inKb: p.getBoundingClientRect().bottom <= window.innerHeight + 1 }; })()") or {}
     record("quick-switch sub-page scrolls inside the keyboard",
-           pair_rows == 6 and scroll.get('oy') == 'auto' and scroll.get('inKb') is True,
+           pair_rows == 7 and scroll.get('oy') == 'auto' and scroll.get('inKb') is True,
            f"rows={pair_rows} scroll={scroll}")
     # The back chevron rides the toolbar page bar (child 0).
     ev("document.getElementById('settingsPageBar')?.children[0]?.click()")

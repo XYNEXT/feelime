@@ -18,19 +18,18 @@ object InputModeBridge {
 object EngineFactory {
     fun create(context: Context, mode: InputMode): TextEngine = when (mode) {
         InputMode.DIRECT -> DirectTextEngine()
-        // 模糊音开启时用预编译的 fuzzy 变体 schema；其资产缺失（部署不完整）
-        // 时回落正宫，保证全拼模式始终可用。
+        // 模糊音开启时用预编译的 fuzzy 变体（按掩码物化 prism）；其资产缺失
+        // （部署不完整/变体缺失）时回落正宫，保证全拼模式始终可用。
         InputMode.PINYIN -> RimeTextEngine(
             context,
-            if (FuzzyPinyin.on(context) &&
-                com.feelime.ime.engine.EngineDataStore.isFuzzySchemaReady(context)
-            ) {
-                FuzzyPinyin.SCHEMA_ID
-            } else {
-                "luna_pinyin"
-            },
+            com.feelime.ime.engine.EngineDataStore.fuzzySchemaId(context)
+                ?: FuzzyPinyin.STRICT_SCHEMA_ID,
         )
         InputMode.DOUBLE_PINYIN -> RimeTextEngine(context, DoublePinyinScheme.schemaId(context))
+        // T9 九宫格：数字键面（schema 侧 xlit 把音节表映射成数字串，
+        // 见 scripts/generate-t9-schema.py）；资产缺失时由引擎数据
+        // 就绪判定挡在模式菜单，不会走到这里。
+        InputMode.T9 -> RimeTextEngine(context, "luna_pinyin_t9")
         InputMode.FRENCH -> HunspellTextEngine(context, "fr", "bonjour")
         InputMode.RUSSIAN -> HunspellTextEngine(context, "ru_RU", "ёлка")
         InputMode.JAPANESE -> MozcTextEngine(context)

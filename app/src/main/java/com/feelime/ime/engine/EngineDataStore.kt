@@ -38,16 +38,41 @@ object EngineDataStore {
             InputMode.DIRECT -> true
             InputMode.PINYIN -> File(root, "rime/luna_pinyin.schema.yaml").isFile
             InputMode.DOUBLE_PINYIN -> File(root, "rime/${DoublePinyinScheme.schemaId(context)}.schema.yaml").isFile
+            InputMode.T9 -> File(root, "rime/luna_pinyin_t9.schema.yaml").isFile
             InputMode.FRENCH -> File(root, "hunspell/fr.aff").isFile
             InputMode.RUSSIAN -> File(root, "hunspell/ru_RU.aff").isFile
             InputMode.JAPANESE -> File(root, "mozc/mozc.data").isFile
         }
     }
 
-    /** 模糊音变体 schema 是否已随包部署（EngineFactory 回落判据）。 */
-    fun isFuzzySchemaReady(context: Context): Boolean {
-        val root = readyRoot(context) ?: return false
-        return File(root, "rime/${FuzzyPinyin.SCHEMA_ID}.schema.yaml").isFile
+    /** 已部署版本目录内经 MANIFEST 校验部署的文件；未就绪返回 null。 */
+    fun readyFile(context: Context, path: String): File? {
+        val root = readyRoot(context) ?: return null
+        return File(root, path).takeIf { it.isFile }
+    }
+
+    /** 模糊音开启时返回 schema id，并把该掩码的预编译 prism 物化为
+     * schema 期望的文件名（运行时只加载 prism，不重跑 algebra）。
+     * 掩码为 0 或数据未就绪/变体缺失时返回 null（调用方回落严格全拼）。 */
+    fun fuzzySchemaId(context: Context): String? {
+        val mask = FuzzyPinyin.mask(context)
+        if (mask == 0) return null
+        val root = readyRoot(context) ?: return null
+        val variant = File(root, "rime/${FuzzyPinyin.SCHEMA_ID}_m$mask.prism.bin")
+        val active = File(root, "rime/${FuzzyPinyin.SCHEMA_ID}.prism.bin")
+        if (!File(root, "rime/${FuzzyPinyin.SCHEMA_ID}.schema.yaml").isFile) return null
+        if (!variant.isFile) return null
+        // active 不在 MANIFEST 里，长度相等的内容损坏无法被启动校验发现：
+        // 以内容一致为准，不一致就一律从已校验的变体重新物化
+        // （codex round-1 P2-5）。
+        if (!active.isFile || active.length() != variant.length() ||
+            !active.inputStream().use { it.readBytes() }.contentEquals(
+                variant.inputStream().use { it.readBytes() })
+        ) {
+            android.util.Log.w("FeelimeEngine", "fuzzy prism re-materialize: ${active.name} (mask=$mask)")
+            variant.copyTo(active, overwrite = true)
+        }
+        return FuzzyPinyin.SCHEMA_ID
     }
 
     /**
@@ -81,7 +106,11 @@ object EngineDataStore {
 
     @Synchronized
     private fun ensure(context: Context) {
-        val manifest = manifest(context) ?: run { deployFailed = true; return }
+        val manifest = manifest(context) ?: run {
+            android.util.Log.w("FeelimeEngine", "engine data deploy: manifest unreadable")
+            deployFailed = true
+            return
+        }
         val version = sha256(manifest.raw)
         val versions = File(context.filesDir, "engine-data/versions").apply { mkdirs() }
         val target = File(versions, version)
@@ -92,7 +121,20 @@ object EngineDataStore {
         manifest.files.forEach { (path, entry) ->
             val outFile = File(staging, path)
             outFile.parentFile?.mkdirs()
-            context.assets.open("$ASSET_ROOT/$path").use { input ->
+            // 资产缺包（如 aapt2 改名 .gz）必须响亮：静默吞掉会退化成
+            // 「引擎永远 init 失败」的远端症状（2026-09-13 实录）。
+            val stream = runCatching { context.assets.open("$ASSET_ROOT/$path") }
+                .onFailure {
+                    android.util.Log.w(
+                        "FeelimeEngine",
+                        "engine data deploy: asset missing $path (${it.message})",
+                    )
+                }.getOrNull() ?: run {
+                deployFailed = true
+                staging.deleteRecursively()
+                return
+            }
+            stream.use { input ->
                 outFile.outputStream().use { output ->
                     input.copyTo(output)
                     // durable deploy — every byte is on disk before
@@ -101,6 +143,10 @@ object EngineDataStore {
                 }
             }
             if (outFile.length() != entry.bytes || sha256(outFile) != entry.sha256) {
+                android.util.Log.w(
+                    "FeelimeEngine",
+                    "engine data deploy: hash mismatch $path",
+                )
                 mismatch = true
                 staging.deleteRecursively()
                 return

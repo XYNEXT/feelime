@@ -181,9 +181,14 @@ class TextInputCoordinator(
         }
     }
 
+    /** 拼音族（全拼/双拼/T9）：preedit 只在键盘 UI（候选条/preedit 行），
+     * 宿主编辑器不落组合串；其余模式保持经典 span 语义（IN-04）。 */
+    private fun isPinyinFamily(mode: InputMode): Boolean =
+        mode == InputMode.PINYIN || mode == InputMode.DOUBLE_PINYIN || mode == InputMode.T9
+
     private fun expectReplacement(length: Int) {
         if (predictedSelectionStart < 0 || predictedSelectionEnd < 0) return
-        val start = if (composingActive && mode != InputMode.PINYIN && mode != InputMode.DOUBLE_PINYIN) predictedSelectionEnd - composingRaw.length
+        val start = if (composingActive && !isPinyinFamily(mode)) predictedSelectionEnd - composingRaw.length
             else minOf(predictedSelectionStart, predictedSelectionEnd)
         val target = (start + length).coerceAtLeast(0)
         predictedSelectionStart = target
@@ -458,7 +463,7 @@ class TextInputCoordinator(
         if (!composingActive) return DispatchAck.Accepted
 
         val raw = composingRaw.replace(" ", "")
-        val rawMode = mode == InputMode.PINYIN || mode == InputMode.DOUBLE_PINYIN
+        val rawMode = isPinyinFamily(mode)
         composingActive = false
         composingRaw = ""
         val ack = dispatchLive(EngineCommand.Reset)
@@ -866,7 +871,7 @@ class TextInputCoordinator(
         // host span (same as an explicit mode switch, IN-08). Committing the
         // raw for span modes too double-landed the word (round-5 review).
         if (composingActive) {
-            if (mode == InputMode.PINYIN || mode == InputMode.DOUBLE_PINYIN) {
+            if (isPinyinFamily(mode)) {
                 val raw = composingRaw.replace(" ", "")
                 if (raw.isNotEmpty()) editor.commitText(raw)
             } else {
@@ -1147,7 +1152,7 @@ class TextInputCoordinator(
                     // raw letters must not land before a word is chosen.
                     // Alphabetical spellcheck modes (French/Russian) and the
                     // editors' own composing spans keep the classic span.
-                    if (mode != InputMode.PINYIN && mode != InputMode.DOUBLE_PINYIN) {
+                    if (!isPinyinFamily(mode)) {
                         expectReplacement(event.state.composing.length)
                         editor.setComposing(event.state.composing)
                     }
@@ -1159,7 +1164,7 @@ class TextInputCoordinator(
                     // that span first so the final character is not orphaned
                     // into the editor as a literal prefix.
                     if (composingActive) {
-                        if (mode != InputMode.PINYIN && mode != InputMode.DOUBLE_PINYIN) expectReplacement(0)
+                        if (!isPinyinFamily(mode)) expectReplacement(0)
                         editor.setComposing("")
                         editor.finishComposing()
                     }

@@ -1213,7 +1213,7 @@ test('Chinese-mode popup pick lands literally (requirement 7)', () => {
     equal(commits2[commits2.length - 1], 'K', 'popup letter lands literally in Chinese mode');
 });
 
-test('settings sub-pages: nav, key map, back (requirements 1+6)', () => {
+test('settings sub-pages: nav, key map, back (requirements 1+6)', {since: '3.33.0'}, () => {
     const world = fresh();
     world.tap(world.$('setupButton'));
     const nav = label => [...world.$('settingsPanel').querySelectorAll('.set-row')]
@@ -1225,7 +1225,7 @@ test('settings sub-pages: nav, key map, back (requirements 1+6)', () => {
     assert(world.document.body.classList.contains('settings-page'),
         'settings-page hides the regular tools');
     // pair sub-page: still six keyboards, tick BEFORE the name .
-    equal(world.document.querySelectorAll('#pairEditor .pair-row').length, 6, 'pair page rows');
+    equal(world.document.querySelectorAll('#pairEditor .pair-row').length, 7, 'pair page rows (t9 joined)');
     const pairRow = world.document.querySelector('#pairEditor .pair-row');
     assert(pairRow.children[0].classList.contains('pair-tick'),
         'pair tick precedes the name');
@@ -1235,7 +1235,7 @@ test('settings sub-pages: nav, key map, back (requirements 1+6)', () => {
     equal(world.document.querySelectorAll('#pairEditor').length, 0, 'back returns home');
     // menu sub-page: tick + name + drag handle LAST.
     world.tap(nav('长按菜单'));
-    equal(world.document.querySelectorAll('#menuEditor .pair-row').length, 6, 'menu page rows');
+    equal(world.document.querySelectorAll('#menuEditor .pair-row').length, 7, 'menu page rows (t9 joined)');
     const menuRow = world.document.querySelector('#menuEditor .pair-row');
     assert(menuRow.children[0].classList.contains('pair-tick'), 'menu tick first');
     assert(menuRow.children[menuRow.children.length - 1].classList.contains('pair-drag'),
@@ -1705,7 +1705,7 @@ test('combo card anchors to its trigger; shrink/side fallbacks keep it in-window
         're-open recomputes the cell size');
 });
 
-test('long-press menu filters to the enabled keyboards', () => {
+test('long-press menu filters to the enabled keyboards', {since: '3.33.0'}, () => {
     const world = fresh({ mode: 'pinyin' });
     world.storage.set('feelime_menu_modes',
         JSON.stringify(['pinyin', 'direct', 'double-pinyin']));
@@ -1722,7 +1722,7 @@ test('long-press menu filters to the enabled keyboards', () => {
     world.storage.set('feelime_menu_modes', JSON.stringify([]));
     world.context.window.Feelime.closeModeMenu();
     world.context.window.Feelime.toggleModeMenu();
-    equal(world.$('modeMenu').children.length, 6, 'empty set falls back to all');
+    equal(world.$('modeMenu').children.length, 7, 'empty set falls back to all (t9 joined)');
 });
 
 test('phrase editor strip + item menu hit the bridge', {since: '3.21.0'},  ()=> {
@@ -2076,7 +2076,30 @@ test('dp scheme switch: single-key expansion uses the active scheme table', {sin
 
 // ---------------------------------------------------------------- modes
 
-test('mode menu lists all modes; selecting emits selectMode', () => {
+test('t9 mode renders the digit grid with letter groups and selects via the menu', {since: '3.33.0'}, () => {
+    const world = fresh();
+    world.engineState({ mode: 't9', revision: 1, candidates: [], composing: '' });
+    const keys = [...world.document.querySelectorAll('#qwertyLayer .kb-key')]
+        .map(k => k.dataset.key);
+    for (const d of ['1', '2', '3', '4', '5', '6', '7', '8', '9']) {
+        assert(keys.includes(d), `digit ${d} present`);
+    }
+    // 分词键保留：数字切分歧义（9426 = xian / xi'an）要手动消歧。
+    assert(world.document.querySelector('[data-role="sep"]'),
+        'separator key survives in t9 (chinese mode chrome)');
+    // 菜单可选。
+    const world2 = fresh();
+    world2.touchDown(world2.$('modeToggle'));
+    world2.clock.advance(360);
+    world2.touchUp(world2.$('modeToggle'));
+    const t9 = [...world2.$('modeMenu').children]
+        .find(item => item.textContent.includes('九宫格'));
+    assert(t9, 'mode menu lists 九宫格 T9');
+    world2.tap(t9);
+    equal(world2.native.of('selectMode').slice(-1)[0].args[0], 't9', 't9 selected');
+});
+
+test('mode menu lists all modes; selecting emits selectMode', {since: '3.33.0'}, () => {
     const world = fresh();
     const toggle = world.$('modeToggle');
     world.touchDown(toggle);
@@ -2084,7 +2107,7 @@ test('mode menu lists all modes; selecting emits selectMode', () => {
     world.touchUp(toggle);
     assert(world.$('modeMenu').classList.contains('open'), 'menu open');
     const items = [...world.$('modeMenu').children];
-    equal(items.length, 6, '6 modes (theme moved to the settings panel)');
+    equal(items.length, 7, '7 modes (theme moved to the settings panel; t9 joined)');
     equal(items[0].textContent, 'En英文 Direct', 'first item: shorthand leads, title follows');
     world.tap(items[0]);
     equal(world.native.of('selectMode').length, 0, 'direct is current, no call');
@@ -4332,6 +4355,51 @@ test('another finger ending cannot terminate an ongoing cursor scrub', {since: '
     equal(world.native.of('moveCursor').slice(-1)[0].args[0], 2, 'original finger continues from its anchor');
     send(a, 'touchend', [], [finger(1, 84)]);
     equal(world.native.of('key').length, 0, 'scrub never emits letter taps');
+});
+
+test('assoc click routes through the real bridge (FeelimeNative)', {since: '3.33.0'}, () => {
+    const world = fresh({ mode: 'pinyin' });
+    world.engineState({ phase: 'READY', mode: 'pinyin', revision: 3, composing: '', rawInput: '',
+        candidates: [], hasNextPage: false });
+    world.assoc(['的', '是', '也']);
+    // mock DOM 的 querySelectorAll 不认复合类选择器，按 className 过滤
+    const assocButtons = () => [...world.$('candidates').children]
+        .filter(b => (b.className || '').split(/\s+/).includes('assoc'));
+    equal(assocButtons().length, 3, 'assoc words render while the pool is empty');
+    assocButtons()[0].click();
+    const call = world.native.of('commitAssoc')[0];
+    assert(call, 'assoc click reaches the native bridge');
+    equal(call.args[0], '的', 'commits the clicked word');
+    equal(assocButtons().length, 0, 'assoc bar clears after the click');
+});
+
+test('mode switch clears assoc words', {since: '3.33.0'}, () => {
+    const world = fresh({ mode: 'pinyin' });
+    world.engineState({ phase: 'READY', mode: 'pinyin', revision: 3, composing: '', rawInput: '',
+        candidates: [], hasNextPage: false });
+    world.assoc(['的', '是']);
+    const assocCount = () => [...world.$('candidates').children]
+        .filter(b => (b.className || '').split(/\s+/).includes('assoc')).length;
+    equal(assocCount(), 2, 'assoc words render');
+    world.engineState({ phase: 'READY', mode: 'direct', revision: 4, composing: '', rawInput: '',
+        candidates: [], hasNextPage: false });
+    equal(assocCount(), 0, 'mode change clears the assoc bar');
+});
+
+test('t9 letter-group hints are display-only', {since: '3.33.0'}, () => {
+    const world = fresh({ mode: 't9' });
+    world.engineState({ phase: 'READY', mode: 't9', revision: 1, composing: '', rawInput: '',
+        candidates: [], hasNextPage: false });
+    equal(world.key('2').querySelector('.kb-alt').textContent, 'abc',
+        'keycap hint shows the letter group');
+    // 长按弹窗走可上屏备选：字母组不能混进去（P2-3 曾把 'abc' 整段提交）。
+    const two = world.key('2');
+    world.touchDown(two);
+    world.clock.advance(360);
+    const items = [...world.document.querySelectorAll('.kp-item')].map(i => i.textContent);
+    world.touchCancel(two);
+    assert(!items.includes('abc'), 'letter group never offered as popup cell');
+    assert(items.includes('2'), 'digit itself still offered');
 });
 
 console.log(`\n== mock-bridge suite: ${passed} passed, ${failed} failed` +

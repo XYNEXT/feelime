@@ -5,6 +5,7 @@ enum class InputMode(val wireName: String) {
     DIRECT("direct"),
     PINYIN("pinyin"),
     DOUBLE_PINYIN("double-pinyin"),
+    T9("t9"),
     JAPANESE("japanese"),
     FRENCH("french"),
     RUSSIAN("russian"),

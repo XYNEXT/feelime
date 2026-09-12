@@ -60,8 +60,20 @@ const I18N = {
         "page.test": "输入测试",
         "input.fuzzy.title": "全拼模糊音",
         "input.fuzzy.badge": "输入",
-        "input.fuzzy.enable": "启用模糊音",
-        "input.fuzzy.hint": "z/zh、c/ch、s/sh、n/l 和前后鼻音（an/ang 等）混用时也能命中；只在全拼模式生效。",
+        "input.fuzzy.g.ping": "平翘舌",
+        "input.fuzzy.g.ping.hint": "z/zh、c/ch、s/sh：打 zang 也能出「张」，打 zhang 也能出「脏」。",
+        "input.fuzzy.g.nl": "声母 n/l",
+        "input.fuzzy.g.nl.hint": "打 nai 也能出「来」，打 lai 也能出「奶」。",
+        "input.fuzzy.g.fh": "声母 f/h",
+        "input.fuzzy.g.fh.hint": "打 fu 也能出「湖」，打 hu 也能出「父」。",
+        "input.fuzzy.g.rl": "声母 r/l",
+        "input.fuzzy.g.rl.hint": "打 re 也能出「乐」，打 le 也能出「热」。",
+        "input.fuzzy.g.nasal": "前后鼻音",
+        "input.fuzzy.g.nasal.hint": "an/ang、en/eng、in/ing：打 zang 也能出「张」，打 zhon 也能出「中」。",
+        "input.assoc.title": "中文联想",
+        "input.assoc.badge": "输入",
+        "input.assoc.enable": "选词后联想下一个词",
+        "input.assoc.hint": "上屏后在候选条给出高频接续词，点击可连续联想；只在全拼/双拼生效。",
         "input.double.title": "双拼方案",
         "input.double.badge": "输入",
         "input.double.scheme": "方案",
@@ -333,8 +345,20 @@ const I18N = {
         "page.test": "Input test",
         "input.fuzzy.title": "Full-pinyin fuzzy",
         "input.fuzzy.badge": "Input",
-        "input.fuzzy.enable": "Enable fuzzy pinyin",
-        "input.fuzzy.hint": "Matches despite z/zh, c/ch, s/sh, n/l and front/back nasal (an/ang etc.) confusions; applies to full-pinyin mode only.",
+        "input.fuzzy.g.ping": "Retroflex z/zh, c/ch, s/sh",
+        "input.fuzzy.g.ping.hint": "Typing zang also matches 张, typing zhang also matches 脏.",
+        "input.fuzzy.g.nl": "n/l initials",
+        "input.fuzzy.g.nl.hint": "Typing nai also matches 来, typing lai also matches 奶.",
+        "input.fuzzy.g.fh": "f/h initials",
+        "input.fuzzy.g.fh.hint": "Typing fu also matches 湖, typing hu also matches 父.",
+        "input.fuzzy.g.rl": "r/l initials",
+        "input.fuzzy.g.rl.hint": "Typing re also matches 乐, typing le also matches 热.",
+        "input.fuzzy.g.nasal": "Front/back nasals",
+        "input.fuzzy.g.nasal.hint": "an/ang, en/eng, in/ing: typing zang also matches 张, typing zhon also matches 中.",
+        "input.assoc.title": "Chinese word association",
+        "input.assoc.badge": "Input",
+        "input.assoc.enable": "Suggest the next word after a commit",
+        "input.assoc.hint": "Shows frequent followers in the candidates bar after a word commits; tap to keep the chain going. Full/Double Pinyin only.",
         "input.double.title": "Double-pinyin scheme",
         "input.double.badge": "Input",
         "input.double.scheme": "Scheme",
@@ -739,6 +763,7 @@ window.FeelimeSettings = {
             case "bottomPadError":
             case "candidateFontError":
             case "feelOptionsError":
+            case "fuzzyPinyinError":
                 setNote("feelNote", eventText(event, "error.INVALID_FEEL_OPTION"));
                 break;
             case "asrNote":
@@ -818,7 +843,16 @@ function renderDoublePinyin(state) {
     const scheme = ["ziranma", "flypy", "sogou"].includes(state.dpScheme)
         ? state.dpScheme : "ziranma";
     if (document.activeElement !== select) select.value = scheme;
-    if (document.activeElement !== $("fuzzyPinyin")) $("fuzzyPinyin").checked = !!state.fuzzyPinyin;
+    // 模糊音分组开关：按位掩码勾选，焦点所在的组不回写（连续点按不被
+    // 异步 state 推送打断）。
+    const mask = Number(state.fuzzyPinyinMask) || 0;
+    document.querySelectorAll("input[data-fuzzy-bit]").forEach(box => {
+        if (document.activeElement === box) return;
+        box.checked = (mask & Number(box.dataset.fuzzyBit)) !== 0;
+    });
+    if (document.activeElement !== $("associationOn")) {
+        $("associationOn").checked = !!state.associationOn;
+    }
     $("dpNote").textContent = t(`input.double.note.${select.value}`);
     renderDpKeymap(select.value);
 }
@@ -1287,7 +1321,16 @@ $("btnCustomTemplate").addEventListener("click", () => {
 
 $("btnCheckUpdate").addEventListener("click", () => call("checkUpdate", $("updateSource").value));
 $("autoUpdateCheck").addEventListener("change", event => call("setAutoUpdateCheck", event.target.checked));
-$("fuzzyPinyin").addEventListener("change", event => call("setFuzzyPinyin", event.target.checked));
+$("associationOn").addEventListener("change", event => call("setAssociation", event.target.checked));
+document.querySelectorAll("input[data-fuzzy-bit]").forEach(box => {
+    box.addEventListener("change", () => {
+        let mask = 0;
+        document.querySelectorAll("input[data-fuzzy-bit]").forEach(other => {
+            if (other.checked) mask |= Number(other.dataset.fuzzyBit);
+        });
+        call("setFuzzyPinyinMask", mask);
+    });
+});
 $("btnInstallZip").addEventListener("click", () => call("installZip", $("updateUrl").value));
 $("btnImportZip").addEventListener("click", () => call("openKeyboardDocument"));
 $("btnRestore").addEventListener("click", () => call("restoreBuiltInKeyboard"));

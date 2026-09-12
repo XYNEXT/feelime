@@ -238,7 +238,7 @@ def main():
               ".map(r => r.dataset.mode)") or []
     ticked = ev("[...document.querySelectorAll('#pairEditor .pair-tick.on')].length")
     record("pair editor lists all keyboards with two ticks",
-           len(rows) == 6 and ticked == 2, f"rows={rows} ticks={ticked}")
+           len(rows) == 7 and ticked == 2, f"rows={rows} ticks={ticked}")
     shot('b10-pair-editor')
     ev("(() => { window.Feelime.closeSettingsPanel(); return 1; })()")
     time.sleep(0.3)
@@ -254,7 +254,8 @@ def main():
        " localStorage.removeItem('feelime_mode_order'); return 1; })()")
     record("menu follows the saved drag order",
            menu_titles[:2] in (['日本語 Romaji', '全拼 Pinyin'], ['Japanese', 'Pinyin'])
-           and len(menu_titles) == 6,
+           and len(menu_titles) == 7
+           and menu_titles[-1] in ('九宫格 T9', 'T9'),
            f"menu={menu_titles}")
 
     # ---- #13 symbol layer redesign ----

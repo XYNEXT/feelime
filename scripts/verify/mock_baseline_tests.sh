@@ -6,11 +6,12 @@
 # `since:` gate legitimately adds skips on the old fixture, and pinning the
 # exact totals turned every batch into a manual recount ritual (2026-09
 # review P2-7). A rotting old-form case still shows up as a failure here.
-# Historical pins for reference: 126/39 -> 130/0/73 (keyboard 3.30.0 era).
+# Historical pins for reference: 126/39 -> 130/0/73 (keyboard 3.30.0 era)
+# -> 127/0/79 (3.33.0: t9/pair-count pins era-gated past the 3.20 fixture).
 set -eu
 
 ROOT=$(cd "$(dirname "$0")/../.." && pwd)
-MIN_PASSED=130
+MIN_PASSED=127
 
 OUT=$(FEELIME_KEYBOARD_SRC="$ROOT/test-fixtures/keyboard-3.20.0" \
     node "$ROOT/scripts/verify/mock_bridge_tests.js") || {

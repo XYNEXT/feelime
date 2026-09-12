@@ -55,6 +55,7 @@ SEGMENTS=(
     "9m replay-geometry|device"
     "9n feel-degrade|device"
     "9o input-prefs|device"
+    "9p t9|device"
     "10/11 resource|device"
     "11/11 asr|asr"
 )
@@ -63,6 +64,7 @@ SEGMENTS=(
 # 普通批次的设备验证应该是 ~30min 的 L3 冒烟，不是 ~2h 的全量）。
 PROFILES=(
     "quick|5/11 base 7/11 extended 9n feel-degrade 9o input-prefs 9/11 panel 9j height-card"
+    "input|5/11 base 9n feel-degrade 9o input-prefs 9p t9"
     "keyboard-js|5/11 base 7/11 extended 9a caps-flick 9c keymap 9d pool"
     "native-engine|5/11 base 7/11 extended 9g backspace 9h delete"
     "kotlin-service|5/11 base 8/11 editor 9n feel-degrade 10/11 resource"
@@ -464,6 +466,7 @@ for entry in "${SEGMENTS[@]}"; do
                 "9m replay-geometry") run_suite "$label" python3 "$HERE/device_replay_geometry_verify.py" ;;
                 "9n feel-degrade") run_suite "$label" python3 "$HERE/device_feel_degrade_verify.py" ;;
                 "9o input-prefs") run_suite "$label" python3 "$HERE/device_input_prefs_verify.py" ;;
+                "9p t9") run_suite "$label" python3 "$HERE/device_t9_verify.py" ;;
                 "10/11 resource") run_suite "$label" python3 "$HERE/device_resource_verify.py" --apk "$FEELIME_VERIFY_APK" ;;
                 *) echo "unknown device segment: $label" >&2; exit 2 ;;
             esac

@@ -248,12 +248,30 @@
         // 键位是自然码（ei→Z / ie→X / iao→C / ou→B 是自然码特征）；旧文件名
         // ziranma_double_pinyin 是历史误名，显示一律用「双拼」。
         'double-pinyin': { label: '双', title: '双拼', layout: 'qwerty', engine: true },
+        // 九宫格：键面是数字（schema 侧把音节表 xlit 成数字串），候选出词。
+        't9': { label: '九', title: '九宫格 T9', layout: 't9', engine: true },
         'french': { label: 'FR', title: 'Français', layout: 'qwerty-fr', engine: true },
         'russian': { label: 'РУ', title: 'Русский', layout: 'cyrillic', engine: true },
         'japanese': { label: '日', title: '日本語 Romaji', layout: 'qwerty', engine: true },
     };
 
     const LAYOUTS = {
+        // 九宫格 T9：键面数字为主、字母组为角标（alts）；分隔键（分词）
+        // 保留——数字切分歧义（9426 = xian / xi'an）靠它手动消歧。
+        t9: {
+            // 字母组角标只做键面提示，不参与上滑/弹窗上屏（见 altCandidates）。
+            hintsOnly: true,
+            rows: [
+                '123',
+                '456',
+                { keys: '789', shift: true, backspace: true },
+            ],
+            alts: {
+                '2': 'abc', '3': 'def',
+                '4': 'ghi', '5': 'jkl', '6': 'mno',
+                '7': 'pqrs', '8': 'tuv', '9': 'wxyz',
+            },
+        },
         qwerty: {
             rows: [
                 'qwertyuiop',
@@ -675,7 +693,7 @@
     // re-checked against the prisms by scripts/verify/guard_dp_finals.js.
 
     function modeLabel(mode) {
-        if (uiLocale === 'en') return ({pinyin: 'PY', 'double-pinyin': 'DP', japanese: 'JP'})[mode] || MODES[mode].label;
+        if (uiLocale === 'en') return ({pinyin: 'PY', 'double-pinyin': 'DP', t9: 'T9', japanese: 'JP'})[mode] || MODES[mode].label;
         return (MODES[mode] || MODES.direct).label;
     }
 
@@ -802,6 +820,9 @@
             this.bottomPad = 0;
             // Candidate text scale (issue #2), pre-hello default.
             this.candidateFont = 0;
+            // 中文联想（docs/design/association.md），hello/onAssoc 驱动。
+            this.associationOn = false;
+            this.assocWords = [];
             // Degraded-engine state from events/hello (mode-fallback §2).
             // Non-null while a Direct fallback serves for a failed mode.
             this.degrade = null;
@@ -1086,7 +1107,8 @@
         }
 
         isChineseMode() {
-            return this.mode === 'pinyin' || this.mode === 'double-pinyin';
+            return this.mode === 'pinyin' || this.mode === 'double-pinyin' ||
+                this.mode === 't9';
         }
 
         sendKey(key) {
@@ -1351,7 +1373,7 @@
             button.dataset.key = key;
             button.dataset.lp = 'popup';
             button.innerHTML = '<span class="kb-alt"></span><span class="kb-main"></span>';
-            button.querySelector('.kb-alt').textContent = this.altCandidates(key)[0] || '';
+            button.querySelector('.kb-alt').textContent = this.keyAltHint(key);
             button.addEventListener('click', () => this.sendKey(key));
             this.bindTouch(button);
             return button;
@@ -1752,9 +1774,22 @@
             // Chinese modes print their own symbol set.
             if (this.isChineseMode() && CN_ALTS[key]) return [CN_ALTS[key]];
             const layout = LAYOUTS[(MODES[this.mode] || MODES.direct).layout] || LAYOUTS.qwerty;
+            // t9 的字母组（abc/def…）只是键面提示，整段不是可上屏字符
+            // （codex round-1 P2-3：上滑 2 曾把字面 'abc' 提交出去）。
+            if (layout.hintsOnly) return [];
             const value = layout.alts[key];
             if (!value) return [];
             return Array.isArray(value) ? value : [value];
+        }
+
+        /** 键面角标显示：hintsOnly 布局（t9）也要画出字母组，但走的是
+         * 展示语义，与 altCandidates 的可上屏备选分开。 */
+        keyAltHint(key) {
+            if (this.isChineseMode() && CN_ALTS[key]) return CN_ALTS[key];
+            const layout = LAYOUTS[(MODES[this.mode] || MODES.direct).layout] || LAYOUTS.qwerty;
+            const value = layout.alts[key];
+            if (!value) return '';
+            return Array.isArray(value) ? value[0] : value;
         }
 
         openPopup(button) {
@@ -2743,7 +2778,7 @@
                     alt.textContent = (chinese || upper) ? key.toUpperCase() : key;
                 } else {
                     main.textContent = (chinese || upper) ? key.toUpperCase() : key;
-                    alt.textContent = this.altCandidates(key)[0] || '';
+                    alt.textContent = this.keyAltHint(key);
                 }
             });
         }
@@ -4183,6 +4218,21 @@
             // exists for. Hold and restore across the rebuild.
             const held = bar.scrollLeft || 0;
             bar.replaceChildren();
+            // 中文联想（docs/design/association.md）：组合为空且无引擎候选时，
+            // 候选条展示上屏词的后继联想；组合开始即让位（assocWords 已清）。
+            if (!(this.expandCandidates || []).length &&
+                this.assocWords.length && !state.composing) {
+                this.assocWords.forEach(word => {
+                    const button = document.createElement('button');
+                    button.className = 'candidate assoc';
+                    button.textContent = word;
+                    button.addEventListener('click', () => this.commitAssocWord(word));
+                    button.addEventListener('mousedown', event => event.preventDefault());
+                    bar.append(button);
+                });
+                bar.scrollLeft = held;
+                return;
+            }
             // The bar renders the WHOLE accumulated pool (same pool
             // the expanded grid scrolls) - native paging must not cap it at
             // one page, and swiping the bar reveals the rest. The first pool
@@ -5005,6 +5055,8 @@
                 this.candidateFont = Number(payload.candidateFont);
             }
             this.applyCandidateFont();
+            this.associationOn = !!payload.associationOn;
+            if (!this.associationOn) this.assocWords = [];
             if (Number(payload.holdMs) in { 200: 1, 300: 1, 350: 1, 450: 1, 600: 1 }) {
                 this.holdMs = Number(payload.holdMs);
             }
@@ -5224,9 +5276,36 @@
             }
         }
 
+        /** 中文联想（docs/design/association.md）：原生在 commit 后/点击后
+         * 推送后继词；编辑器切换等场景推空列表清屏。 */
+        onAssoc(payload) {
+            this.assocWords = Array.isArray(payload && payload.words)
+                ? payload.words.filter(word => typeof word === 'string' && word) : [];
+            if (this.variantReplaying) return;
+            this.renderCandidates(this.lastEngineState || {});
+        }
+
+        /** 联想词点击：原生写入编辑器并推下一轮联想（连续联想）。 */
+        commitAssocWord(word) {
+            this.assocWords = [];
+            this.renderCandidates(this.lastEngineState || {});
+            // 桥全局叫 FeelimeNative（本作用域里别名 Native）；window.Native
+            // 从不存在，用它做守卫会把点击静默吞掉（2026-09-13 9o 实录）。
+            if (typeof Native !== 'undefined' && typeof Native.commitAssoc === 'function') {
+                Native.commitAssoc(word, this.token);
+            }
+        }
+
         onEngineState(payload) {
             this.lastRevision = payload.revision || 0;
             this.lastEngineState = payload;
+            // 组合开始，联想让位给引擎候选（设计 §3 清空时机）。
+            if (payload.composing && this.assocWords.length) this.assocWords = [];
+            // 模式变化同样清空：英文模式下残留的中文联想词仍可点击上屏
+            // （codex round-1 P2-2）。
+            if (payload.mode && this.mode && payload.mode !== this.mode && this.assocWords.length) {
+                this.assocWords = [];
+            }
             // Engine lifecycle (warming / degraded) is consumed BEFORE the
             // variantReplaying early-return below — a replay in flight must
             // never swallow a degrade or recovery notice (mode-fallback §2.3).
@@ -5478,6 +5557,7 @@
     window.Feelime = {
         onBridgeHello: payload => keyboard.onBridgeHello(payload),
         onEngineState: payload => keyboard.onEngineState(payload),
+        onAssoc: payload => keyboard.onAssoc(payload),
         onNativeState: payload => keyboard.onNativeState(payload),
         onEditorInfo: payload => keyboard.onEditorInfo(payload),
         cancelTouches: () => keyboard.cancelTouches(),

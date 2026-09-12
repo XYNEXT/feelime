@@ -329,6 +329,23 @@ body.settings-page .compose-tool { display: none; }
     line-height: 34px;
 }
 
+/* 联想词（docs/design/association.md）：与引擎候选同尺寸，降调配色 +
+ * 底部小圆点区分「这是联想，不是当前组合的候选」。 */
+.candidate.assoc {
+    color: var(--subtle, #888);
+}
+
+.candidate.assoc::after {
+    content: '';
+    display: block;
+    width: 4px;
+    height: 4px;
+    margin: -6px auto 0;
+    border-radius: 50%;
+    background: currentColor;
+    opacity: 0.55;
+}
+
 /* 候选字号档位（issue #2）：hello 带来的 body[data-cand-font] 只缩放
  * 文字，不动 34px 行高预算（扩到 2 档以上会挤压行高，另行设计）。 */
 body[data-cand-font="large"] { --cand-font-scale: 1.2; }

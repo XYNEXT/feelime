@@ -27,12 +27,14 @@ MODE_LABELS = {
     "英文 Direct": ("En",),
     "全拼 Pinyin": ("拼", "PY"),
     "双拼": ("双", "DP"),
+    "九宫格 T9": ("九", "T9"),
     "Français": ("FR",),
 }
 MODE_TITLES = {
     "英文 Direct": ("英文 Direct", "English"),
     "全拼 Pinyin": ("全拼 Pinyin", "Pinyin"),
     "双拼": ("双拼", "Double Pinyin"),
+    "九宫格 T9": ("九宫格 T9", "T9"),
     "Français": ("Français",),
     "Русский": ("Русский", "Russian"),
     "日本語 Romaji": ("日本語 Romaji", "Japanese"),
@@ -43,6 +45,7 @@ MODE_ID_TITLES = {
     "direct": MODE_TITLES["英文 Direct"],
     "pinyin": MODE_TITLES["全拼 Pinyin"],
     "double-pinyin": MODE_TITLES["双拼"],
+    "t9": MODE_TITLES["九宫格 T9"],
     "french": MODE_TITLES["Français"],
     "russian": MODE_TITLES["Русский"],
     "japanese": MODE_TITLES["日本語 Romaji"],
@@ -417,6 +420,35 @@ def settings_tap(selector, wait=0.7, scroll=True):
     return False
 
 
+def pick_select_option(selector, option_text, wait=1.0):
+    """Real-tap a settings <select>, then pick the option in the system dialog.
+
+    WebView select dialogs are native UI - the options are visible in the
+    a11y dump and tappable like any other dialog row.
+    """
+    if not settings_tap(selector, wait=wait):
+        return False
+    time.sleep(0.9)
+    for _ in range(5):
+        try:
+            root = ElementTree.fromstring(d.ui_dump())
+        except ElementTree.ParseError:
+            root = None
+        for node in root.iter("node") if root is not None else ():
+            if node.get("text", "").strip() == option_text:
+                bounds = re.fullmatch(
+                    r"\[(\d+),(\d+)\]\[(\d+),(\d+)\]", node.get("bounds", ""))
+                if bounds:
+                    x1, y1, x2, y2 = map(int, bounds.groups())
+                    d.tap((x1 + x2) / 2, (y1 + y2) / 2, wait=0.8)
+                    return True
+        time.sleep(0.6)
+    # Never leave the dialog open on a failure path.
+    d.shell("input keyevent KEYCODE_BACK")
+    time.sleep(0.6)
+    return False
+
+
 def settings_visible_pages():
     return sev("[...document.querySelectorAll('.page')].filter(p => !p.hidden)"
                ".map(p => p.dataset.page)") or []
@@ -432,7 +464,12 @@ def wait_settings_ready():
         lambda value: value is True, timeout=12.0, interval=0.5)
 
 
-def launch_settings(with_fixtures=False):
+def launch_settings(with_fixtures=True):
+    # 默认带 SHOW_DEBUG_FIXTURES：SetupActivity 是 singleTop，不带 extra 的
+    # am start 也走 onNewIntent，而 onNewIntent 让 fixtures 跟随 intent——
+    # 一个不带 extra 的 relaunch 会把测试编辑框藏掉，之后整个套件都在对着
+    # 设置页瞎点（键盘永远唤不起来，2026-09-13 input-prefs v6 实录）。
+    # 显式 with_fixtures=False 的套件（settings_entry/height_card）不受影响。
     extra = " --ez com.feelime.ime.extra.SHOW_DEBUG_FIXTURES true" if with_fixtures else ""
     d.shell(f"am start -n {d.PKG}/.SetupActivity{extra}")
     time.sleep(1.5)

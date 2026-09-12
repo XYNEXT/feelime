@@ -88,6 +88,13 @@ fun readCandidateFont(context: Context): Int =
         .takeIf { it in 0..2 }
         ?: 0
 
+/** 中文联想开关（docs/design/association.md）：默认关。 */
+const val PREF_ASSOCIATION = "association_on"
+
+fun readAssociation(context: Context): Boolean =
+    context.getSharedPreferences(KEYBOARD_PREFS_FILE, Context.MODE_PRIVATE)
+        .getBoolean(PREF_ASSOCIATION, false)
+
 /** The full-settings WebView bridge (design §6.2).
  *
  * Same handshake as the IME bridge (design §5.3): the activity mints a
@@ -300,7 +307,8 @@ class SettingsBridge(
                 .put("isDefault", hostIsDefaultIme()))
             .put("mic", JSONObject().put("granted", micGranted()))
             .put("dpScheme", com.feelime.ime.engine.DoublePinyinScheme.resolve(context))
-            .put("fuzzyPinyin", com.feelime.ime.engine.FuzzyPinyin.on(context))
+            .put("fuzzyPinyinMask", com.feelime.ime.engine.FuzzyPinyin.mask(context))
+            .put("associationOn", readAssociation(context))
             .put("bottomPad", readBottomPadDp(context))
             .put("scrubSpeed", readFeelScrubSpeed(context))
             .put("holdMs", readFeelHoldMs(context))
@@ -625,10 +633,21 @@ class SettingsBridge(
         pushState()
     }
 
-    /** 全拼模糊音开关（issue #2）：切换预编译的 luna_pinyin_fuzzy schema。 */
+    /** 全拼模糊音分组开关（issue #2）：位掩码落盘并广播，IME 在当前全拼
+     * 会话上按新掩码物化 prism 换 schema 重建。掩码由设置页按组合成。 */
     @JavascriptInterface
-    fun setFuzzyPinyin(on: Boolean, token: String) = guarded(token) {
-        com.feelime.ime.engine.FuzzyPinyin.set(context, on)
+    fun setFuzzyPinyinMask(mask: Int, token: String) = guarded(token) {
+        if (mask !in 0..com.feelime.ime.engine.FuzzyPinyin.MASK_ALL) {
+            pushEvent(
+                JSONObject()
+                    .put("type", "fuzzyPinyinError")
+                    .put("code", "BAD_FUZZY_MASK")
+                    .put("message", t(context, "模糊音组合无效", "Invalid fuzzy-pinyin combination")),
+            )
+            pushState()
+            return@guarded
+        }
+        com.feelime.ime.engine.FuzzyPinyin.set(context, mask)
         context.sendBroadcast(
             Intent(ACTION_FUZZY_PINYIN_CHANGED).setPackage(context.packageName),
         )
@@ -672,6 +691,18 @@ class SettingsBridge(
         }
         context.getSharedPreferences(KEYBOARD_PREFS_FILE, Context.MODE_PRIVATE)
             .edit().putInt(PREF_CANDIDATE_FONT, size).apply()
+        context.sendBroadcast(
+            Intent(ACTION_KEYBOARD_PREFS_CHANGED).setPackage(context.packageName),
+        )
+        pushState()
+    }
+
+    /** 中文联想开关（docs/design/association.md §4）：落盘 + 广播重推
+     *  hello；关掉时的联想清屏由 service 的 keyboardPrefsReceiver 处理。 */
+    @JavascriptInterface
+    fun setAssociation(on: Boolean, token: String) = guarded(token) {
+        context.getSharedPreferences(KEYBOARD_PREFS_FILE, Context.MODE_PRIVATE)
+            .edit().putBoolean(PREF_ASSOCIATION, on).apply()
         context.sendBroadcast(
             Intent(ACTION_KEYBOARD_PREFS_CHANGED).setPackage(context.packageName),
         )

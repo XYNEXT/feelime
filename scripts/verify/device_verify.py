@@ -436,7 +436,8 @@ def devtools_click_mode(title):
     keyboard.toggleModeMenu() (rendering the items) - the physical long-press
     path is covered by open_mode_menu. The chip label only updates after the
     async native roundtrip."""
-    order = ["英文 Direct", "全拼 Pinyin", "双拼", "Français", "Русский", "日本語 Romaji"]
+    order = ["英文 Direct", "全拼 Pinyin", "双拼", "九宫格 T9",
+             "Français", "Русский", "日本語 Romaji"]
     index = order.index(title)
     return devtools_eval(
         "(() => { const menu = document.getElementById('modeMenu');"
@@ -465,7 +466,8 @@ def devtools_candidates():
 def devtools_switch_mode(title):
     """Switch mode through the real UI, driven deterministically via DevTools.
  Opens the lazily rendered menu via the exposed hook."""
-    order = ["英文 Direct", "全拼 Pinyin", "双拼", "Français", "Русский", "日本語 Romaji"]
+    order = ["英文 Direct", "全拼 Pinyin", "双拼", "九宫格 T9",
+             "Français", "Русский", "日本語 Romaji"]
     index = order.index(title)
     return devtools_eval(
         "(() => { const menu = document.getElementById('modeMenu');"
@@ -507,6 +509,7 @@ def ui_dump():
         " -c com.feelime.verify.uidump.UiDumpTest -e output /sdcard/fv-ui.xml"
         if dump_jar else "uiautomator dump /sdcard/fv-ui.xml"
     )
+    out = ""
     for _ in range(3):
         shell("rm -f /sdcard/fv-ui.xml")
         try:
@@ -518,10 +521,15 @@ def ui_dump():
             time.sleep(1.0)
             continue
         out = shell("cat /sdcard/fv-ui.xml 2>/dev/null")
-        if out.lstrip().startswith("<?xml") and "EditText" in out:
+        # 有效的 XML 就是一份确定的快照，直接返回，由调用方决定找不到目标
+        # 节点怎么办（ensure_keyboard_up 等本来就有外层轮询）。把「没有
+        # EditText」当失败重试会白烧满 3 轮 dump：无编辑框场景（设置页、
+        # 键盘收起）每次查询从 ~4s 涨到 ~12s，叠上 visible_field_bounds 的
+        # 6 次滚动重试就是几分钟级的爬行（2026-09-12 input-prefs 实测）。
+        if out.lstrip().startswith("<?xml"):
             return out
         time.sleep(1.0)
-    return out if out.lstrip().startswith("<?xml") else ""
+    return ""
 
 
 TEST_INPUT_DESCRIPTION = "feelime-test-input"
@@ -1238,7 +1246,7 @@ def case_english(kb):
     reset_shift()  # never leak caps into later cases
 
 
-MODE_ORDER = ["英文 Direct", "全拼 Pinyin", "双拼", "Français", "Русский", "日本語 Romaji"]
+MODE_ORDER = ["英文 Direct", "全拼 Pinyin", "双拼", "九宫格 T9", "Français", "Русский", "日本語 Romaji"]
 
 
 def menu_open():
@@ -1451,7 +1459,19 @@ def ensure_keyboard_up():
     "shown" - require mInputShown too, and re-tap the field otherwise."""
     if keyboard_chip() is not None and input_shown():
         return
-    bounds = remember_field(visible_field_bounds()) or LAST_FIELD_BOUNDS
+    # 恢复判定只看本次活体查询：缓存坐标兜底会跳过路由恢复，对着设置页
+    # 子页盲点旧坐标（codex round-1 P2-6）。
+    live = remember_field(visible_field_bounds())
+    if not live:
+        # SetupActivity 的子页（输入设置等）没有测试编辑框，swipe 也滚不出
+        # 来；home 页有。路由重置一次，替代之前几分钟的盲转重试
+        # （2026-09-13 input-prefs 60s 采样：25/30 卡在这个循环）。
+        reset = devtools_eval_target(
+            "settings/index.html",
+            "!!window.FeelimeSettings && (window.FeelimeSettings.showPage('home'), true)")
+        if reset is True:
+            live = remember_field(visible_field_bounds())
+    bounds = live or LAST_FIELD_BOUNDS
     if bounds:
         tap((bounds[0] + bounds[2]) / 2, (bounds[1] + bounds[3]) / 2, 1.5)
     for _ in range(6):
@@ -1536,6 +1556,7 @@ def switch_mode(kb, title):
         "英文 Direct": {"En"},
         "全拼 Pinyin": {"拼", "PY"},
         "双拼": {"双", "DP"},
+        "九宫格 T9": {"九", "T9"},
         "Français": {"FR"},
         "Русский": {"РУ"},
         "日本語 Romaji": {"日", "JP"},

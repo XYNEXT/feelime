@@ -40,32 +40,8 @@ def ev(expression):
 
 
 def pick_select_option(selector, option_text, wait=1.0):
-    """Real-tap a settings <select>, then pick the option in the system dialog.
-
-    WebView select dialogs are native UI - the options are visible in the
-    a11y dump and tappable like any other dialog row.
-    """
-    if not shared.settings_tap(selector, wait=wait):
-        return False
-    time.sleep(0.9)
-    for _ in range(5):
-        try:
-            root = ElementTree.fromstring(d.ui_dump())
-        except ElementTree.ParseError:
-            root = None
-        for node in root.iter("node") if root is not None else ():
-            if node.get("text", "").strip() == option_text:
-                bounds = re.fullmatch(
-                    r"\[(\d+),(\d+)\]\[(\d+),(\d+)\]", node.get("bounds", ""))
-                if bounds:
-                    x1, y1, x2, y2 = map(int, bounds.groups())
-                    d.tap((x1 + x2) / 2, (y1 + y2) / 2, wait=0.8)
-                    return True
-        time.sleep(0.6)
-    # Never leave the dialog open on a failure path.
-    d.shell("input keyevent KEYCODE_BACK")
-    time.sleep(0.6)
-    return False
+    # canonical copy lives in fv_common (shared settings helpers)
+    return shared.pick_select_option(selector, option_text, wait=wait)
 
 
 def prefs_body():

@@ -107,9 +107,33 @@
   <main>
     <section class="card" id="sec-fuzzy" aria-labelledby="fuzzyTitle">
       <div class="section-heading"><h2 id="fuzzyTitle" data-i18n="input.fuzzy.title">全拼模糊音</h2><span class="eyebrow" data-i18n="input.fuzzy.badge">输入</span></div>
-      <label class="row switch-row" for="fuzzyPinyin">
-        <span class="row-label"><span data-i18n="input.fuzzy.enable">启用模糊音</span><small data-i18n="input.fuzzy.hint">z/zh、c/ch、s/sh、n/l 和前后鼻音（an/ang 等）混用时也能命中；只在全拼模式生效。</small></span>
-        <input type="checkbox" id="fuzzyPinyin" class="toggle">
+      <label class="row switch-row" for="fuzzyBit1">
+        <span class="row-label"><span data-i18n="input.fuzzy.g.ping">平翘舌</span><small data-i18n="input.fuzzy.g.ping.hint">z/zh、c/ch、s/sh：打 zang 也能出「张」，打 zhang 也能出「脏」。</small></span>
+        <input type="checkbox" id="fuzzyBit1" class="toggle" data-fuzzy-bit="1">
+      </label>
+      <label class="row switch-row" for="fuzzyBit2">
+        <span class="row-label"><span data-i18n="input.fuzzy.g.nl">声母 n/l</span><small data-i18n="input.fuzzy.g.nl.hint">打 nai 也能出「来」，打 lai 也能出「奶」。</small></span>
+        <input type="checkbox" id="fuzzyBit2" class="toggle" data-fuzzy-bit="2">
+      </label>
+      <label class="row switch-row" for="fuzzyBit4">
+        <span class="row-label"><span data-i18n="input.fuzzy.g.fh">声母 f/h</span><small data-i18n="input.fuzzy.g.fh.hint">打 fu 也能出「湖」，打 hu 也能出「父」。</small></span>
+        <input type="checkbox" id="fuzzyBit4" class="toggle" data-fuzzy-bit="4">
+      </label>
+      <label class="row switch-row" for="fuzzyBit8">
+        <span class="row-label"><span data-i18n="input.fuzzy.g.rl">声母 r/l</span><small data-i18n="input.fuzzy.g.rl.hint">打 re 也能出「乐」，打 le 也能出「热」。</small></span>
+        <input type="checkbox" id="fuzzyBit8" class="toggle" data-fuzzy-bit="8">
+      </label>
+      <label class="row switch-row" for="fuzzyBit16">
+        <span class="row-label"><span data-i18n="input.fuzzy.g.nasal">前后鼻音</span><small data-i18n="input.fuzzy.g.nasal.hint">an/ang、en/eng、in/ing：打 zang 也能出「张」，打 zhon 也能出「中」。</small></span>
+        <input type="checkbox" id="fuzzyBit16" class="toggle" data-fuzzy-bit="16">
+      </label>
+    </section>
+
+    <section class="card" id="sec-assoc" aria-labelledby="assocTitle">
+      <div class="section-heading"><h2 id="assocTitle" data-i18n="input.assoc.title">中文联想</h2><span class="eyebrow" data-i18n="input.assoc.badge">输入</span></div>
+      <label class="row switch-row" for="associationOn">
+        <span class="row-label"><span data-i18n="input.assoc.enable">选词后联想下一个词</span><small data-i18n="input.assoc.hint">上屏后在候选条给出高频接续词，点击可连续联想；只在全拼/双拼生效。</small></span>
+        <input type="checkbox" id="associationOn" class="toggle">
       </label>
     </section>
 
