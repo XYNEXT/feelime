@@ -54,6 +54,7 @@ SEGMENTS=(
     "9l editor-modes|device"
     "9m replay-geometry|device"
     "9n feel-degrade|device"
+    "9o input-prefs|device"
     "10/11 resource|device"
     "11/11 asr|asr"
 )
@@ -61,7 +62,7 @@ SEGMENTS=(
 # 敏感度 profiles：按改动面选段（评审 P0-3「mock 优先在批次执行层失守」——
 # 普通批次的设备验证应该是 ~30min 的 L3 冒烟，不是 ~2h 的全量）。
 PROFILES=(
-    "quick|5/11 base 7/11 extended 9n feel-degrade 9/11 panel 9j height-card"
+    "quick|5/11 base 7/11 extended 9n feel-degrade 9o input-prefs 9/11 panel 9j height-card"
     "keyboard-js|5/11 base 7/11 extended 9a caps-flick 9c keymap 9d pool"
     "native-engine|5/11 base 7/11 extended 9g backspace 9h delete"
     "kotlin-service|5/11 base 8/11 editor 9n feel-degrade 10/11 resource"
@@ -110,7 +111,10 @@ if [[ "$LOCK_HELD" != "1" ]]; then
     flock -n 9 || { echo "another gate/driver holds $GATE_LOCK - refusing to interleave" >&2; exit 3; }
     exec 9>&-
     # bash "$0" 中转：脚本未必带可执行位（`bash run-all.sh` 是标准用法）
-    exec flock -n "$GATE_LOCK" bash "$0" --gate-lock-held "${ORIG_ARGS[@]}"
+    # --close：锁 fd 只留在 flock 父进程手里。不带它，gate 派生的一切
+    # 后代（含 FEELIME_EMU_RESTART_CMD 重启出的模拟器）都会继承 fd，
+    # gate 退出后锁悬在活体进程上，下一次 gate 被拒之门外（2026-09-12）。
+    exec flock --close -n "$GATE_LOCK" bash "$0" --gate-lock-held "${ORIG_ARGS[@]}"
 fi
 
 selected_names=()
@@ -295,6 +299,14 @@ reset_device() {
 # 各套件自行 seed 自己需要的状态；跨套件依赖即污染（候选池套件注释里的
 # 假回归就是这类）。
 sweep_device() {
+    # SIGKILL 前先优雅收起 IME：WebView 靠 destroy 才提交 localStorage，
+    # 硬杀留 torn tail 会把 leveldb 恢复截断点之后的写入永久判丢失
+    # （2026-09-12 9m replay-geometry 假失败实录）。收不起来就按原样硬杀。
+    if adb -s "$FEELIME_ADB_SERIAL" shell dumpsys input_method 2>/dev/null |
+        grep -q "mInputShown=true"; then
+        adb -s "$FEELIME_ADB_SERIAL" shell input keyevent KEYCODE_BACK >/dev/null 2>&1 || true
+        sleep 1
+    fi
     adb -s "$FEELIME_ADB_SERIAL" shell am force-stop com.feelime.ime >/dev/null 2>&1 || true
     adb -s "$FEELIME_ADB_SERIAL" shell \
         "run-as com.feelime.ime sh -c 'rm -f shared_prefs/*.xml'" \
@@ -451,6 +463,7 @@ for entry in "${SEGMENTS[@]}"; do
                 "9l editor-modes") run_suite "$label" python3 "$HERE/device_editor_modes_verify.py" ;;
                 "9m replay-geometry") run_suite "$label" python3 "$HERE/device_replay_geometry_verify.py" ;;
                 "9n feel-degrade") run_suite "$label" python3 "$HERE/device_feel_degrade_verify.py" ;;
+                "9o input-prefs") run_suite "$label" python3 "$HERE/device_input_prefs_verify.py" ;;
                 "10/11 resource") run_suite "$label" python3 "$HERE/device_resource_verify.py" --apk "$FEELIME_VERIFY_APK" ;;
                 *) echo "unknown device segment: $label" >&2; exit 2 ;;
             esac

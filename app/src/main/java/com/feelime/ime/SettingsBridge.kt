@@ -40,6 +40,7 @@ const val ACTION_USERDATA_RESTORED = "com.feelime.ime.USERDATA_RESTORED"
 /** 双拼方案切换广播：设置页发，IME 收（当前是双拼会话时按新 schema
  * 重建会话，并重推 hello 让键盘换解析表/sep 键，double-pinyin.md §2）。 */
 const val ACTION_DP_SCHEME_CHANGED = "com.feelime.ime.DP_SCHEME_CHANGED"
+const val ACTION_FUZZY_PINYIN_CHANGED = "com.feelime.ime.FUZZY_PINYIN_CHANGED"
 
 /** 设置页改动键盘侧偏好（底部留白/手感参数）后通知 IME 重推 hello。 */
 const val ACTION_KEYBOARD_PREFS_CHANGED = "com.feelime.ime.KEYBOARD_PREFS_CHANGED"
@@ -53,6 +54,7 @@ const val PREF_FEEL_SCRUB_SPEED = "feel_scrub_speed"
 const val PREF_FEEL_HOLD_MS = "feel_hold_ms"
 val FEEL_HOLD_STEPS = intArrayOf(200, 300, 350, 450, 600)
 const val PREF_FEEL_POPUP_SNAP = "feel_popup_snap"
+const val PREF_CANDIDATE_FONT = "candidate_font"
 
 /** 键盘侧偏好读取（非法持久值回落默认）；设置页 state 与 IME hello 共用。 */
 fun readBottomPadDp(context: Context): Int =
@@ -78,6 +80,13 @@ fun readFeelPopupSnap(context: Context): Int =
         .getInt(PREF_FEEL_POPUP_SNAP, 1)
         .takeIf { it in 0..2 }
         ?: 1
+
+/** 候选字号档位：0=正常 1=大 2=更大（issue #2）。 */
+fun readCandidateFont(context: Context): Int =
+    context.getSharedPreferences(KEYBOARD_PREFS_FILE, Context.MODE_PRIVATE)
+        .getInt(PREF_CANDIDATE_FONT, 0)
+        .takeIf { it in 0..2 }
+        ?: 0
 
 /** The full-settings WebView bridge (design §6.2).
  *
@@ -291,10 +300,12 @@ class SettingsBridge(
                 .put("isDefault", hostIsDefaultIme()))
             .put("mic", JSONObject().put("granted", micGranted()))
             .put("dpScheme", com.feelime.ime.engine.DoublePinyinScheme.resolve(context))
+            .put("fuzzyPinyin", com.feelime.ime.engine.FuzzyPinyin.on(context))
             .put("bottomPad", readBottomPadDp(context))
             .put("scrubSpeed", readFeelScrubSpeed(context))
             .put("holdMs", readFeelHoldMs(context))
             .put("popupSnap", readFeelPopupSnap(context))
+            .put("candidateFont", readCandidateFont(context))
             .put("appVersion", BuildConfig.VERSION_NAME)
             .put("keyboardVersion", keyboardVersion())
             .put("device", JSONObject()
@@ -614,6 +625,16 @@ class SettingsBridge(
         pushState()
     }
 
+    /** 全拼模糊音开关（issue #2）：切换预编译的 luna_pinyin_fuzzy schema。 */
+    @JavascriptInterface
+    fun setFuzzyPinyin(on: Boolean, token: String) = guarded(token) {
+        com.feelime.ime.engine.FuzzyPinyin.set(context, on)
+        context.sendBroadcast(
+            Intent(ACTION_FUZZY_PINYIN_CHANGED).setPackage(context.packageName),
+        )
+        pushState()
+    }
+
     /** 底部留白（mode-fallback §3）：档位离散，非法值报错不落盘。写完
      *  广播让 IME 重推 hello，运行中的键盘即时采用新 pad。 */
     @JavascriptInterface
@@ -630,6 +651,27 @@ class SettingsBridge(
         }
         context.getSharedPreferences(KEYBOARD_PREFS_FILE, Context.MODE_PRIVATE)
             .edit().putInt(PREF_BOTTOM_PAD_DP, dp).apply()
+        context.sendBroadcast(
+            Intent(ACTION_KEYBOARD_PREFS_CHANGED).setPackage(context.packageName),
+        )
+        pushState()
+    }
+
+    /** 候选字号档位（issue #2）：0=正常 1=大 2=更大。 */
+    @JavascriptInterface
+    fun setCandidateFont(size: Int, token: String) = guarded(token) {
+        if (size !in 0..2) {
+            pushEvent(
+                JSONObject()
+                    .put("type", "candidateFontError")
+                    .put("code", "BAD_CANDIDATE_FONT")
+                    .put("message", t(context, "候选字号选项无效", "Invalid candidate font option")),
+            )
+            pushState()
+            return@guarded
+        }
+        context.getSharedPreferences(KEYBOARD_PREFS_FILE, Context.MODE_PRIVATE)
+            .edit().putInt(PREF_CANDIDATE_FONT, size).apply()
         context.sendBroadcast(
             Intent(ACTION_KEYBOARD_PREFS_CHANGED).setPackage(context.packageName),
         )

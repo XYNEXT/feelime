@@ -58,6 +58,10 @@ const I18N = {
         "page.update": "键盘热更新",
         "page.about": "关于",
         "page.test": "输入测试",
+        "input.fuzzy.title": "全拼模糊音",
+        "input.fuzzy.badge": "输入",
+        "input.fuzzy.enable": "启用模糊音",
+        "input.fuzzy.hint": "z/zh、c/ch、s/sh、n/l 和前后鼻音（an/ang 等）混用时也能命中；只在全拼模式生效。",
         "input.double.title": "双拼方案",
         "input.double.badge": "输入",
         "input.double.scheme": "方案",
@@ -219,6 +223,8 @@ const I18N = {
         "input.feel.badge": "微调",
         "input.feel.pad": "底部留白",
         "input.feel.padHint": "键盘下方的空白高度，0 保持贴底（终端场景）。",
+        "input.feel.candFont": "候选字号",
+        "input.feel.candFontHint": "候选词文字的大小，不改变键盘行高。",
         "input.feel.hold": "长按触发时长",
         "input.feel.holdHint": "长按弹出选字、锁定大写、打开模式菜单的等待时间。",
         "input.feel.scrub": "光标移动速度",
@@ -325,6 +331,10 @@ const I18N = {
         "page.update": "Keyboard updates",
         "page.about": "About",
         "page.test": "Input test",
+        "input.fuzzy.title": "Full-pinyin fuzzy",
+        "input.fuzzy.badge": "Input",
+        "input.fuzzy.enable": "Enable fuzzy pinyin",
+        "input.fuzzy.hint": "Matches despite z/zh, c/ch, s/sh, n/l and front/back nasal (an/ang etc.) confusions; applies to full-pinyin mode only.",
         "input.double.title": "Double-pinyin scheme",
         "input.double.badge": "Input",
         "input.double.scheme": "Scheme",
@@ -486,6 +496,8 @@ const I18N = {
         "input.feel.badge": "Tuning",
         "input.feel.pad": "Bottom padding",
         "input.feel.padHint": "Blank strip under the keys; 0 keeps the keyboard flush with the screen (terminal use).",
+        "input.feel.candFont": "Candidate text size",
+        "input.feel.candFontHint": "Size of the candidate words; keyboard row height is unchanged.",
         "input.feel.hold": "Long-press trigger",
         "input.feel.holdHint": "How long a press waits before popup selection, caps lock, or the mode menu opens.",
         "input.feel.scrub": "Cursor speed",
@@ -725,6 +737,7 @@ window.FeelimeSettings = {
                 setNote("dpNote", eventText(event, "error.INVALID_DP_SCHEME"));
                 break;
             case "bottomPadError":
+            case "candidateFontError":
             case "feelOptionsError":
                 setNote("feelNote", eventText(event, "error.INVALID_FEEL_OPTION"));
                 break;
@@ -792,6 +805,7 @@ function renderFeel(state) {
         if (allowed.includes(text) && document.activeElement !== node) node.value = text;
     };
     setSelect("bottomPad", state.bottomPad ?? 0, ["0", "12", "24", "36", "48"]);
+    setSelect("candidateFont", state.candidateFont ?? 0, ["0", "1", "2"]);
     setSelect("holdMs", state.holdMs ?? 350, ["200", "300", "350", "450", "600"]);
     setSelect("scrubSpeed", state.scrubSpeed ?? 3, ["1", "2", "3", "4", "5"]);
     setSelect("popupSnap", state.popupSnap ?? 1, ["0", "1", "2"]);
@@ -804,6 +818,7 @@ function renderDoublePinyin(state) {
     const scheme = ["ziranma", "flypy", "sogou"].includes(state.dpScheme)
         ? state.dpScheme : "ziranma";
     if (document.activeElement !== select) select.value = scheme;
+    if (document.activeElement !== $("fuzzyPinyin")) $("fuzzyPinyin").checked = !!state.fuzzyPinyin;
     $("dpNote").textContent = t(`input.double.note.${select.value}`);
     renderDpKeymap(select.value);
 }
@@ -1215,6 +1230,7 @@ function submitFeelOptions() {
     );
 }
 $("bottomPad").addEventListener("change", event => call("setBottomPadding", parseInt(event.target.value, 10)));
+$("candidateFont").addEventListener("change", event => call("setCandidateFont", parseInt(event.target.value, 10)));
 $("holdMs").addEventListener("change", submitFeelOptions);
 $("scrubSpeed").addEventListener("change", submitFeelOptions);
 $("popupSnap").addEventListener("change", submitFeelOptions);
@@ -1271,6 +1287,7 @@ $("btnCustomTemplate").addEventListener("click", () => {
 
 $("btnCheckUpdate").addEventListener("click", () => call("checkUpdate", $("updateSource").value));
 $("autoUpdateCheck").addEventListener("change", event => call("setAutoUpdateCheck", event.target.checked));
+$("fuzzyPinyin").addEventListener("change", event => call("setFuzzyPinyin", event.target.checked));
 $("btnInstallZip").addEventListener("click", () => call("installZip", $("updateUrl").value));
 $("btnImportZip").addEventListener("click", () => call("openKeyboardDocument"));
 $("btnRestore").addEventListener("click", () => call("restoreBuiltInKeyboard"));

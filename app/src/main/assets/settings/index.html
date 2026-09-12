@@ -105,6 +105,14 @@
     <h2 class="page-title" data-i18n="page.input">键盘与输入</h2>
   </header>
   <main>
+    <section class="card" id="sec-fuzzy" aria-labelledby="fuzzyTitle">
+      <div class="section-heading"><h2 id="fuzzyTitle" data-i18n="input.fuzzy.title">全拼模糊音</h2><span class="eyebrow" data-i18n="input.fuzzy.badge">输入</span></div>
+      <label class="row switch-row" for="fuzzyPinyin">
+        <span class="row-label"><span data-i18n="input.fuzzy.enable">启用模糊音</span><small data-i18n="input.fuzzy.hint">z/zh、c/ch、s/sh、n/l 和前后鼻音（an/ang 等）混用时也能命中；只在全拼模式生效。</small></span>
+        <input type="checkbox" id="fuzzyPinyin" class="toggle">
+      </label>
+    </section>
+
     <section class="card" id="sec-dp" aria-labelledby="dpTitle">
       <div class="section-heading"><h2 id="dpTitle" data-i18n="input.double.title">双拼方案</h2><span class="eyebrow" data-i18n="input.double.badge">输入</span></div>
       <div class="row language-row">
@@ -148,6 +156,17 @@
           <option value="350">350 ms</option>
           <option value="450">450 ms</option>
           <option value="600">600 ms</option>
+        </select>
+      </div>
+      <div class="row language-row">
+        <span class="row-label">
+          <span data-i18n="input.feel.candFont">候选字号</span>
+          <small data-i18n="input.feel.candFontHint">候选词文字的大小，不改变键盘行高。</small>
+        </span>
+        <select id="candidateFont" class="select" aria-label="候选字号" data-i18n-aria="input.feel.candFont">
+          <option value="0">100%</option>
+          <option value="1">120%</option>
+          <option value="2">135%</option>
         </select>
       </div>
       <div class="row language-row">

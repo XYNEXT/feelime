@@ -260,9 +260,14 @@ def set_feel_defaults():
     again after it, so the device is always left at defaults."""
     d.ensure_keyboard_down()
     if not (shared.launch_settings() and open_input_page()):
+        print("feel-defaults: settings/input page did not open", flush=True)
         return False
-    pick_select_option("#holdMs", "350 ms")
-    pick_select_option("#scrubSpeed", "3x")
+    if not pick_select_option("#holdMs", "350 ms"):
+        print("feel-defaults: holdMs 350ms pick failed", flush=True)
+        return False
+    if not pick_select_option("#scrubSpeed", "3x"):
+        print("feel-defaults: scrubSpeed 3x pick failed", flush=True)
+        return False
     return bool(shared.wait_until(
         lambda: re.search(r'name="feel_hold_ms" value="350"', prefs_body())
         and not re.search(r'name="feel_hold_ms" value="600"', prefs_body()),

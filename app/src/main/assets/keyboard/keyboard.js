@@ -800,6 +800,8 @@
             // Bottom blank strip (CSS px) below the rows - native window
             // includes it; applyHeight/H budgets exclude it (mode-fallback §3).
             this.bottomPad = 0;
+            // Candidate text scale (issue #2), pre-hello default.
+            this.candidateFont = 0;
             // Degraded-engine state from events/hello (mode-fallback §2).
             // Non-null while a Direct fallback serves for a failed mode.
             this.degrade = null;
@@ -2964,6 +2966,13 @@
             return Math.max(0, Number(this.bottomPad) || 0);
         }
 
+        // 候选字号（issue #2）：body data 属性驱动 CSS 变量，行高预算不动。
+        applyCandidateFont() {
+            const level = Number(this.candidateFont) || 0;
+            document.body.dataset.candFont =
+                level === 1 ? 'large' : level === 2 ? 'xlarge' : 'normal';
+        }
+
         applyHeight() {
             const view = document.getElementById('softKeyboard');
             const total = (view && view.clientHeight) || window.innerHeight;
@@ -4990,6 +4999,12 @@
             // CSS px in this WebView; hello is authoritative over the old
             // localStorage scrub key (which stays as the pre-hello fallback).
             this.bottomPad = Math.max(0, Number(payload.bottomPad) || 0);
+            // Candidate text scale (issue #2): 0=normal 1=large 2=xlarge,
+            // applied as a CSS var multiplier (row budget untouched).
+            if (Number(payload.candidateFont) in { 0: 1, 1: 1, 2: 1 }) {
+                this.candidateFont = Number(payload.candidateFont);
+            }
+            this.applyCandidateFont();
             if (Number(payload.holdMs) in { 200: 1, 300: 1, 350: 1, 450: 1, 600: 1 }) {
                 this.holdMs = Number(payload.holdMs);
             }

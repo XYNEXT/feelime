@@ -2305,6 +2305,18 @@ test('bottom pad rides hello into the CSS budget and is excluded from content', 
     equal(before - after, 6, 'row budget excludes exactly the pad');
 });
 
+test('candidate font scale rides hello into the body dataset', {since: '3.30.0'}, () => {
+    const world = fresh();
+    world.hello({});
+    equal(world.document.body.dataset.candFont, 'normal', 'default normal');
+    world.hello({candidateFont: 1});
+    equal(world.document.body.dataset.candFont, 'large', 'large tier applied');
+    world.hello({candidateFont: 2});
+    equal(world.document.body.dataset.candFont, 'xlarge', 'xlarge tier applied');
+    world.hello({candidateFont: 9});
+    equal(world.document.body.dataset.candFont, 'xlarge', 'off-whitelist ignored (keeps last)');
+});
+
 test('quick-pair editor: tick 双拼 relabels the toggle and flips the pair', () => {
     const world = fresh();
     world.tap(world.$('setupButton'));

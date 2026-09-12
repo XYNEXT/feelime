@@ -1,5 +1,4 @@
 {
-  "formatVersion": 1,
   "files": {
     "hunspell/fr.aff": {
       "bytes": 199870,
@@ -77,6 +76,18 @@
       "bytes": 12263660,
       "sha256": "7213f6acfe24af622f82eb50fa84578d807fcb9378c6288368afa6f7eebb212b"
     },
+    "rime/luna_pinyin_fuzzy.prism.bin": {
+      "bytes": 43888,
+      "sha256": "158ba5c18bf07aa0c500e2f7867029748921c0c94399ccbb424d6fc03c70419d"
+    },
+    "rime/luna_pinyin_fuzzy.prism.txt": {
+      "bytes": 30995,
+      "sha256": "13f7e9b04e122bf6c5a3c9a0d77642af827d002f79fa09176290558efdd48e30"
+    },
+    "rime/luna_pinyin_fuzzy.schema.yaml": {
+      "bytes": 44212,
+      "sha256": "21dcfea18d8316ad1d96006138cc57f0e68af80cb369bdef9d17492758d1e448"
+    },
     "rime/opencc/TSCharacters.txt": {
       "bytes": 104512,
       "sha256": "a0ded7c0aefe350bd96bb0995a604623ee2cc98fe7e3870c886b73fa3184bed6"
@@ -101,5 +112,6 @@
       "bytes": 39293,
       "sha256": "7d4f5c1e0beb8d7f9ff6c9ca70c29999f2ea9a33f6025c4d9665eb79bd97d2ab"
     }
-  }
+  },
+  "formatVersion": 1
 }

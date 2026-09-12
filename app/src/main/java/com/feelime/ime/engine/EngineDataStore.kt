@@ -44,6 +44,12 @@ object EngineDataStore {
         }
     }
 
+    /** 模糊音变体 schema 是否已随包部署（EngineFactory 回落判据）。 */
+    fun isFuzzySchemaReady(context: Context): Boolean {
+        val root = readyRoot(context) ?: return false
+        return File(root, "rime/${FuzzyPinyin.SCHEMA_ID}.schema.yaml").isFile
+    }
+
     /**
      * Full hash verification for one engine group ("rime"/"hunspell"/"mozc").
      * Returns the ready data root, or null when the group is not deployed;

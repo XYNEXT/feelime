@@ -195,7 +195,7 @@ body.landscape #candidateBar { height: 40px; margin-top: 14px; margin-bottom: 4p
 body.landscape #candidateBar .tool,
 body.landscape #settingsPageBar .tool { width: 30px; height: 30px; }
 body.landscape #candidates { min-height: 40px; }
-body.landscape .candidate { height: 40px; line-height: 40px; font-size: 16px; }
+body.landscape .candidate { height: 40px; line-height: 40px; font-size: calc(16px * var(--cand-font-scale, 1)); }
 body.landscape .kb-row { gap: 4px; margin-bottom: 3px; }
 body.landscape #symCatBar { margin-top: 3px; gap: 4px; }
 
@@ -325,9 +325,14 @@ body.settings-page .compose-tool { display: none; }
     border-radius: 8px;
     background: transparent;
     color: var(--text);
-    font-size: 17px;
+    font-size: calc(17px * var(--cand-font-scale, 1));
     line-height: 34px;
 }
+
+/* 候选字号档位（issue #2）：hello 带来的 body[data-cand-font] 只缩放
+ * 文字，不动 34px 行高预算（扩到 2 档以上会挤压行高，另行设计）。 */
+body[data-cand-font="large"] { --cand-font-scale: 1.2; }
+body[data-cand-font="xlarge"] { --cand-font-scale: 1.35; }
 .candidate:active, .candidate.active-touch { background: var(--pressed); }
 /* First candidate: accent text on a pill (both themes, reference behaviour). */
 .candidate.first { color: var(--accent-text); background: var(--pill); }

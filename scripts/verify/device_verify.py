@@ -251,10 +251,16 @@ def devtools_eval(expression):
         try:
             sock.sendall(bytes(frame))
             buffer = b""
+            # recv 的 10s 超时只防「沉默的半开连接」；对端若持续吐事件流
+            # （永不沉默），这里必须另设硬截止，否则等 id 匹配响应的循环
+            # 会把套件吊死（2026-09-12 input-prefs 首跑实录）。
+            deadline = _time.monotonic() + 15.0
             while True:
                 chunk = sock.recv(65536)
                 if not chunk:
                     raise OSError("socket closed")
+                if _time.monotonic() > deadline:
+                    raise OSError("eval deadline exceeded (event storm?)")
                 buffer += chunk
                 while len(buffer) >= 2:
                     opcode = buffer[0] & 0x0F
@@ -503,7 +509,14 @@ def ui_dump():
     )
     for _ in range(3):
         shell("rm -f /sdcard/fv-ui.xml")
-        shell(dump_command + " >/dev/null 2>&1")
+        try:
+            # 病态 SystemUI（ANR/僵尸页）能让 dump 卡满任意时长：显式 20s
+            # 边界 + 捕获重试，别让 30s 的 TimeoutExpired 在上层被吞成一圈
+            # 无感知的爬行（2026-09-12 input-prefs 首跑实录）。
+            shell(dump_command + " >/dev/null 2>&1", timeout=20)
+        except subprocess.TimeoutExpired:
+            time.sleep(1.0)
+            continue
         out = shell("cat /sdcard/fv-ui.xml 2>/dev/null")
         if out.lstrip().startswith("<?xml") and "EditText" in out:
             return out
@@ -1162,6 +1175,17 @@ def app_hard_reset():
     shell("input keyevent KEYCODE_WAKEUP")
     shell("wm dismiss-keyguard")
     shell("input keyevent 82")
+    # SIGKILL 的 WebView 永远不提交 localStorage：leveldb log 里留 torn
+    # tail 后，恢复截断点之后的追加永久不可见（2026-09-12 9m 全程实录，
+    # 写进文件的 key 重启后读不回来）。先优雅收起 IME 让 WebView 走
+    # destroy/flush，再 force-stop；收不起来就按原样硬杀（尽力语义）。
+    if input_shown():
+        shell("input keyevent KEYCODE_BACK")
+        for _ in range(4):
+            if not input_shown():
+                break
+            time.sleep(0.5)
+    time.sleep(0.8)
     shell("am force-stop " + PKG)
     time.sleep(1.5)
     shell(f"ime set {PKG}/.FeelimeService")

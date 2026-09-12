@@ -80,6 +80,8 @@ class MockSettingsNative {
     setAutoUpdateCheck(...a) { this._rec('setAutoUpdateCheck', a); }
     setBottomPadding(...a) { this._rec('setBottomPadding', a); }
     setFeelOptions(...a) { this._rec('setFeelOptions', a); }
+    setCandidateFont(...a) { this._rec('setCandidateFont', a); }
+    setFuzzyPinyin(...a) { this._rec('setFuzzyPinyin', a); }
     // /R8: page reporting (BACK returns home first) + about-page
     // one-tap copy.
     reportPage(...a) { this._rec('reportPage', a); }
@@ -688,11 +690,12 @@ test('double-pinyin key map renders the active scheme chart from dp-data.js', ()
 
 test('feel card renders state values and commits each control with the token', () => {
     const world = new SettingsWorld();
-    world.push({ ...BASE_STATE, bottomPad: 24, holdMs: 450, scrubSpeed: 2, popupSnap: 2 });
+    world.push({ ...BASE_STATE, bottomPad: 24, holdMs: 450, scrubSpeed: 2, popupSnap: 2, candidateFont: 2 });
     equal(world.$('bottomPad').value, '24', 'bottom pad from state');
     equal(world.$('holdMs').value, '450', 'hold ms from state');
     equal(world.$('scrubSpeed').value, '2', 'scrub speed from state');
     equal(world.$('popupSnap').value, '2', 'popup snap from state');
+    equal(world.$('candidateFont').value, '2', 'candidate font from state');
 
     const fire = (id) => {
         const select = world.$(id);
@@ -707,6 +710,8 @@ test('feel card renders state values and commits each control with the token', (
     equal(world.lastCall('setFeelOptions').args, [2, 450, 2, world.token], 'unchanged values still complete');
     fire('bottomPad');
     equal(world.lastCall('setBottomPadding').args, [24, world.token], 'bottom pad + token');
+    fire('candidateFont');
+    equal(world.lastCall('setCandidateFont').args, [2, world.token], 'candidate font + token');
 });
 
 test('feel card defaults when state omits the values and never adopts off-whitelist ones', () => {
@@ -716,12 +721,29 @@ test('feel card defaults when state omits the values and never adopts off-whitel
     equal(world.$('holdMs').value, '350', 'hold default 350');
     equal(world.$('scrubSpeed').value, '3', 'scrub default 3x');
     equal(world.$('popupSnap').value, '1', 'snap default standard');
+    equal(world.$('candidateFont').value, '0', 'candidate font default 100%');
     // Native validates too, but the page must not blindly mirror junk.
-    world.push({ ...BASE_STATE, bottomPad: 7, holdMs: 1234, scrubSpeed: 99, popupSnap: 9 });
+    world.push({ ...BASE_STATE, bottomPad: 7, holdMs: 1234, scrubSpeed: 99, popupSnap: 9, candidateFont: 5 });
     equal(world.$('bottomPad').value, '0', 'off-list pad ignored');
     equal(world.$('holdMs').value, '350', 'off-list hold ignored');
     equal(world.$('scrubSpeed').value, '3', 'off-list scrub ignored');
     equal(world.$('popupSnap').value, '1', 'off-list snap ignored');
+    equal(world.$('candidateFont').value, '0', 'off-list candidate font ignored');
+});
+
+test('fuzzy-pinyin toggle reflects state and commits with the token', () => {
+    const world = new SettingsWorld();
+    world.push({ ...BASE_STATE, fuzzyPinyin: true });
+    equal(world.$('fuzzyPinyin').checked, true, 'fuzzy on from state');
+    world.push({ ...BASE_STATE });
+    equal(world.$('fuzzyPinyin').checked, false, 'fuzzy default off');
+
+    const box = world.$('fuzzyPinyin');
+    const change = box.listeners.find(listener => listener.type === 'change');
+    assert(change, '#fuzzyPinyin has a change listener');
+    box.checked = true;
+    change.handler({ target: box });
+    equal(world.lastCall('setFuzzyPinyin').args, [true, world.token], 'fuzzy toggle + token');
 });
 
 test('bridge validation errors surface on the feel note', () => {
@@ -731,6 +753,8 @@ test('bridge validation errors surface on the feel note', () => {
     assert(world.$('feelNote').textContent.includes('手感参数无效'), 'zh feel error note');
     world.FeelimeSettings().onEvent({ type: 'bottomPadError', code: 'BAD_BOTTOM_PAD' });
     assert(world.$('feelNote').textContent.length > 0, 'bottom pad error also lands on the note');
+    world.FeelimeSettings().onEvent({ type: 'candidateFontError', code: 'BAD_CANDIDATE_FONT' });
+    assert(world.$('feelNote').textContent.length > 0, 'candidate font error lands on the note');
 });
 
 // ---------------------------------------------------------------- runner

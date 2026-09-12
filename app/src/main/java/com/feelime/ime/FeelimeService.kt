@@ -179,6 +179,20 @@ class FeelimeService : InputMethodService(), AsrEngine.Listener {
         }
     }
 
+    /** 设置页切换全拼模糊音（issue #2）：当前就是全拼会话时立即按新
+     *  schema 重建；顺带重推 hello。非全拼会话下次建会话自然取到。 */
+    private val fuzzyPinyinReceiver = object : android.content.BroadcastReceiver() {
+        override fun onReceive(context: android.content.Context?, intent: android.content.Intent?) {
+            if (intent?.action != ACTION_FUZZY_PINYIN_CHANGED) return
+            onMain {
+                if (coordinator.currentMode == com.feelime.ime.engine.InputMode.PINYIN) {
+                    coordinator.recreateEngineSession { }
+                }
+                pushBridgeHello()
+            }
+        }
+    }
+
     /** 设置页改动键盘侧偏好（底部留白/手感参数，mode-fallback §3/§4）：
      *  值已由设置页落盘，这里重推 hello（运行中的键盘即时采用），并让
      *  FixedHeightInputView 按新留白重新测量——否则键盘可见时 JS 立刻把
@@ -297,6 +311,11 @@ class FeelimeService : InputMethodService(), AsrEngine.Listener {
         registerReceiver(
             dpSchemeReceiver,
             android.content.IntentFilter(ACTION_DP_SCHEME_CHANGED),
+            androidx.core.content.ContextCompat.RECEIVER_NOT_EXPORTED,
+        )
+        registerReceiver(
+            fuzzyPinyinReceiver,
+            android.content.IntentFilter(ACTION_FUZZY_PINYIN_CHANGED),
             androidx.core.content.ContextCompat.RECEIVER_NOT_EXPORTED,
         )
         registerReceiver(
@@ -681,6 +700,7 @@ class FeelimeService : InputMethodService(), AsrEngine.Listener {
         unregisterReceiver(updateReceiver)
         unregisterReceiver(userdataReceiver)
         unregisterReceiver(dpSchemeReceiver)
+        unregisterReceiver(fuzzyPinyinReceiver)
         unregisterReceiver(keyboardPrefsReceiver)
         unregisterReceiver(voicePermissionReceiver)
         UiLanguage.preferences(this)
@@ -1284,6 +1304,7 @@ class FeelimeService : InputMethodService(), AsrEngine.Listener {
             .put("scrubSpeed", feelScrubSpeed())
             .put("holdMs", feelHoldMs())
             .put("popupSnap", feelPopupSnap())
+            .put("candidateFont", candidateFont())
             .put(
                 "engineDataReady",
                 JSONObject().apply {
@@ -2253,6 +2274,9 @@ class FeelimeService : InputMethodService(), AsrEngine.Listener {
     fun feelHoldMs(): Int = readFeelHoldMs(this)
 
     fun feelPopupSnap(): Int = readFeelPopupSnap(this)
+
+    /** 候选字号档位（issue #2）：0=正常 1=大 2=更大。 */
+    private fun candidateFont(): Int = readCandidateFont(this)
 
     /** Current system area overlapped by the keyboard. WindowMetrics avoids
      * decor insets already consumed by InputMethodService; layout callbacks
