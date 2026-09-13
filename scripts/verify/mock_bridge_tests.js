@@ -4377,11 +4377,17 @@ test('assoc click routes through the real bridge (FeelimeNative)', {since: '3.33
     const assocButtons = () => [...world.$('candidates').children]
         .filter(b => (b.className || '').split(/\s+/).includes('assoc'));
     equal(assocButtons().length, 3, 'assoc words render while the pool is empty');
+    // 联想 chrome（用户定稿）：工具栏快捷按钮全部让位（含 mic）仅留 ×。
+    assert(world.$('setupButton').hidden, 'assoc hides the toolbar');
+    assert(world.$('mic').hidden, 'assoc hides mic');
+    assert(!world.$('composeClear').hidden, 'assoc shows ×');
     assocButtons()[0].click();
     const call = world.native.of('commitAssoc')[0];
     assert(call, 'assoc click reaches the native bridge');
     equal(call.args[0], '的', 'commits the clicked word');
     equal(assocButtons().length, 0, 'assoc bar clears after the click');
+    assert(!world.$('setupButton').hidden, 'toolbar restored after assoc pick');
+    assert(!world.$('mic').hidden, 'mic restored after assoc pick');
 });
 
 test('mode switch clears assoc words', {since: '3.33.0'}, () => {
@@ -4652,42 +4658,49 @@ test('t9 function keys: confirm/重输/1/123/emoji', {since: '3.35.0'}, () => {
     assert(world.document.querySelector('.emoji-area'), 'emoji view is showing');
 });
 
-test('t9 1-key chrome: toolbar yields, × restores, up-flick commits 1', {since: '3.35.0'}, () => {
+test('t9 1-key chrome: tap yields toolbar, pick/× restores, up-flick commits 1', {since: '3.36.0'}, () => {
     const world = fresh({ mode: 't9' });
     world.engineState({ phase: 'READY', mode: 't9', revision: 1, composing: '', rawInput: '',
         candidates: [], hasNextPage: false });
     const one = world.key('1');
-    // 长按 1：chrome 态——工具栏图标全部隐藏，仅最右 × 保留用于取消。
-    world.touchDown(one);
-    world.clock.advance(360);
-    // 松手：longFired 置位后 touchend 不补发 click，chrome 态必须保住
-    // （codex round-4 P2-2）。
-    world.touchUp(one);
-    assert(world.$('setupButton').hidden, 'setup tool hidden in chrome mode');
-    assert(world.$('clipboardButton').hidden, 'clipboard tool hidden');
+    // 单击 1（用户定稿，不再需要长按）：符号行 + chrome——工具栏快捷
+    // 按钮全部让位（含 mic），仅保留最右 ×。
+    world.tap(one);
+    assert(world.$('setupButton').hidden, 'setup tool hidden');
+    assert(world.$('mic').hidden, 'mic hidden too');
     assert(!world.$('composeClear').hidden, '× visible to cancel the bar');
-    // 联想事件让符号行让位时工具栏必须复原（onAssoc 不经过
-    // updateComposing，codex round-4 P2-3）。
-    world.assoc(['的', '是']);
-    assert(!world.$('setupButton').hidden, 'assoc yield restores the toolbar');
-    assert(world.$('composeClear').hidden, 'assoc yield hides ×');
-    // 重新进 chrome 态再验 × 取消路径（先清掉联想词，让位分支不再触发）。
-    world.assoc([]);
-    world.touchDown(one);
-    world.clock.advance(360);
-    world.touchUp(one);
-    assert(world.$('setupButton').hidden, 'chrome re-enters after assoc yield');
-    // 空闲引擎事件/原生状态刷新不得翻回工具栏（× 是唯一取消入口，
-    // codex round-2 P2-4）。
+    // 点选符号 = 上屏 + 关符号行 + 工具栏复原（用户定稿）。
+    const sym = [...world.document.querySelectorAll('#candidates .candidate')][0];
+    world.tap(sym);
+    const commits = world.native.of('commitText');
+    equal(commits[commits.length - 1].args[0], '@', 'symbol goes straight to the editor');
+    assert(!world.$('setupButton').hidden, 'toolbar restored after pick');
+    assert(!world.$('mic').hidden, 'mic restored after pick');
+    assert(world.$('composeClear').hidden, '× hidden after pick');
+    equal([...world.document.querySelectorAll('#candidates .candidate')].length, 0,
+        'symbol row cleared after pick');
+    // 重新打开；空闲引擎事件/原生状态刷新不得翻回工具栏（× 是唯一
+    // 取消入口，codex round-2 P2-4）。
+    world.tap(one);
     world.engineState({ phase: 'READY', mode: 't9', revision: 2, composing: '', rawInput: '',
         candidates: [], hasNextPage: false });
     assert(world.$('setupButton').hidden, 'idle refresh holds the chrome');
     assert(!world.$('composeClear').hidden, '× survives idle refresh');
     // × 单击 = 只关符号行并恢复工具栏，绝不清组合。
     world.tap(world.$('composeClear'));
-    assert(!world.$('setupButton').hidden, 'toolbar restored');
+    assert(!world.$('setupButton').hidden, 'toolbar restored by ×');
     assert(world.$('composeClear').hidden, '× hidden again');
     equal(world.native.of('clearComposing').length, 0, '× must not clear the composition');
+    // 联想事件让符号行让位后进入联想 chrome：工具栏同样让位（含 mic）
+    // 仅留 ×；× 关联想并复原（用户定稿）。
+    world.tap(one);
+    world.assoc(['的', '是']);
+    assert(world.$('setupButton').hidden, 'assoc keeps the toolbar yielded');
+    assert(world.$('mic').hidden, 'assoc hides mic too');
+    assert(!world.$('composeClear').hidden, 'assoc shows ×');
+    world.tap(world.$('composeClear'));
+    assert(!world.$('setupButton').hidden, 'assoc × restores the toolbar');
+    equal(world.native.of('clearComposing').length, 0, 'assoc × must not clear the composition');
     // 上滑 1 = 字面数字 1（1 不在引擎 alphabet，sendSymbol 旁路上屏）。
     world.touchDown(one, 20, 20);
     world.move(one, 20, -30);

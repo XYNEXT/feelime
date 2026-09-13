@@ -361,7 +361,10 @@ android {
             }
         }
         release {
-            isMinifyEnabled = false
+            // R8 minify + 资源收缩（Play App optimization）：keep 规则只保
+            // 按名字/注解反射找代码的面（JNI 符号绑定、JS bridge、sherpa）。
+            isMinifyEnabled = true
+            isShrinkResources = true
             if (releaseSigningConfigured) {
                 signingConfig = signingConfigs.getByName("feelimeRelease")
             }

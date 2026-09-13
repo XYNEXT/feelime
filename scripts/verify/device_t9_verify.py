@@ -258,25 +258,38 @@ def main():
         record("t9: after ni pick pending 426 lists hao", False, "no ni cell")
     d.clear_field(kb)
 
-    # ===== 1 键：长按 chrome（工具栏让位 + × 取消）/ 上滑字面 1 =====
+    # ===== 1 键：单击 chrome（工具栏+mic 让位，仅留 ×）/ 点选还原 / 上滑字面 1 =====
     x1, y1 = geo["1"]
-    d.synth_touch("start", x1, y1)
-    time.sleep(0.65)
-    # 松手后再读：longFired 必须保住 chrome（touchend 补发 click 会把它
-    # 冲回普通符号行，codex round-4 P2-2）。
-    d.synth_touch("end", x1, y1)
-    time.sleep(0.4)
+    d.tap(x1, y1, wait=0.6)
     chrome = ev("""(() => ({
         setup: document.getElementById('setupButton').hidden,
-        clear: !document.getElementById('composeClear').hidden }))()""")
-    record("t9: 1-key long-press chrome hides toolbar + shows ×",
-           bool(chrome) and chrome.get("setup") is True and chrome.get("clear") is True,
+        mic: document.getElementById('mic').hidden,
+        clear: !document.getElementById('composeClear').hidden,
+        syms: document.querySelectorAll('#candidates .candidate').length }))()""")
+    record("t9: 1-key tap chrome yields toolbar+mic, shows symbols",
+           bool(chrome) and chrome.get("setup") is True and chrome.get("mic") is True
+           and chrome.get("clear") is True and (chrome.get("syms") or 0) > 0,
            f"chrome={chrome}")
+    # 点选首个符号：上屏 + 工具栏复原 + 符号行清空（用户定稿）。
+    sym_at = element_center('#candidates .candidate')
+    if sym_at:
+        d.tap(*css2phys(sym_at), wait=0.6)
+    after_pick = ev("""(() => ({
+        setup: !document.getElementById('setupButton').hidden,
+        clear: document.getElementById('composeClear').hidden,
+        syms: document.querySelectorAll('#candidates .candidate').length }))()""")
+    record("t9: symbol pick restores toolbar + clears bar",
+           bool(after_pick) and after_pick.get("setup") is True
+           and after_pick.get("clear") is True and after_pick.get("syms") == 0,
+           f"after={after_pick}")
+    # 再次打开后 × 取消路径。
+    d.tap(x1, y1, wait=0.6)
     x_at = element_center('#composeClear')
     if x_at:
         d.tap(*css2phys(x_at), wait=0.5)
     restored = ev("!document.getElementById('setupButton').hidden")
     record("t9: × restores the toolbar", restored is True, f"restored={restored}")
+    d.clear_field(kb)
     d.synth_swipe(x1, y1, x1, y1 - 160)
     time.sleep(0.6)
     field = (d.field_text_retry() or "").strip()

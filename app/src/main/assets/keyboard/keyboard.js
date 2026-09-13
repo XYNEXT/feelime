@@ -1061,9 +1061,15 @@
             // whole keyboard; inside, ˄ collapses (the
             // single chevron - aborting stays with the toolbar's ×).
             document.getElementById('composeClear').addEventListener('click', () => {
-                // T9 符号行（1 键长按）的 × = 取消本次符号选择，工具栏恢复。
+                // T9 符号行（1 键单击）的 × = 取消本次符号选择，工具栏恢复。
                 if (this.t9SymBar) {
                     this.t9CloseSymbolBar();
+                    return;
+                }
+                // 联想态的 × = 清掉联想词并恢复工具栏（没有引擎组合可清）。
+                if (this.assocWords.length && !this.composing) {
+                    this.assocWords = [];
+                    this.renderCandidates(this.lastEngineState || {});
                     return;
                 }
                 this.clearComposing();
@@ -1296,8 +1302,15 @@
         }
 
         renderLetters(layoutName) {
-            if (layoutName === 't9') { this.t9SymBar = false; return this.renderT9(); }
+            if (layoutName === 't9') {
+                this.t9SymBar = false;
+                // 换键面=离开符号行：工具栏让位必须解除，否则隐藏的快捷
+                // 按钮没有恢复入口（引擎事件只是兜底）。
+                if (!this.composing) this.setToolbarYield(this.assocWords.length > 0);
+                return this.renderT9();
+            }
             this.t9SymBar = false;
+            if (!this.composing) this.setToolbarYield(this.assocWords.length > 0);
             const layout = LAYOUTS[layoutName] || LAYOUTS.qwerty;
             // E: the folded landscape layout is REVERTED - user
             // report: the mixed bottom rows broke muscle memory and the
@@ -1378,12 +1391,11 @@
             };
             Object.keys(coords).forEach(digit => {
                 if (digit === '1') {
-                    // 1 键：主字形 @#. （西文/技术符号），点按在候选条展开。
+                    // 1 键：主字形 @#.（西文/技术符号）。单击=符号行并让位
+                    // 工具栏（× 取消/点选还原），无长按态（用户定稿）。
                     const one = document.createElement('button');
                     one.className = 'kb-key t9-key';
                     one.dataset.key = '1';
-                    // 长按 = 符号行 + 工具栏收起（× 取消）；点按 = 仅符号行。
-                    one.dataset.lp = 'popup';
                     one.innerHTML = '<span class="t9-sup">1</span><span class="t9-group">@#.</span>';
                     one.addEventListener('click', () => this.t9SymbolBar());
                     this.bindTouch(one);
@@ -1610,19 +1622,28 @@
         /** 1 键（点按/长按）：候选条展开西文/技术符号行（sendSymbol 直
          * 上屏）。长按（chrome=true）额外收起工具栏图标，仅保留最右的
          * × 供取消本次符号行——取消后工具栏原样恢复。 */
-        t9SymbolBar(chrome = false) {
-            if (this.composing) return;
+        /** 1 键符号行（用户定稿：单击即开）：候选栏展开西文/技术符号行，
+         * 工具栏快捷按钮全部让位（含 mic），仅保留最右 × 供取消。点选
+         * 符号或 × 都会关闭符号行并复原工具栏。语音进行中不开（mic 是
+         * 停止入口）。 */
+        t9SymbolBar() {
+            if (this.composing || this.voiceState !== 'idle') return;
             this.t9SymBar = true;
-            this.t9BarChrome = chrome;
-            const ids = ['setupButton', 'ctrlTool', 'imeSwitchButton',
-                'clipboardButton', 'favoritesButton'];
-            ids.forEach(id => {
+            this.t9BarChrome = true;
+            this.setToolbarYield(true);
+            this.renderT9SymbolBar();
+        }
+
+        /** 工具栏让位开关（T9 符号行与中文联想共用）：setup/控制/切换/
+         * 剪贴板/收藏/mic 全部隐藏，仅留 ×。关闭时全部复位。 */
+        setToolbarYield(active) {
+            ['setupButton', 'ctrlTool', 'imeSwitchButton',
+                'clipboardButton', 'favoritesButton', 'mic'].forEach(id => {
                 const el = document.getElementById(id);
-                if (el) el.hidden = chrome;
+                if (el) el.hidden = active;
             });
             const clear = document.getElementById('composeClear');
-            if (clear) clear.hidden = !chrome;
-            this.renderT9SymbolBar();
+            if (clear) clear.hidden = !active;
         }
 
         /** 撤掉符号行 chrome：工具栏图标复位、× 隐藏。联想等引擎事件
@@ -1633,13 +1654,7 @@
             this.t9SymBar = false;
             this.t9BarChrome = false;
             if (composing) return;
-            ['setupButton', 'ctrlTool', 'imeSwitchButton',
-                'clipboardButton', 'favoritesButton'].forEach(id => {
-                const el = document.getElementById(id);
-                if (el) el.hidden = false;
-            });
-            const clear = document.getElementById('composeClear');
-            if (clear) clear.hidden = true;
+            this.setToolbarYield(false);
         }
 
         t9CloseSymbolBar() {
@@ -1654,7 +1669,11 @@
                 const button = document.createElement('button');
                 button.className = 'candidate';
                 button.textContent = symbol;
-                button.addEventListener('click', () => this.sendSymbol(symbol));
+                // 点选符号 = 上屏 + 关闭符号行并还原工具栏（用户定稿）。
+                button.addEventListener('click', () => {
+                    this.sendSymbol(symbol);
+                    this.t9CloseSymbolBar();
+                });
                 button.addEventListener('mousedown', event => event.preventDefault());
                 bar.append(button);
             });
@@ -1932,12 +1951,9 @@
                         // T9：长按=数字+字母组全后选（引擎通道）；1 键=
                         // 符号行并收起工具栏；qwerty 维持 accent 备选弹层。
                         if (this.mode === 't9') {
-                            // longFired：松手的 touchend 会补发 click，不
-                            // 置位会把 chrome 态立刻冲回普通符号行。
-                            if (button.dataset.key === '1') {
-                                longFired = true;
-                                this.t9SymbolBar(true);
-                            } else this.openT9HoldPopup(button);
+                            // 1 键没有长按态（单击即开符号行，用户定稿）；
+                            // 其余数字键长按=数字+字母组全后选浮层。
+                            this.openT9HoldPopup(button);
                         } else this.openPopup(button);
                     }, this.holdMs);
                 } else if (button.dataset.lp === 'lock') {
@@ -4769,6 +4785,13 @@
                     return;
                 }
             }
+            // 中文联想 chrome（用户定稿）：有联想词时工具栏全部让位（含
+            // mic）仅留 ×；onAssoc 直调这里、不经过 updateComposing，
+            // 联想的出现与消失都在这条统一兜住。组合/语音态不动（各由
+            // updateComposing 管）。
+            if (!state.composing && this.voiceState === 'idle') {
+                this.setToolbarYield(this.assocWords.length > 0);
+            }
             const bar = document.getElementById('candidates');
             // Full repaints would clamp scrollLeft back to 0 mid-drag - the
             // exact bar-side version of the grid bug appendExpandedCandidates
@@ -4888,12 +4911,12 @@
             // 件）不得把工具栏翻回来——× 是唯一取消入口（codex round-2
             // P2-4）。组合/语音中的可见性仍由上面的通用规则管。
             if (this.mode === 't9' && this.t9BarChrome && !this.composing && !voiceBusy) {
-                ['setupButton', 'ctrlTool', 'imeSwitchButton',
-                    'clipboardButton', 'favoritesButton'].forEach(id => {
-                    const el = document.getElementById(id);
-                    if (el) el.hidden = true;
-                });
-                document.getElementById('composeClear').hidden = false;
+                this.setToolbarYield(true);
+            } else if ((this.assocWords || []).length && !voiceBusy) {
+                // 中文联想（用户定稿）：有联想词时工具栏全部让位（含
+                // mic）仅留 ×。renderCandidates 会兜住引擎事件路径，这
+                // 条覆盖 onNativeState 等不渲染候选条的刷新。
+                this.setToolbarYield(true);
             }
             document.getElementById('composeExpand').hidden = !this.composing || voiceBusy;
             if (!this.composing && this.expanded && !this.variantReplaying) this.setExpanded(false);
