@@ -96,6 +96,18 @@
 7. 深浅两主题、横竖两方向的截图各一份验收；DOM 断言不能代替视觉核对。
 8. 不动像素门禁依赖的硬编码色；若必须加，先补门禁再合码。
 
+### 7.1 T9 九宫格键面（t9 模式，keyboard.md §2.7）
+
+- 左列条格（`.t9-side-cell`）= `--special` 表面 + `--text`，声母前缀
+  （`.t9-syl-pre`）用 `--key-subtext` 置灰；符号键沿用 kb-special 灰。
+- 角标（`.t9-sup`：字母组数字、空格的 0）= 10px `--key-subtext`，
+  与 qwerty 键角标同语言；主字形 `.t9-group` 沿用 `.kb-main` 字号体系。
+- 浮层（`.t9-row` 单行 5 格）沿用 `#keyPopup`/`.kp-item` 卡片语言；
+  预选格 `--accent` 描边。
+- 深浅主题验收截图：`t9.md` §2 定稿时的 preview 页 + 设备截图存档。
+
+## 8. 完整设置页
+
 ## 8. 完整设置页
 
 设置页（`assets/settings/`）与键盘同源 token、同主题机制；卡片圆角、

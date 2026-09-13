@@ -541,6 +541,76 @@ body[data-cand-font="xlarge"] { --cand-font-scale: 1.35; }
 }
 .num-digit { font-size: min(26px, calc(var(--kb-row-h, 44px) * 0.6)); font-weight: 400; }
 .num-fn { font-size: 14px; }
+/* ===== 九宫格 T9（微信式五列键面，preview-t9 定稿） ===== */
+.t9-grid {
+    flex: 1;
+    min-height: 0;
+    display: grid;
+    grid-template-columns: 0.92fr 1fr 1fr 1fr 0.92fr;
+    grid-template-rows: repeat(4, var(--kb-row-h, 44px));
+    gap: 5px;
+}
+/* 左列：常用字符/音节条（native pan-y 滚动，键不 bindTouch——
+ * preventDefault 杀拖动，同 .num-syms 的教训）+ 底部符号面板键。
+ * 显式跨满 4 行——缺了放置声明整列会塌进 r1（截图评审抓到）。 */
+.t9-side {
+    grid-row: 1 / 5;
+    grid-column: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-height: 0;
+    min-width: 0;
+}
+.t9-strip {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    overflow-y: auto;
+    touch-action: pan-y;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+}
+.t9-strip::-webkit-scrollbar { display: none; }
+.t9-side-cell {
+    flex: none;
+    height: calc(var(--kb-row-h, 44px) * 0.78);
+    border: 0;
+    border-radius: var(--radius-key);
+    background: var(--special);
+    color: var(--text);
+    font-size: min(17px, calc(var(--kb-row-h, 44px) * 0.4));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+}
+.t9-side-cell:active { background: var(--pressed); }
+.t9-syl-pre { color: var(--key-subtext); }
+/* flex:none 压住 .kb-key 的默认 flex:1——否则符号键与滚动条平分列高 */
+.t9-sym-btn { flex: none; height: calc(var(--kb-row-h, 44px) * 0.78); }
+/* 字母组键：主字形=字母组，右上角标=数字（与空格的 0 角标同款）。 */
+.t9-key { position: relative; }
+.t9-sup {
+    position: absolute;
+    top: 2px;
+    right: 7px;
+    font-size: 10px;
+    color: var(--key-subtext);
+}
+.t9-group { font-size: min(20px, calc(var(--kb-row-h, 44px) * 0.46)); }
+/* 底行：123 与中英各 2/3 键宽，省出的空间全给 mic/空格（5/3 键宽）。 */
+.t9-r4 { display: flex; gap: 5px; min-width: 0; }
+.t9-r4 .kb-key { flex: 3; min-width: 0; }
+.t9-r4 .t9-narrow { flex: 2; }
+.t9-r4 .t9-wide { flex: 5; }
+/* T9 长按浮层：单行排布（5 格，qwerty 长按的 3 格换行排不适用）。 */
+#keyPopupInner.t9-row { max-width: none; flex-wrap: nowrap; }
+/* 横屏高度预算按 qwerty 的 4px gap 计算——T9 保持 5px 会侵入底部
+ * 预留（codex round-2 P2-7 实测 3px）。 */
+body.landscape .t9-grid { gap: 4px 5px; }
 /* Emoji sub-view: snapping page scroller over the category strip.
  * No edge mask - the pages are exactly full width and a mask would dim
  * the first/last emoji column. */

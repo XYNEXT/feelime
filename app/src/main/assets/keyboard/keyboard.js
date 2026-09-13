@@ -205,7 +205,7 @@
         });
     }
 
-    const KEYBOARD_VERSION = '3.30.0';
+    const KEYBOARD_VERSION = '3.35.0';
     const MIN_NATIVE_API = 1;
     const REQUIRED_CAPABILITIES = [
         'candidate-revision-v1',
@@ -392,6 +392,25 @@
     // (phone numbers, prices, units, simple math). Literal commits.
     const NUM_PAD_SYMBOLS = ['@', '%', '-', '+', '/', '*', '(', ')',
         '#', '$', '&', '_', '=', '~', '^', ':', ';'];
+
+    /* ===== 九宫格 T9（微信式键面，docs/design/t9.md） ===== */
+    // 左列空闲态的常用字符：中文标点，与 1 键(@#.)的西文/技术符号后选
+    // （候选条符号行）互不重复——两套独立清单，避免同字符双入口。
+    const T9_SIDE_CHARS = ['，', '。', '？', '！', '；', '：', '、',
+        '“', '”', '（', '）', '《', '》', '…', '·', '—'];
+    // 1 键点按在候选条展开的西文/技术符号（sendSymbol 直上屏）。
+    const T9_BAR_SYMBOLS = ['@', '#', '.', '*', '+', '-', '_', '/', '='];
+    // 下滑拆分浮层：7/9 是四个字母里唯二有两枚「下位」字母的键，
+    // 下左/下右继续滑选中 q/r、x/y（用户定稿：不做子组通配拼写）。
+    const T9_SPLIT = { '7': ['q', 'r'], '9': ['x', 'y'] };
+    // 字母 → 九宫格数字（与 schema xlit 同表）：音节点选后计算剩余
+    // 数字段长度用（ni 消耗 "64"，剩余从第 3 位起）。
+    const T9_XLIT = {
+        a: '2', b: '2', c: '2', d: '3', e: '3', f: '3', g: '4', h: '4', i: '4',
+        j: '5', k: '5', l: '5', m: '6', n: '6', o: '6', p: '7', q: '7', r: '7',
+        s: '7', t: '8', u: '8', v: '8', w: '9', x: '9', y: '9', z: '9',
+    };
+    const t9ToDigits = text => [...text].map(ch => T9_XLIT[ch] || ch).join('');
 
     // The emoji picker's curated offline set - seven categories of
     // daily-use glyphs (~350 total, a few KB inline). VS16/ZWJ sequences
@@ -686,6 +705,12 @@
         xi xia xian xiang xiao xie xin xing xiong xiu xu xuan xue xun
         ya yai yan yang yao ye yi yin ying yo yong you yu yuan yue yun
         za zai zan zang zao ze zei zen zeng zha zhai zhan zhang zhao zhe zhei zhen zheng zhi zhong zhou zhu zhua zhuai zhuan zhuang zhui zhun zhuo zi zong zou zu zuan zui zun zuo`.trim().split(/\s+/);
+
+// BEGIN GENERATED T9_SYLLABLE_INDEX
+    // 由 scripts/generate-t9-syllables.py 生成：数字串 → 音节/
+    // 声母前缀（424 音节，源 luna_pinyin.table.txt）。
+    const T9_SYLLABLE_INDEX = {"full":{"2":["a"],"24":["ai","bi","ci"],"26":["an","ao","bo"],"264":["ang"],"22":["ba","ca"],"224":["bai","cai"],"226":["ban","bao","can","cao"],"2264":["bang","cang"],"234":["bei","cei"],"236":["ben","cen"],"2364":["beng","ceng"],"2426":["bian","biao","chan","chao"],"24264":["biang","chang"],"243":["bie","che"],"246":["bin"],"2464":["bing"],"28":["bu","cu"],"23":["ce"],"242":["cha"],"2424":["chai"],"2436":["chen"],"24364":["cheng"],"244":["chi"],"24664":["chong"],"2468":["chou"],"248":["chu"],"2482":["chua"],"24824":["chuai"],"24826":["chuan"],"248264":["chuang"],"2484":["chui"],"2486":["chun","chuo"],"2664":["cong"],"268":["cou"],"2826":["cuan"],"284":["cui"],"286":["cun","cuo"],"32":["da","fa"],"324":["dai"],"326":["dan","dao","fan"],"3264":["dang","fang"],"33":["de"],"334":["dei","fei"],"336":["den","fen"],"3364":["deng","feng"],"34":["di","eh","ei"],"342":["dia"],"3426":["dian","diao","fiao"],"343":["die"],"346":["din"],"3464":["ding"],"348":["diu"],"3664":["dong","fong"],"368":["dou","fou"],"38":["du","fu"],"3826":["duan"],"384":["dui"],"386":["dun","duo"],"3":["e"],"36":["en","fo"],"364":["eng"],"37":["er"],"42":["ga","ha"],"424":["gai","hai"],"426":["gan","gao","han","hao"],"4264":["gang","hang"],"43":["ge","he"],"434":["gei","hei"],"436":["gen","hen"],"4364":["geng","heng"],"4664":["gong","hong"],"468":["gou","hou"],"48":["gu","hu"],"482":["gua","hua"],"4824":["guai","huai"],"4826":["guan","huan"],"48264":["guang","huang"],"484":["gui","hui"],"486":["gun","guo","hun","huo"],"54":["ji","li"],"542":["jia","lia"],"5426":["jian","jiao","lian","liao"],"54264":["jiang","liang"],"543":["jie","lie"],"546":["jin","lin"],"5464":["jing","ling"],"54664":["jiong"],"548":["jiu","liu"],"58":["ju","ku","lu","lv"],"5826":["juan","kuan","luan","lvan"],"583":["jue","lve"],"586":["jun","kun","kuo","lun","luo"],"52":["ka","la"],"524":["kai","lai"],"526":["kan","kao","lan","lao"],"5264":["kang","lang"],"53":["ke","le"],"534":["kei","lei"],"536":["ken"],"5364":["keng","leng"],"5664":["kong","long"],"568":["kou","lou"],"582":["kua"],"5824":["kuai"],"58264":["kuang"],"584":["kui"],"56":["lo"],"62":["ma","na"],"624":["mai","nai"],"626":["man","mao","nan","nao"],"6264":["mang","nang"],"63":["me","ne"],"634":["mei","nei"],"636":["men","nen"],"6364":["meng","neng"],"64":["mi","ni"],"6426":["mian","miao","nian","niao"],"643":["mie","nie"],"646":["min","nin"],"6464":["ming","ning"],"648":["miu","niu"],"66":["mo"],"668":["mou","nou"],"68":["mu","nu","nv","ou"],"642":["nia"],"64264":["niang"],"6664":["nong"],"6826":["nuan"],"686":["nun","nuo"],"683":["nve"],"6":["o"],"72":["pa","sa"],"724":["pai","sai"],"726":["pan","pao","ran","rao","san","sao"],"7264":["pang","rang","sang"],"734":["pei","sei"],"736":["pen","ren","sen"],"7364":["peng","reng","seng"],"74":["pi","qi","ri","si"],"742":["pia","qia","sha"],"7426":["pian","piao","qian","qiao","shan","shao"],"743":["pie","qie","she"],"746":["pin","qin"],"7464":["ping","qing"],"76":["po"],"768":["pou","rou","sou"],"78":["pu","qu","ru","su"],"74264":["qiang","shang"],"74664":["qiong"],"748":["qiu","shu"],"7826":["quan","ruan","suan"],"783":["que"],"786":["qun","run","ruo","sun","suo"],"73":["re","se"],"7664":["rong","song"],"782":["rua"],"784":["rui","sui"],"7424":["shai"],"7434":["shei"],"7436":["shen"],"74364":["sheng"],"744":["shi"],"7468":["shou"],"7482":["shua"],"74824":["shuai"],"74826":["shuan"],"748264":["shuang"],"7484":["shui"],"7486":["shun","shuo"],"82":["ta"],"824":["tai"],"826":["tan","tao"],"8264":["tang"],"83":["te"],"834":["tei"],"8364":["teng"],"84":["ti"],"8426":["tian","tiao"],"843":["tie"],"8464":["ting"],"8664":["tong"],"868":["tou"],"88":["tu"],"8826":["tuan"],"884":["tui"],"886":["tun","tuo"],"92":["wa","ya","za"],"924":["wai","yai","zai"],"926":["wan","yan","yao","zan","zao"],"9264":["wang","yang","zang"],"934":["wei","zei"],"936":["wen","zen"],"9364":["weng","zeng"],"96":["wo","yo"],"9664":["wong","yong","zong"],"98":["wu","xu","yu","zu"],"94":["xi","yi","zi"],"942":["xia","zha"],"9426":["xian","xiao","zhan","zhao"],"94264":["xiang","zhang"],"943":["xie","zhe"],"946":["xin","yin"],"9464":["xing","ying"],"94664":["xiong","zhong"],"948":["xiu","zhu"],"9826":["xuan","yuan","zuan"],"983":["xue","yue"],"986":["xun","yun","zun","zuo"],"93":["ye","ze"],"968":["you","zou"],"9424":["zhai"],"9434":["zhei"],"9436":["zhen"],"94364":["zheng"],"944":["zhi"],"9468":["zhou"],"9482":["zhua"],"94824":["zhuai"],"94826":["zhuan"],"948264":["zhuang"],"9484":["zhui"],"9486":["zhun","zhuo"],"984":["zui"]},"pre":{"2":["b","c"],"7":["p","q","r","s"],"6":["m","n"],"3":["f","d"],"8":["t"],"5":["l","k","j"],"4":["g","h"],"9":["x","z","y","w"],"94":["zh"],"24":["ch"],"74":["sh"]}};
+    // END GENERATED T9_SYLLABLE_INDEX
 
     // Double-pinyin parse variants and the displayed key map come from the
     // generated block below: per scheme (ziranma / flypy / sogou), derived
@@ -1263,6 +1288,8 @@
         }
 
         renderLetters(layoutName) {
+            if (layoutName === 't9') { this.t9SymBar = false; return this.renderT9(); }
+            this.t9SymBar = false;
             const layout = LAYOUTS[layoutName] || LAYOUTS.qwerty;
             // E: the folded landscape layout is REVERTED - user
             // report: the mixed bottom rows broke muscle memory and the
@@ -1307,6 +1334,237 @@
             this.updateLabels();
         }
 
+        /* ===== 九宫格 T9 键面：五列网格（微信式，preview-t9 定稿） =====
+         * c1 音节/常用字符条（grid-row 1/5，底部符号键）· c2-c4 字母组 3×3 ·
+         * c5 退格/重输/emoji/确认。底行 123 与中英各 2/3 键宽，省出的
+         * 空间全部给空格（mic）键（用户定稿）。 */
+        renderT9() {
+            const layer = document.getElementById('qwertyLayer');
+            layer.replaceChildren();
+            const grid = document.createElement('div');
+            grid.className = 't9-grid';
+            // 左列：竖向滚动条（native scroll，无 bindTouch——preventDefault
+            // 杀拖动的既有教训）+ 底部符号键（面板入口，非 @#. 后选）。
+            const side = document.createElement('div');
+            side.className = 't9-side';
+            const strip = document.createElement('div');
+            strip.className = 't9-strip';
+            strip.id = 't9Strip';
+            side.append(strip);
+            const symBtn = this.specialKey('t9sym', t("符号"),
+                () => this.showSymbols(), 't9-sym-btn kb-special');
+            symBtn.setAttribute('aria-label', t("符号面板"));
+            side.append(symBtn);
+            grid.append(side);
+            // 3×3 字母组键（data-key=数字：几何/套件/长按弹层都认它）。
+            // 显式坐标表——自动占位错一格就全盘漂移（renderNumpad 教训）。
+            const place = (button, row, column) => {
+                button.style.gridRow = String(row);
+                button.style.gridColumn = String(column);
+                grid.append(button);
+            };
+            const coords = {
+                '1': [1, 2], '2': [1, 3], '3': [1, 4],
+                '4': [2, 2], '5': [2, 3], '6': [2, 4],
+                '7': [3, 2], '8': [3, 3], '9': [3, 4],
+            };
+            Object.keys(coords).forEach(digit => {
+                if (digit === '1') {
+                    // 1 键：主字形 @#. （西文/技术符号），点按在候选条展开。
+                    const one = document.createElement('button');
+                    one.className = 'kb-key t9-key';
+                    one.dataset.key = '1';
+                    one.innerHTML = '<span class="t9-sup">1</span><span class="t9-group">@#.</span>';
+                    one.addEventListener('click', () => this.t9SymbolBar());
+                    this.bindTouch(one);
+                    place(one, coords[digit][0], coords[digit][1]);
+                } else {
+                    place(this.t9LetterKey(digit), coords[digit][0], coords[digit][1]);
+                }
+            });
+            // 右列功能键。
+            place(this.specialKey('backspace', ICONS.backspace,
+                () => this.call(() => Native.backspace(this.token)),
+                'kb-special', 'repeat'), 1, 5);
+            const clearKey = this.specialKey('t9clear', t("重输"),
+                () => this.clearComposing(), 'kb-special');
+            place(clearKey, 2, 5);
+            const emojiKey = this.specialKey('t9emoji', ICONS.smiley,
+                () => { this.emojiView = true; this.showNumpad(); }, 'kb-special');
+            place(emojiKey, 3, 5);
+            // 底行：123(2/3) + mic/空格(5/3) + 中英(2/3)。
+            const r4 = document.createElement('div');
+            r4.className = 't9-r4';
+            r4.append(this.specialKey('symbols', '123',
+                () => this.showNumpad(), 't9-narrow kb-special'));
+            const space = this.spaceKey();
+            // data-key 让通用手势层认领 mic：上滑字面 0、横滑光标 scrub
+            // 都走 .kb-key[data-key] 选择器（T9 下唯一保留 scrub 的键）。
+            space.dataset.key = '0';
+            space.classList.add('t9-wide');
+            r4.append(space);
+            // 中英键同样压成 2/3 键宽——cnEnKey 自带的 kb-wide-1_15 会被
+            // .t9-r4 .kb-key{flex:3} 盖掉，不补窄类会吃掉空格的宽度
+            // （底行约定 2:5:2，codex round-2 P2-8）。
+            const cnEn = this.cnEnKey();
+            cnEn.classList.add('t9-narrow');
+            r4.append(cnEn);
+            r4.style.gridRow = '4';
+            r4.style.gridColumn = '2 / 5';
+            grid.append(r4);
+            // 确认键：组合中=提交高亮候选（拦截 Native.enter），见 enterKey。
+            const enter = this.enterKey('');
+            enter.style.gridRow = '4';
+            enter.style.gridColumn = '5';
+            grid.append(enter);
+            layer.append(grid);
+            this.t9SideSig = null;
+            this.renderT9Side();
+            this.updateLabels();
+        }
+
+        /** 字母组键：主字形=字母组（ABC），右上角标=数字。点按=整组通配
+         * （数字进引擎）；长按=数字+字母全后选弹层；四向滑动见 setupFlick。 */
+        t9LetterKey(digit) {
+            const button = document.createElement('button');
+            button.className = 'kb-key t9-key';
+            button.dataset.key = digit;
+            button.dataset.lp = 'popup';
+            const sup = document.createElement('span');
+            sup.className = 't9-sup';
+            sup.textContent = digit;
+            const group = document.createElement('span');
+            group.className = 't9-group';
+            group.textContent = (LAYOUTS.t9.alts[digit] || '').toUpperCase();
+            button.append(sup, group);
+            button.addEventListener('click', () =>
+                this.call(() => Native.key(digit, this.token)));
+            this.bindTouch(button);
+            return button;
+        }
+
+        /** 当前未完成段：引擎回显按已确认音节边界插显示空格（'ni 426'），
+         * 取最后一个空格后的待确认段；无段结构时退化为尾部连续 [a-z2-9]
+         * （n426 的 n 属于同一未完成音节，不能把 hao 排在它后面接，
+         * codex round-2 P2-5；点选 ni 后要能继续选 426 的 hao，
+         * codex round-3 P2）。不用 RegExp.lastMatch（可变全局）。 */
+        t9TrailingSegment(raw) {
+            const text = raw || '';
+            const cut = text.lastIndexOf(' ');
+            const tail = cut >= 0 ? text.slice(cut + 1) : text;
+            const m = tail.match(/[a-z2-9]+$/);
+            return m ? m[0] : '';
+        }
+
+        /** 尾段音节枚举：段的数字投影做前缀枚举，且逐位校验字母一致性
+         * （段中已确认的字母必须与音节同位字母相同或该位是数字）。
+         * pre 声母层全表枚举 + 同一一致性过滤（zh/ch/sh 因此可达）。 */
+        t9SegmentSyllables(seg) {
+            const digits = t9ToDigits(seg);
+            const consistent = (form, n) => {
+                for (let i = 0; i < n; i++) {
+                    if (seg[i] !== form[i] && seg[i] !== t9ToDigits(form[i]).charAt(0)) {
+                        return false;
+                    }
+                }
+                return true;
+            };
+            const full = [];
+            for (let n = 1; n <= seg.length; n++) {
+                (T9_SYLLABLE_INDEX.full[digits.slice(0, n)] || []).forEach(s => {
+                    if (consistent(s, n)) full.push(s);
+                });
+            }
+            const pre = [];
+            const seen = new Set();
+            Object.values(T9_SYLLABLE_INDEX.pre).forEach(list => list.forEach(p => {
+                if (!seen.has(p) && p.length <= seg.length && consistent(p, p.length)) {
+                    seen.add(p);
+                    pre.push(p);
+                }
+            }));
+            return { full, pre };
+        }
+
+        /** 左列双态：空闲=常用字符（中文标点，sendSymbol 直上屏）；组合中=
+            拼音音节候选（完整音节可点重写组合，声母前缀置灰提示）。
+            内容签名不变不重建——滚动位置在竖拖时不被引擎事件打断。 */
+        renderT9Side() {
+            const strip = document.getElementById('t9Strip');
+            if (!strip || this.mode !== 't9') return;
+            // lastRawInput 保留引擎回显的段空格（'ni 426'），段提取靠它
+            // 区分「已确认音节」与「待确认段」。
+            const raw = this.lastRawInput || '';
+            const seg = this.composing ? this.t9TrailingSegment(raw) : '';
+            const sig = this.composing && seg ? `syl:${seg}` : 'sym';
+            if (sig === this.t9SideSig) return;
+            this.t9SideSig = sig;
+            strip.replaceChildren();
+            if (sig === 'sym') {
+                T9_SIDE_CHARS.forEach(char => strip.append(this.t9SideCell(char)));
+                return;
+            }
+            const { full, pre } = this.t9SegmentSyllables(seg);
+            full.forEach(syllable => {
+                const cell = this.t9SideCell(syllable,
+                    () => this.t9PickSyllable(syllable, seg));
+                cell.classList.add('t9-syl-full');
+                strip.append(cell);
+            });
+            pre.forEach(initial => {
+                // 前缀格只做提示（「还没打完」），点按无动作。
+                const cell = this.t9SideCell(initial, () => {});
+                cell.classList.add('t9-syl-pre');
+                strip.append(cell);
+            });
+        }
+
+        t9SideCell(label, action) {
+            const cell = document.createElement('button');
+            cell.className = 't9-side-cell';
+            cell.textContent = label;
+            // 默认行为=字面上屏（常用字符）；音节格传自己的动作，
+            // 前缀格传 no-op——避免默认上屏把拼音组合打断。
+            cell.addEventListener('click', action || (() => this.sendSymbol(label)));
+            return cell;
+        }
+
+        /** 点选音节：把未完成段重写为「选中音节 + 段内剩余」。混合串由
+         * 引擎音节图原生切分（BridgeContract 对 T9 放行 2-9），复用双拼
+         * 变体的原子 setComposition 通道。段前的已确认部分（含回显空格）
+         * 原样保留。 */
+        t9PickSyllable(syllable, seg) {
+            const raw = this.lastRawInput || '';
+            const head = raw.slice(0, raw.length - seg.length).replace(/ /g, '');
+            this.switchToVariant(head + syllable + seg.slice(syllable.length));
+        }
+
+        /** preedit 观感：字母段与数字段之间插窄空格（64426 → ni·426 观感），
+         * 只改显示——lastRawInput 仍是无空格混合串。 */
+        t9PreeditLabel(raw) {
+            return (raw || '').replace(/([a-z]+)([2-9])/g, '$1 $2');
+        }
+
+        /** 1 键点按：候选条展开西文/技术符号行（sendSymbol 直上屏）。 */
+        t9SymbolBar() {
+            if (this.composing) return;
+            this.t9SymBar = true;
+            this.renderT9SymbolBar();
+        }
+
+        renderT9SymbolBar() {
+            const bar = document.getElementById('candidates');
+            bar.replaceChildren();
+            T9_BAR_SYMBOLS.forEach(symbol => {
+                const button = document.createElement('button');
+                button.className = 'candidate';
+                button.textContent = symbol;
+                button.addEventListener('click', () => this.sendSymbol(symbol));
+                button.addEventListener('mousedown', event => event.preventDefault());
+                bar.append(button);
+            });
+        }
+
         cnEnKey() {
             const button = document.createElement('button');
             button.className = 'kb-key kb-special kb-wide-1_15';
@@ -1334,15 +1592,29 @@
             return button;
         }
 
-        enterKey() {
+        enterKey(longPress = 'repeat') {
             const button = document.createElement('button');
             button.className = 'kb-key kb-special kb-wide-2_25';
             button.dataset.role = 'enter';
             button.id = 'enterKey';
-            button.dataset.lp = 'repeat';
+            if (longPress) button.dataset.lp = longPress;
             button.setAttribute('aria-label', this.composing ? t("确定") : t("换行"));
             button.textContent = this.composing ? t("确定") : t("换行");
-            button.addEventListener('click', () => this.call(() => Native.enter(this.token)));
+            button.addEventListener('click', () => {
+                // T9 组合中的确认键=提交高亮候选（用户定稿）。EnterRaw 会
+                // ESCAPE+把数字串原样上屏（RimeTextEngine），必须拦截。
+                // repeat 长按在 T9 关闭：确认后残留的 interval 点击会
+                // 落进非组合分支连发换行。
+                if (this.mode === 't9' && this.composing) {
+                    const candidate = (this.expandCandidates || []).find(item =>
+                        !String(item.id).startsWith('alt:'));
+                    if (candidate) {
+                        this.choosePoolCandidate(candidate);
+                        return;
+                    }
+                }
+                this.call(() => Native.enter(this.token));
+            });
             this.bindTouch(button);
             return button;
         }
@@ -1492,8 +1764,10 @@
                     if (armed) this.showToast(t("已撤销本次听写"));
                 } else if (!cancelled) {
                     // touchstart preventDefault suppresses synthetic clicks,
-                    // so the tap must be delivered manually.
-                    button.click();
+                    // so the tap must be delivered manually. T9 的 mic 有
+                    // data-key：横滑 scrub 已被手势层消费，松手不再补发
+                    // 空格（swiping 的复位是 setTimeout(0)，此处仍为 true）。
+                    if (!this.swiping) button.click();
                 }
             };
             button.addEventListener('touchstart', start, { passive: false });
@@ -1558,7 +1832,13 @@
                 if (button.dataset.lp === 'repeat') {
                     holdTimer = setTimeout(() => { repeatTimer = setInterval(() => button.click(), 75); }, this.holdMs + 40);
                 } else if (button.dataset.lp === 'popup' && button.dataset.key) {
-                    holdTimer = setTimeout(() => { if (!this.swiping) this.openPopup(button); }, this.holdMs);
+                    holdTimer = setTimeout(() => {
+                        if (this.swiping) return;
+                        // T9：长按=数字+字母组全后选（引擎通道）；
+                        // qwerty 维持 accent 备选弹层。
+                        if (this.mode === 't9') this.openT9HoldPopup(button);
+                        else this.openPopup(button);
+                    }, this.holdMs);
                 } else if (button.dataset.lp === 'lock') {
                     holdTimer = setTimeout(() => {
                         if (!this.swiping) { longFired = true; this.lockShift(); }
@@ -1655,6 +1935,11 @@
                     // the origin (that is exactly how direction reverses).
                     if (Math.hypot(dx, dy) < threshold) return;
                     this.swiping = true;
+                    // 滑动接管手势：只撤「挂起的」语音长按计时器（T9 mic
+                    // 横滑 scrub 按住不放，350ms 计时器若不撤，光标移动
+                    // 中途会拉起语音浮层）。已激活的语音会话不动——上滑
+                    // 撤销是 bindSpaceHold 自己的手势，这里抢了会破坏它。
+                    clearTimeout(this.spaceHoldTimer);
                     // A LEFT swipe on the backspace key aborts the
                     // whole live composition (pinyin preedit...) in one go -
                     // repeat-tapping it down letter by letter is the old way.
@@ -1669,6 +1954,9 @@
                         if (this.composing) this.clearComposing();
                         return;
                     }
+                    // T9 手势仲裁（t9.md §3）：字母键四向=引擎字母/字面
+                    // 数字，mic 独占 scrub。false=落回通用分支（mic 横滑）。
+                    if (this.mode === 't9' && this.t9Flick(originButton, dx, dy)) return;
                     if (Math.abs(dy) >= Math.abs(dx) && button && button.dataset.key) {
                         const key = button.dataset.key;
                         // Chinese-mode punct slot : the main glyph is
@@ -1702,7 +1990,8 @@
                             // Direction-only blob, no character.
                             this.showFlick(button, dy);
                         }
-                    } else if (Math.abs(dx) > Math.abs(dy) && button && !this.composing) {
+                    } else if (Math.abs(dx) > Math.abs(dy) && button && !this.composing
+                        && !this.voiceHold) {
                         // Scrub only starts ON a letter key: horizontal drags
                         // that begin on the panel/symbol grid scroll those
                         // layers instead of moving the caret. While a pinyin
@@ -1770,6 +2059,54 @@
             }
         }
 
+        /** T9 手势仲裁（t9.md §3）。返回 true=已消费；false=落回通用
+         * 分支（mic 的横滑 scrub 由通用代码处理——scrub 选择器认
+         * .kb-key[data-key]，mic 在 T9 下挂 data-key=0）。 */
+        t9Flick(originButton, dx, dy) {
+            const button = originButton && originButton.closest('.kb-key[data-key]');
+            if (!button) return false;
+            const vertical = Math.abs(dy) >= Math.abs(dx);
+            if (button.id === 'spaceKey') {
+                // 语音会话进行中：手势归 bindSpaceHold（上滑撤销听写），
+                // T9 的字面 0 消歧不再抢道——否则撤销会先落一个 0
+                // （codex round-3 P2）。
+                if (this.voiceHold) return true;
+                if (!vertical) return false;
+                if (dy < 0) {
+                    // 上滑=字面 0（右上角标提示）。
+                    this.sendSymbol('0');
+                    this.showFlick(button, dy, dx);
+                }
+                return true;
+            }
+            const key = button.dataset.key;
+            if (this.mode !== 't9' || !/^[2-9]$/.test(key)) return false;
+            const letters = (LAYOUTS.t9.alts[key] || '').split('');
+            if (vertical) {
+                if (dy < 0) {
+                    // 上滑=字面数字，commitText 旁路（进引擎会成为
+                    // 候选选择器，字面数字永远上不了屏）。
+                    this.sendSymbol(key);
+                } else if (T9_SPLIT[key]) {
+                    // 7/9 下滑=拆分浮层：下左/下右继续滑选 q/r、x/y。
+                    // initialX=越过阈值那一刻的手指 x——直接松手也按
+                    // 半边判定选中，不再固定预选首格（codex round-3 P2）。
+                    this.openT9Popup(button, T9_SPLIT[key], {
+                        split: true,
+                        initialX: this.touchOrigin ? this.touchOrigin.x + dx : null,
+                    });
+                } else {
+                    // 下滑=中间字母进引擎（确认拼写，非 commitText）。
+                    this.sendText(letters[Math.floor((letters.length - 1) / 2)]);
+                }
+            } else {
+                // 横滑=首/尾字母进引擎。
+                this.sendText(dx < 0 ? letters[0] : letters[letters.length - 1]);
+            }
+            this.showFlick(button, dy, dx);
+            return true;
+        }
+
         altCandidates(key) {
             // Chinese modes print their own symbol set.
             if (this.isChineseMode() && CN_ALTS[key]) return [CN_ALTS[key]];
@@ -1790,6 +2127,55 @@
             const value = layout.alts[key];
             if (!value) return '';
             return Array.isArray(value) ? value[0] : value;
+        }
+
+        /** 长按全后选：数字 + 字母组逐个（4 → [4 g h i]）。 */
+        openT9HoldPopup(button) {
+            const key = button.dataset.key;
+            const letters = (LAYOUTS.t9.alts[key] || '').split('');
+            this.openT9Popup(button, [key, ...letters]);
+        }
+
+        /** T9 浮层：长按=数字+字母全后选（4 → [4 g h i]，数字格与点按
+         * 同义）；7/9 下滑=拆分字母（opts.split：按触点 x 半边判定下左/
+         * 下右，不按格子距离——拖动方向与浮层位置相反，距离命中会立刻
+         * 取消）。格子全部走引擎通道（enginePath → sendText），字母确认
+         * 拼写、数字=通配。 */
+        openT9Popup(button, cells, opts = {}) {
+            const popup = document.getElementById('keyPopup');
+            const inner = document.getElementById('keyPopupInner');
+            inner.classList.add('t9-row');
+            inner.replaceChildren();
+            const items = cells.map(char => {
+                const item = document.createElement('div');
+                item.className = 'kp-item';
+                item.textContent = char;
+                inner.append(item);
+                return { item, char, cx: 0, cy: 0 };
+            });
+            popup.classList.add('open');
+            const rect = button.getBoundingClientRect();
+            const left = Math.max(4, Math.min(innerWidth - popup.offsetWidth - 4,
+                rect.left + rect.width / 2 - popup.offsetWidth / 2));
+            popup.style.left = left + 'px';
+            popup.style.top = Math.max(2, rect.top - popup.offsetHeight - 6) + 'px';
+            items.forEach(cell => {
+                const r = cell.item.getBoundingClientRect();
+                cell.cx = r.left + r.width / 2;
+                cell.cy = r.top + r.height / 2;
+            });
+            // 预选=数字格（与点按同义）：不拖直接松手不改变输入。
+            // 拆分浮层按 initialX 半边判定初始选中（松手不再产生 move
+            // 也选对格，codex round-3 P2）。
+            let selected = items[0];
+            if (opts.split && typeof opts.initialX === 'number') {
+                const mid = (items[0].cx + items[1].cx) / 2;
+                selected = opts.initialX < mid ? items[0] : items[1];
+            }
+            selected.item.classList.add('sel');
+            this.popup = { key: button.dataset.key, cells: items,
+                selected, cancelled: false, enginePath: true };
+            if (opts.split) this.popup.split = true;
         }
 
         openPopup(button) {
@@ -1845,6 +2231,18 @@
 
         movePopup(touch) {
             if (!this.popup) return;
+            // 拆分浮层（T9 7/9 下滑）：下左/下右按两格中点判定，
+            // 不做距离取消——下滑开层后继续向左下/右下即选中。
+            if (this.popup.split) {
+                const mid = (this.popup.cells[0].cx + this.popup.cells[1].cx) / 2;
+                const sel = touch.clientX < mid
+                    ? this.popup.cells[0] : this.popup.cells[1];
+                this.popup.cancelled = false;
+                this.popup.selected = sel;
+                this.popup.cells.forEach(cell =>
+                    cell.item.classList.toggle('sel', cell === sel));
+                return;
+            }
             // the reference parity: a finger that leaves every popup cell cancels the
             // pick - the layer shrinks/fades with distance and past
             // POPUP_GONE_RADIUS the release commits nothing. Dragging back
@@ -1882,8 +2280,15 @@
             const inner = document.getElementById('keyPopupInner');
             inner.style.transform = '';
             inner.style.opacity = '';
+            inner.classList.remove('t9-row');
             document.getElementById('keyPopup').classList.remove('open');
             if (cancel || popup?.cancelled) return;
+            // T9 弹层：选格进引擎（字母=确认拼写，数字=通配）——
+            // sendSymbol 会把字母当文本直上屏，拼音组合就断了。
+            if (popup?.enginePath) {
+                if (popup.selected) this.sendText(popup.selected.char);
+                return;
+            }
             // the reference parity (soft_keyboard.js closePopup): the pre-selected
             // cell is the uppercase form, so a release with no drag commits
             // that pre-selection - "original spot" only falls back to the
@@ -1914,7 +2319,7 @@
          * viscous half-ellipse that peels OFF the key along the swipe and
          * fades fast. It must NOT preview the character (the character
          * actually lands; showing it read as a duplicate). */
-        showFlick(button, dy) {
+        showFlick(button, dy, dx = 0) {
             const blob = document.getElementById('flickBlob');
             if (!blob) return;
             const rect = button.getBoundingClientRect();
@@ -1923,15 +2328,18 @@
             blob.style.top = (rect.top + rect.height / 2 - size / 2) + 'px';
             blob.style.width = size + 'px';
             blob.style.height = size + 'px';
-            const dir = dy < 0 ? -1 : 1;
+            // 方向跟随手势轴：横滑（T9 首/尾字母）沿 X 剥离，竖滑沿 Y。
+            const horizontal = Math.abs(dx) > Math.abs(dy);
+            const dir = (horizontal ? dx : dy) < 0 ? -1 : 1;
+            const axis = horizontal ? 'X' : 'Y';
             blob.classList.add('run');
             // WAAPI is assumed on real WebViews; without it the blob must not
             // stick around (the .run class would leave it painted forever).
             if (typeof blob.animate === 'function') {
                 const anim = blob.animate([
                     { transform: 'scale(1.12, 0.55)', opacity: 0.5, filter: 'blur(1.5px)' },
-                    { transform: `scale(1, 1) translateY(${dir * 12}px)`, opacity: 0.38, filter: 'blur(2.5px)', offset: 0.45 },
-                    { transform: `scale(0.82, 1.28) translateY(${dir * 26}px)`, opacity: 0, filter: 'blur(5px)' },
+                    { transform: `scale(1, 1) translate${axis}(${dir * 12}px)`, opacity: 0.38, filter: 'blur(2.5px)', offset: 0.45 },
+                    { transform: `scale(0.82, 1.28) translate${axis}(${dir * 26}px)`, opacity: 0, filter: 'blur(5px)' },
                 ], { duration: 250, easing: 'cubic-bezier(.2, .7, .3, 1)' });
                 anim.onfinish = () => blob.classList.remove('run');
             } else {
@@ -1959,6 +2367,9 @@
             document.querySelectorAll('[data-key]').forEach(button => {
                 const key = button.dataset.key;
                 const main = button.querySelector('.kb-main');
+                // T9 键（.t9-group 固定字形）与挂 data-key 的 mic 没有主字
+                // span——键面固定，大小写切换不适用。
+                if (!main) return;
                 main.textContent = (chinese || upper) ? key.toUpperCase() : key;
             });
             // The slot's main glyph is ，(what a tap commits
@@ -3960,7 +4371,9 @@
 
         renderExpanded() {
             const strip = document.getElementById('expandGrid');
-            document.getElementById('expandPreedit').textContent = this.lastRawInput || '';
+            document.getElementById('expandPreedit').textContent =
+                this.mode === 't9' ? this.t9PreeditLabel(this.lastRawInput)
+                    : (this.lastRawInput || '');
             strip.replaceChildren();
             this.expandRendered = 0;
             this.renderVariants();
@@ -4028,6 +4441,26 @@
         renderVariants() {
             const column = document.getElementById('expandVariants');
             column.replaceChildren();
+            // T9：左列改渲染音节候选（与键盘左列同一枚举），右侧仍是
+            // 该组合的候选字词——用户要的「完整候选界面」（t9.md §3）。
+            if (this.mode === 't9') {
+                const seg = this.t9TrailingSegment(this.lastRawInput || '');
+                if (!seg) { column.hidden = true; return; }
+                column.hidden = false;
+                const makeSyllable = (syllable, disabled) => {
+                    const button = document.createElement('button');
+                    button.className = 'expand-variant';
+                    button.textContent = syllable;
+                    if (disabled) button.disabled = true;
+                    else button.addEventListener('click', () =>
+                        this.t9PickSyllable(syllable, seg));
+                    column.append(button);
+                };
+                const { full, pre } = this.t9SegmentSyllables(seg);
+                full.forEach(s => makeSyllable(s, false));
+                pre.forEach(p => makeSyllable(p, true));
+                return;
+            }
             const raw = this.mode === 'pinyin'
                 ? (this.lastRawInput || '').trim().replace(/ +/g, "'")
                 : (this.lastRawInput || '').replace(/ /g, '');
@@ -4069,9 +4502,12 @@
             // Optimistic highlight; the list itself stays put. The grid dims
             // and refuses taps while its ids still belong to the previous
             // parse (taps during the swap used to be lost).
-            document.querySelectorAll('#expandVariants .expand-variant').forEach(el => {
-                el.classList.toggle('current', el.textContent === keys);
-            });
+            // T9 音节点选没有变体列（列表是音节枚举，非解析变体），跳过。
+            if (this.mode !== 't9') {
+                document.querySelectorAll('#expandVariants .expand-variant').forEach(el => {
+                    el.classList.toggle('current', el.textContent === keys);
+                });
+            }
             document.getElementById('expandGrid').classList.add('reloading');
             document.getElementById('expandPreedit').textContent = keys;
             if (typeof Native.setComposition === 'function') {
@@ -4212,6 +4648,17 @@
             // Variant replay bursts intermediate events: freeze the bar like
             // the grid (the replay's target echo repaints it).
             if (this.variantReplaying) return;
+            // T9：1 键展开的西文/技术符号行。引擎候选/联想/组合任一
+            // 出现即让位（符号行是暂态选择面，不与候选池共存）。
+            if (this.t9SymBar) {
+                if (state.composing || this.mode !== 't9' ||
+                    (this.expandCandidates || []).length || this.assocWords.length) {
+                    this.t9SymBar = false;
+                } else {
+                    this.renderT9SymbolBar();
+                    return;
+                }
+            }
             const bar = document.getElementById('candidates');
             // Full repaints would clamp scrollLeft back to 0 mid-drag - the
             // exact bar-side version of the grid bug appendExpandedCandidates
@@ -4280,7 +4727,9 @@
             if (this.composing && rawInput !== undefined) this.lastRawInput = rawInput;
             document.body.classList.toggle('composing', this.composing);
             const preedit = document.getElementById('preeditLine');
-            preedit.textContent = this.composing ? this.lastRawInput : '';
+            preedit.textContent = this.composing
+                ? (this.mode === 't9' ? this.t9PreeditLabel(this.lastRawInput) : this.lastRawInput)
+                : '';
             const recording = this.voiceState !== 'idle';
             // Composing hides the setup/mode/clipboard tools but never the mic
             // while a voice session is active (the stop entry must survive).
@@ -4326,6 +4775,8 @@
                 this.closeModeMenu();
             }
             this.updateEnterLabel();
+            // T9 左列跟随组合状态：空闲=常用字符，组合中=音节候选。
+            this.renderT9Side();
         }
 
         /* ===== clipboard / favorites panel ===== */
@@ -5596,6 +6047,9 @@
             // live degrade state (active=false left a stale badge).
             degraded: keyboard.degrade ? { ...keyboard.degrade } : null,
             warming: keyboard.warming,
+            // Automation gates drive setComposition (T9 音节条引擎验证等)；
+            // DevTools 已是调试构建的完整控制面，token 不放大攻击面。
+            token: keyboard.token,
         }),
         // Voice-overlay preview hooks: 长按空格的浮层（无按钮、上滑撤销）
         // 与 mic 浮层不同形；preview 页没有真实的按住手势，用钩子驱动。

@@ -1633,8 +1633,11 @@ class FeelimeService : InputMethodService(), AsrEngine.Listener {
             // Variant parses are short key sequences ('xc'an').  Unicode
             // letters and combining marks are accepted for accent variants;
             // punctuation and whitespace remain rejected by the contract
-            // validator.
-            if (!BridgeContract.isValidComposition(keys)) {
+            // validator.  T9 额外放行 2-9（音节条点选后的「已选音节+剩余
+            // 数字」混合重写，t9.md §3）。
+            val allowDigits = coordinator.currentMode ==
+                com.feelime.ime.engine.InputMode.T9
+            if (!BridgeContract.isValidComposition(keys, allowDigits)) {
                 rejectedCalls += 1
                 return@guarded
             }

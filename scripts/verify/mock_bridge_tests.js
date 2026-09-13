@@ -2076,7 +2076,7 @@ test('dp scheme switch: single-key expansion uses the active scheme table', {sin
 
 // ---------------------------------------------------------------- modes
 
-test('t9 mode renders the digit grid with letter groups and selects via the menu', {since: '3.33.0'}, () => {
+test('t9 renders the five-column grid and selects via the menu', {since: '3.35.0'}, () => {
     const world = fresh();
     world.engineState({ mode: 't9', revision: 1, candidates: [], composing: '' });
     const keys = [...world.document.querySelectorAll('#qwertyLayer .kb-key')]
@@ -2084,9 +2084,15 @@ test('t9 mode renders the digit grid with letter groups and selects via the menu
     for (const d of ['1', '2', '3', '4', '5', '6', '7', '8', '9']) {
         assert(keys.includes(d), `digit ${d} present`);
     }
-    // 分词键保留：数字切分歧义（9426 = xian / xi'an）要手动消歧。
-    assert(world.document.querySelector('[data-role="sep"]'),
-        'separator key survives in t9 (chinese mode chrome)');
+    // 五列网格（preview-t9 定稿）：左列条 + 右列 重输/emoji；qwerty 的
+    // 分词键不再进 T9——9426 类切分歧义交给引擎音节图与音节候选条。
+    assert(world.document.getElementById('t9Strip'), 'side strip present');
+    assert(world.document.querySelector('[data-role="t9clear"]'), '重输 key present');
+    assert(world.document.querySelector('[data-role="t9emoji"]'), 'emoji key present');
+    assert(!world.document.querySelector('[data-role="sep"]'), 'no qwerty separator on t9');
+    // mic 挂 data-key=0：上滑字面 0 + 横滑 scrub 的手势选择器依赖
+    // （T9 下唯一保留 scrub 的键）。
+    equal(world.$('spaceKey').dataset.key, '0', 'mic carries data-key 0');
     // 菜单可选。
     const world2 = fresh();
     world2.touchDown(world2.$('modeToggle'));
@@ -4386,20 +4392,220 @@ test('mode switch clears assoc words', {since: '3.33.0'}, () => {
     equal(assocCount(), 0, 'mode change clears the assoc bar');
 });
 
-test('t9 letter-group hints are display-only', {since: '3.33.0'}, () => {
+test('t9 long-press popup routes digit + letters through the engine', {since: '3.35.0'}, () => {
     const world = fresh({ mode: 't9' });
     world.engineState({ phase: 'READY', mode: 't9', revision: 1, composing: '', rawInput: '',
         candidates: [], hasNextPage: false });
-    equal(world.key('2').querySelector('.kb-alt').textContent, 'abc',
-        'keycap hint shows the letter group');
-    // 长按弹窗走可上屏备选：字母组不能混进去（P2-3 曾把 'abc' 整段提交）。
+    equal(world.key('2').querySelector('.t9-group').textContent, 'ABC',
+        'keycap shows the letter group');
+    // 长按弹层：数字 + 逐个字母；组标签绝不成为可提交格子（P2-3 教训）。
     const two = world.key('2');
     world.touchDown(two);
     world.clock.advance(360);
-    const items = [...world.document.querySelectorAll('.kp-item')].map(i => i.textContent);
-    world.touchCancel(two);
-    assert(!items.includes('abc'), 'letter group never offered as popup cell');
-    assert(items.includes('2'), 'digit itself still offered');
+    const items = [...world.document.querySelectorAll('.kp-item')];
+    equal(items.map(i => i.textContent).join(','), '2,a,b,c',
+        'popup offers the digit then each letter');
+    // 选字母格 → 引擎通道（Native.key），不是 commitText。
+    const bRect = items[2].getBoundingClientRect();
+    world.move(two, bRect.left + bRect.width / 2, 10);
+    world.touchUp(two);
+    const keys = world.native.of('key');
+    assert(keys.length >= 1, 'popup pick reaches the engine');
+    equal(keys[keys.length - 1].args[0], 'b', 'letter goes to the engine channel');
+    // 不拖直接松手 = 预选数字格，与点按同义（通配数字进引擎）。
+    const world2 = fresh({ mode: 't9' });
+    world2.engineState({ phase: 'READY', mode: 't9', revision: 1, composing: '', rawInput: '',
+        candidates: [], hasNextPage: false });
+    const two2 = world2.key('2');
+    world2.touchDown(two2);
+    world2.clock.advance(360);
+    world2.touchUp(two2);
+    const keys2 = world2.native.of('key');
+    equal(keys2[keys2.length - 1].args[0], '2', 'release on the digit cell feeds the wildcard');
+});
+
+test('t9 letter-key flicks: literal digit up, engine letters down/left/right', {since: '3.35.0'}, () => {
+    const world = fresh({ mode: 't9' });
+    world.engineState({ phase: 'READY', mode: 't9', revision: 1, composing: '', rawInput: '',
+        candidates: [], hasNextPage: false });
+    const four = world.key('4');
+    // 上滑=字面数字：commitText 旁路（Native.key 会把它喂成候选选择器）。
+    world.touchDown(four, 20, 20);
+    world.move(four, 20, -30);
+    world.touchUp(four);
+    world.clock.advance(2);
+    equal(world.native.of('commitText').slice(-1)[0].args[0], '4',
+        'up-flick commits the literal digit');
+    // 下滑=中间字母进引擎。
+    world.touchDown(four, 20, 20);
+    world.move(four, 20, 70);
+    world.touchUp(four);
+    world.clock.advance(2);
+    equal(world.native.of('key').slice(-1)[0].args[0], 'h', 'down-flick sends the middle letter');
+    // 左/右滑=首/尾字母进引擎。
+    world.touchDown(four, 20, 20);
+    world.move(four, -40, 20);
+    world.touchUp(four);
+    world.clock.advance(2);
+    equal(world.native.of('key').slice(-1)[0].args[0], 'g', 'left-flick sends the first letter');
+    world.touchDown(four, 20, 20);
+    world.move(four, 80, 20);
+    world.touchUp(four);
+    world.clock.advance(2);
+    equal(world.native.of('key').slice(-1)[0].args[0], 'i', 'right-flick sends the last letter');
+    // 点按=整组通配（数字进引擎）。
+    world.tap(four);
+    equal(world.native.of('key').slice(-1)[0].args[0], '4', 'tap feeds the wildcard digit');
+});
+
+test('t9 mic key: literal 0 up, horizontal scrub, tap space', {since: '3.35.0'}, () => {
+    const world = fresh({ mode: 't9' });
+    world.engineState({ phase: 'READY', mode: 't9', revision: 1, composing: '', rawInput: '',
+        candidates: [], hasNextPage: false });
+    const space = world.$('spaceKey');
+    world.touchDown(space, 20, 20);
+    world.move(space, 20, -30);
+    world.touchUp(space);
+    world.clock.advance(2);
+    equal(world.native.of('commitText').slice(-1)[0].args[0], '0', 'mic up-flick commits literal 0');
+    // 横滑=光标 scrub（T9 唯一保留 scrub 的键）；scrub 不得补发空格。
+    const before = world.native.of('space').length;
+    world.touchDown(space, 20, 20);
+    world.move(space, 60, 20);
+    world.touchUp(space);
+    world.clock.advance(2);
+    assert(world.native.of('moveCursor').length >= 1, 'mic horizontal drag scrubs');
+    equal(world.native.of('space').length, before, 'scrub release must not also send space');
+    // 点按=空格。
+    world.tap(space);
+    equal(world.native.of('space').slice(-1).length, 1, 'mic tap sends space');
+});
+
+test('t9 syllable strip lists readings for the trailing segment', {since: '3.35.0'}, () => {
+    const world = fresh({ mode: 't9' });
+    // 尾段 n426：n 属于同一未完成音节（滑动确认的首字母），不是「已
+    // 确认音节」——候选必须与 n 一致（ni/nian/niao），hao/gan 这类
+    // 不一致读音绝不出现（codex round-2 P2-5 复现用例）。
+    world.engineState({ phase: 'READY', mode: 't9', revision: 1, composing: 'n426',
+        rawInput: 'n426', candidates: [], hasNextPage: false });
+    const labels = [...world.document.querySelectorAll('#t9Strip .t9-side-cell')]
+        .map(c => c.textContent);
+    assert(labels.includes('ni'), 'ni listed');
+    assert(labels.includes('nian') && labels.includes('niao'), 'longer n-readings listed');
+    assert(!labels.includes('hao') && !labels.includes('gan'),
+        'inconsistent readings never offered');
+    assert(labels.includes('n'), 'initial prefix listed');
+    // 点 nian → 整段重写为 nian。
+    const nian = [...world.document.querySelectorAll('#t9Strip .t9-side-cell')]
+        .find(c => c.textContent === 'nian');
+    world.tap(nian);
+    equal(world.native.of('setComposition').slice(-1)[0].args[0], 'nian',
+        'syllable pick rewrites the whole trailing segment atomically');
+    // 目标回声落地，重写完成（variantReplaying 解除）。
+    world.engineState({ phase: 'READY', mode: 't9', revision: 2, composing: 'nian',
+        rawInput: 'nian', candidates: [{ id: 'c1', text: '年' }], hasNextPage: false });
+    // 引擎回显带段空格（ni 已确认）：待确认段只剩 426 → hao 可选，
+    // 点 hao → nihao（确认边界不能吞掉剩余段的候选，codex round-3 P2）。
+    world.engineState({ phase: 'READY', mode: 't9', revision: 3, composing: 'ni 426',
+        rawInput: 'ni 426', candidates: [], hasNextPage: false });
+    const seg2 = [...world.document.querySelectorAll('#t9Strip .t9-side-cell')]
+        .map(c => c.textContent);
+    assert(seg2.includes('hao') && seg2.includes('gan'), 'pending 426 lists hao/gan');
+    assert(!seg2.includes('nian'), 'confirmed ni is not re-offered');
+    const hao = [...world.document.querySelectorAll('#t9Strip .t9-side-cell')]
+        .find(c => c.textContent === 'hao');
+    world.tap(hao);
+    equal(world.native.of('setComposition').slice(-1)[0].args[0], 'nihao',
+        'hao after confirmed ni rewrites to nihao');
+    // hao 的回声落地（解除 replay 冻结）。
+    world.engineState({ phase: 'READY', mode: 't9', revision: 4, composing: 'nihao',
+        rawInput: 'nihao', candidates: [{ id: 'c1', text: '你好' }], hasNextPage: false });
+    // 纯数字段行为不变：94664 仍列 zhong。
+    world.engineState({ phase: 'READY', mode: 't9', revision: 5, composing: '94664',
+        rawInput: '94664', candidates: [], hasNextPage: false });
+    const digits = [...world.document.querySelectorAll('#t9Strip .t9-side-cell')]
+        .map(c => c.textContent);
+    assert(digits.includes('zhong') && digits.includes('xiong'), 'digit segment lists zhong/xiong');
+    // 组合结束后左列回到常用字符。
+    world.engineState({ phase: 'READY', mode: 't9', revision: 6, composing: '', rawInput: '',
+        candidates: [], hasNextPage: false });
+    const idle = [...world.document.querySelectorAll('#t9Strip .t9-side-cell')]
+        .map(c => c.textContent);
+    assert(idle.includes('，') && idle.includes('。'), 'idle strip shows common characters');
+});
+
+test('t9 mic scrub cancels the pending voice hold timer', {since: '3.35.0'}, () => {
+    const world = fresh({ mode: 't9' });
+    world.engineState({ phase: 'READY', mode: 't9', revision: 1, composing: '', rawInput: '',
+        candidates: [], hasNextPage: false });
+    const space = world.$('spaceKey');
+    // 横滑 scrub 按住不放：越过 350ms 语音长按阈值也不得拉起语音。
+    world.touchDown(space, 20, 20);
+    world.move(space, 60, 20);
+    world.clock.advance(400);
+    equal(world.native.of('startVoice').length, 0,
+        'scrub must cancel the voice hold timer');
+    world.touchUp(space);
+    world.clock.advance(2);
+});
+
+test('t9 function keys: confirm/重输/1/123/emoji', {since: '3.35.0'}, () => {
+    const world = fresh({ mode: 't9' });
+    world.engineState({ phase: 'READY', mode: 't9', revision: 7, composing: 'ni', rawInput: 'ni',
+        candidates: [{ id: 'c1', text: '你' }, { id: 'c2', text: '呢' }], hasNextPage: false });
+    // 组合中确认 = 提交高亮（池首），绝不走 EnterRaw（数字串会原样上屏）。
+    world.tap(world.$('enterKey'));
+    const pick = world.native.of('chooseCandidate').slice(-1)[0];
+    equal(pick.args[0], 7, 'confirm uses the live revision');
+    equal(pick.args[1], 'c1', 'confirm picks the highlighted pool head');
+    // 空闲确认 = 换行。
+    world.engineState({ phase: 'READY', mode: 't9', revision: 8, composing: '', rawInput: '',
+        candidates: [], hasNextPage: false });
+    world.tap(world.$('enterKey'));
+    equal(world.native.of('enter').length, 1, 'idle confirm falls through to newline');
+    // 重输 = 清组合。
+    world.engineState({ phase: 'READY', mode: 't9', revision: 9, composing: 'ni4', rawInput: 'ni4',
+        candidates: [{ id: 'c1', text: '你' }], hasNextPage: false });
+    world.tap(world.document.querySelector('[data-role="t9clear"]'));
+    assert(world.native.of('clearComposing').length >= 1, '重输 clears the composition');
+    // 1 键点按：候选条出西文/技术符号行。
+    world.engineState({ phase: 'READY', mode: 't9', revision: 10, composing: '', rawInput: '',
+        candidates: [], hasNextPage: false });
+    world.tap(world.key('1'));
+    const bar = [...world.document.querySelectorAll('#candidates .candidate')]
+        .map(b => b.textContent);
+    equal(bar.join(''), '@#.*+-_/=', '1 key opens the technical symbol bar');
+    // 123 → 数字板；emoji → 数字板 emoji 视图。
+    world.tap(world.document.querySelector('[data-role="symbols"]'));
+    assert(!world.$('numPadLayer').hidden, '123 opens the nine-pad');
+    world.tap(world.document.querySelector('[data-role="numpad-back"]'));
+    assert(!world.$('qwertyLayer').hidden, 'back returns to the t9 keyface');
+    world.tap(world.document.querySelector('[data-role="t9emoji"]'));
+    assert(!world.$('numPadLayer').hidden, 'emoji opens the nine-pad');
+    assert(world.document.querySelector('.emoji-area'), 'emoji view is showing');
+});
+
+test('t9 7/9 down-swipe opens the split popup (下左/下右)', {since: '3.35.0'}, () => {
+    const world = fresh({ mode: 't9' });
+    world.engineState({ phase: 'READY', mode: 't9', revision: 1, composing: '', rawInput: '',
+        candidates: [], hasNextPage: false });
+    const seven = world.key('7');
+    // 下滑拉开浮层后直接松手 = 预选下左 q。
+    world.touchDown(seven, 20, 20);
+    world.move(seven, 20, 70);
+    world.touchUp(seven);
+    world.clock.advance(2);
+    equal(world.native.of('key').slice(-1)[0].args[0], 'q', 'release on 下左 commits q');
+    // 拖到下右格松手 = r。
+    world.touchDown(seven, 20, 20);
+    world.move(seven, 20, 70);
+    const cells = [...world.document.querySelectorAll('.kp-item')];
+    equal(cells.map(c => c.textContent).join(','), 'q,r', 'split popup offers q/r');
+    const rRect = cells[1].getBoundingClientRect();
+    world.move(seven, rRect.left + rRect.width / 2, 10);
+    world.touchUp(seven);
+    world.clock.advance(2);
+    equal(world.native.of('key').slice(-1)[0].args[0], 'r', 'drag to 下右 commits r');
 });
 
 console.log(`\n== mock-bridge suite: ${passed} passed, ${failed} failed` +

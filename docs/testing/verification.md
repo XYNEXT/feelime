@@ -171,7 +171,7 @@ import 其它套件当库（历史教训：height_card 曾被 6 个套件当库�
 | `device_phrase_codes` | 常用语自动输入码、法语卡内编辑、光标快慢一致性 |
 | `device_editor_modes` | 编辑器级模式限制、全拼展开、触摸状态清理、收起重开 |
 | `device_replay_geometry` | 稳定展开列表、快捷切换目标、Fn 键面、横屏槽位预算 |
-| `device_t9_verify` | T9 九宫格：数字键面、94664→中族候选、9426 歧义切分、空格上屏、回全拼复原 |
+| `device_t9_verify` | T9 九宫格（微信式键面）：五列结构/左列常用字符、点按通配回归（94664→中族、9426 歧义）、手势消歧（上滑字面数字、横滑首尾字母、下滑中字母、7 拆分浮层 q/r）、音节条收窄 + 确认键提交、长按全后选、123/emoji 直达、重输、mic scrub 不落空格、空格上屏、回全拼复原 |
 | `device_input_prefs` | 输入偏好全链路：候选字号三档到真实候选文字、模糊音五组独立开关切 prism（nian→lian、zan→zhan、fu→hu、le→re、zhon→zhong）与复原、联想 bigram 上屏出接续词 + 连续联想 + 关闭复原 |
 | `device_resource_verify` | 高度顶沿、APK/数据/PSS 预算 |
 | `device_upgrade_verify` / `device_firstlaunch_verify` | 发布冒烟：覆盖安装 / 真正首启 |

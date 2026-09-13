@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
-"""T9 九宫格 device gate: digit keyface -> librime digit-prism -> candidates.
+"""T9 九宫格 device gate：新键面（五列/手势/音节条/浮层）+ 数字点按回归。
 
-The T9 schema (scripts/generate-t9-schema.py) xlit-maps every pinyin syllable
-to its digit string; the lattice enumerates ambiguous splits (9426 = xian /
-xi'an) and ranks by frequency. This suite drives the REAL keyboard: switch to
-九宫格 via the long-press mode menu, type digits on the rendered grid, and
-assert candidates/commit through the host editor oracle.
+键面：左列常用字符/音节候选条 + 3×3 字母组 + 右列退格/重输/emoji/确认；
+底行 123/mic/中英。手势：点按=整组通配数字、上滑=字面数字（commitText
+旁路）、下滑=中间字母进引擎（7/9=拆分浮层 下左/下右）、横滑=首/尾字母、
+长按=数字+字母全后选浮层、mic 独占 scrub。引擎侧：混合拼写 schema
+（字母确认+数字通配，librime 音节图原生切分），音节点选经 setComposition
+原子重写组合（t9.md §2/§3）。
 """
 import sys
 import time
@@ -30,6 +31,11 @@ def ev(expr):
 
 def tick(label):
     print(f"[t {time.time():.0f}] {label}", flush=True)
+
+
+def css2phys(p):
+    return (p[0] * d._DT_SCALE + d._DT_OFFSET[0],
+            p[1] * d._DT_SCALE + d._DT_OFFSET[1])
 
 
 def digit_keys_present():
@@ -70,8 +76,35 @@ def wait_candidates(attempts=8):
     return []
 
 
+def side_cells():
+    return ev("[...document.querySelectorAll('#t9Strip .t9-side-cell')]"
+              ".map(c => c.textContent)") or []
+
+
+def tap_side_cell(label):
+    """条格是原生 click（组件不 bindTouch 以保竖向滚动），合成 touch
+    不产生浏览器 click——直接 JS 派发。"""
+    got = ev(f"""(() => {{ const c = [...document.querySelectorAll('#t9Strip .t9-side-cell')]
+        .find(c => c.textContent === '{label}'); if (!c) return 'no-cell';
+        c.click(); return 'clicked'; }})()""")
+    return got == "clicked"
+
+
+def element_center(selector):
+    return ev(f"""(() => {{ const b = document.querySelector('{selector}');
+        if (!b) return null; const r = b.getBoundingClientRect();
+        return [r.left + r.width/2, r.top + r.height/2]; }})()""")
+
+
 def main():
     d.prepare()
+    # 模式记忆可能停在 T9：fresh_kb 的几何门按 qwerty 完整性（>=27 字母
+    # 键）判定，T9 键面必不过——先回全拼再走标准入口。
+    token = ev("window.Feelime && window.Feelime.debugState ? "
+               "window.Feelime.debugState().token : ''")
+    if token:
+        ev('window.FeelimeNative.selectMode("pinyin", "%s")' % token)
+        time.sleep(1.2)
     kb = d.fresh_kb(refocus=True)
     if not kb:
         raise SystemExit("keyboard geometry unavailable")
@@ -82,11 +115,20 @@ def main():
     geo = t9_geometry()
     tick("t9: mode switched")
 
+    # ===== 键面结构 =====
     present, keys = digit_keys_present()
     record("t9: digit keyface rendered", present,
            f"keys={[k for k in keys if k and len(k) == 1][:12]}")
+    record("t9: side strip + sym button exist",
+           ev("!!document.getElementById('t9Strip')"
+              " && !!document.querySelector('[data-role=\"t9sym\"]')") is True)
+    record("t9: mic carries data-key 0",
+           ev("document.getElementById('spaceKey').dataset.key") == "0")
+    cells = side_cells()
+    record("t9: idle strip shows common characters",
+           "，" in cells and "。" in cells, f"{cells[:6]}")
 
-    # 94664 = zhong（也允许其它音节切分）。清场后输入。
+    # ===== 回归：点按数字流 =====
     d.clear_field(kb)
     type_digits(geo, "94664")
     time.sleep(0.8)
@@ -94,31 +136,174 @@ def main():
     has_zhong = any(any(ch in text for ch in "中种重众钟忠") for text in cands)
     record("t9: 94664 reaches zhong-family candidates",
            bool(cands) and has_zhong, f"candidates={cands[:6]}")
-    preedit = preedit_text()
-    record("t9: digits echo on the preedit line",
-           "94664" in preedit or "94664" in " ".join(cands),
-           f"preedit={preedit!r}")
-    tick("t9: zhong typed")
 
-    # 歧义切分：9426 = xian / xi'an，两类候选都该出现。
+    # 歧义切分：9426 = xian / xi'an。
     d.clear_field(kb)
     type_digits(geo, "9426")
     time.sleep(0.8)
     cands2 = wait_candidates()
     joined = "".join(cands2)
     has_xian = any(ch in joined for ch in "先县现线限显")
-    has_xian_split = any(ch in joined for ch in "西吸希息") and any(
-        ch in joined for ch in "安按岸案")
     record("t9: 9426 lattice offers xian readings",
-           bool(cands2) and (has_xian or has_xian_split),
-           f"candidates={cands2[:6]}")
-    tick("t9: ambiguous split typed")
+           bool(cands2) and has_xian, f"candidates={cands2[:6]}")
 
-    # 空格上屏首候选（宿主编辑器为 oracle）。
+    # ===== 手势消歧 =====
+    # 上滑=字面数字（commitText 旁路）。
+    d.clear_field(kb)
+    x4, y4 = geo["4"]
+    d.synth_swipe(x4, y4, x4, y4 - 160)
+    time.sleep(0.6)
+    field = (d.field_text_retry() or "").strip()
+    record("t9: up-swipe commits literal digit", field == "4", f"field={field!r}")
+
+    # 右滑=尾字母进引擎：f + 364 → feng 族。
+    d.clear_field(kb)
+    x3, y3 = geo["3"]
+    d.synth_swipe(x3, y3, x3 + 160, y3)
+    time.sleep(0.4)
+    type_digits(geo, "364", wait=0.25)
+    time.sleep(0.8)
+    cands = wait_candidates()
+    joined = "".join(cands)
+    record("t9: right-swipe f + 364 reaches feng family",
+           any(ch in joined for ch in "风封丰疯枫豐風"), f"cands={cands[:6]}")
+
+    # 下滑=中间字母：4 下滑 h + 26 → hao 族。
+    d.clear_field(kb)
+    d.synth_swipe(x4, y4, x4, y4 + 160)
+    time.sleep(0.4)
+    type_digits(geo, "26", wait=0.25)
+    time.sleep(0.8)
+    cands = wait_candidates()
+    joined = "".join(cands)
+    record("t9: down-swipe h + 26 reaches hao family",
+           any(ch in joined for ch in "好号豪毫"), f"cands={cands[:6]}")
+
+    # 7 下滑=拆分浮层：拖到下左 q 松手；q + 826 → quan 族。
+    d.clear_field(kb)
+    shared.refresh_keyboard_geometry()
+    geo = t9_geometry()
+    x7, y7 = geo["7"]
+    d.synth_touch("start", x7, y7)
+    time.sleep(0.05)
+    d.synth_touch("move", x7, y7 + 160)
+    time.sleep(0.15)
+    q_at = element_center("#keyPopup .kp-item")  # 首格=q
+    if q_at:
+        qx, qy = css2phys(q_at)
+        d.synth_touch("move", qx, qy)
+        d.synth_touch("end", qx, qy)
+    else:
+        d.synth_touch("end", x7, y7)
+    time.sleep(0.6)
+    cands = wait_candidates()
+    record("t9: 7 down-swipe split popup commits q", bool(cands),
+           f"cands={cands[:6]}")
+    type_digits(geo, "826", wait=0.25)
+    time.sleep(0.8)
+    cands = wait_candidates()
+    joined = "".join(cands)
+    record("t9: q + 826 reaches quan family",
+           any(ch in joined for ch in "全泉权劝圈拳勸"), f"cands={cands[:6]}")
+
+    # ===== 音节候选条 + 组合重写 + 确认键 =====
+    d.clear_field(kb)
+    type_digits(geo, "94664")
+    time.sleep(0.8)
+    cells = side_cells()
+    record("t9: syllable strip lists zhong", "zhong" in cells, f"{cells[:10]}")
+    if tap_side_cell("zhong"):
+        time.sleep(0.8)
+        cands = wait_candidates()
+        joined = "".join(cands)
+        record("t9: tap zhong narrows candidates",
+               bool(cands) and any(ch in joined for ch in "中种重種衆众钟忠仲"),
+               f"cands={cands[:6]}")
+        preedit = preedit_text()
+        record("t9: preedit echoes letters", "zhong" in preedit.lower(),
+               f"preedit={preedit!r}")
+        d.tap(*geo["<enter>"], wait=0.3)
+        time.sleep(0.8)
+        committed = (d.field_text_retry() or "").strip()
+        record("t9: confirm key commits pool head", bool(committed),
+               f"field={committed!r}")
+    else:
+        record("t9: tap zhong narrows candidates", False, "no zhong cell")
+
+    # ===== 长按全后选浮层 =====
+    d.clear_field(kb)
+    if d.synth_touch("start", x4, y4) == "ok":
+        time.sleep(0.65)  # holdMs 350 + 余量
+        cell = ev("""(() => {
+            const items = [...document.querySelectorAll('#keyPopup .kp-item')];
+            const texts = items.map(i => i.textContent);
+            const h = items.find(i => i.textContent === 'h');
+            if (!h) return { items: texts };
+            const r = h.getBoundingClientRect();
+            return { items: texts, at: [r.left + r.width/2, r.top + r.height/2] }; })()""")
+        ok = isinstance(cell, dict) and cell.get("items") == ["4", "g", "h", "i"]
+        record("t9: long-press offers digit+letters", ok,
+               f"cells={cell.get('items') if isinstance(cell, dict) else cell}")
+        if "at" in (cell or {}):
+            hx, hy = css2phys(cell["at"])
+            d.synth_touch("move", hx, hy)
+            d.synth_touch("end", hx, hy)
+            time.sleep(0.5)
+            type_digits(geo, "26", wait=0.25)
+            time.sleep(0.8)
+            cands = wait_candidates()
+            joined = "".join(cands)
+            record("t9: h from hold popup + 26 reaches hao family",
+                   any(ch in joined for ch in "好号豪毫"), f"cands={cands[:6]}")
+        else:
+            d.synth_touch("cancel", x4, y4)
+
+    # ===== 功能键 =====
+    d.tap(*geo["<123>"], wait=0.6)
+    record("t9: 123 opens the nine-pad",
+           ev("!document.getElementById('numPadLayer').hidden") is True)
+    back = element_center('[data-role="numpad-back"]')
+    if back:
+        d.tap(*css2phys(back), wait=0.6)
+    record("t9: numpad back returns to t9",
+           ev("!document.getElementById('qwertyLayer').hidden") is True)
+    emoji = element_center('[data-role="t9emoji"]')
+    if emoji:
+        d.tap(*css2phys(emoji), wait=0.6)
+        record("t9: emoji opens the nine-pad emoji view",
+               ev("!document.getElementById('numPadLayer').hidden"
+                  " && !!document.querySelector('.emoji-area')") is True)
+        if back:
+            d.tap(*css2phys(back), wait=0.6)
+    clear_at = element_center('[data-role="t9clear"]')
+    type_digits(geo, "94664", wait=0.25)
+    time.sleep(0.6)
+    if clear_at:
+        d.tap(*css2phys(clear_at), wait=0.5)
+    record("t9: 重输 clears the composition", not preedit_text(),
+           f"preedit={preedit_text()!r}")
+
+    # ===== mic：scrub 不落空格 =====
+    d.clear_field(kb)
+    d.shell("input text abc")
+    time.sleep(0.6)
+    before = (d.field_text_retry() or "").strip()
+    sx, sy = geo["<space>"]
+    d.synth_swipe(sx, sy, sx - 200, sy)
+    time.sleep(0.6)
+    after = (d.field_text_retry() or "").strip()
+    record("t9: mic horizontal swipe scrubs without space",
+           before == after and " " not in after,
+           f"before={before!r} after={after!r}")
+
+    # ===== 空格上屏首候选（宿主编辑器为 oracle） =====
+    d.clear_field(kb)
+    type_digits(geo, "9426", wait=0.25)
+    time.sleep(0.8)
     space = geo.get("<space>")
     if not space:
         record("t9: space commits the pool head", False, "no <space> geometry")
-        sys.exit(1)  # 没有空格几何无法继续；直接非零退出，别绕过失败汇总
+        sys.exit(1)
     d.tap(*space, wait=0.2)
     time.sleep(0.8)
     committed = (d.field_text_retry() or "").strip()

@@ -44,8 +44,11 @@ object BridgeContract {
      * ';' is a legal key code too: the sogou double-pinyin scheme puts its
      * ing final on the wide key, and parse-variant replays then carry ';'
      * (double-pinyin.md §2.1).
+     *
+     * [allowDigits] opens '2'..'9' for the T9 音节条重写（ni + 剩余数字的
+     * 混合组合串）；仅 T9 模式传入，Direct/密码字段等组合通道不收数字。
      */
-    fun isValidComposition(value: String): Boolean {
+    fun isValidComposition(value: String, allowDigits: Boolean = false): Boolean {
         if (value.isEmpty() || value.codePointCount(0, value.length) > MAX_COMPOSITION_CODE_POINTS) {
             return false
         }
@@ -59,8 +62,9 @@ object BridgeContract {
                 -> true
                 else -> false
             }
+            val digitOk = allowDigits && codePoint in '2'.code..'9'.code
             if (codePoint != '\''.code && codePoint != ';'.code &&
-                !Character.isLetter(codePoint) && !mark
+                !Character.isLetter(codePoint) && !mark && !digitOk
             ) return false
             offset += Character.charCount(codePoint)
         }

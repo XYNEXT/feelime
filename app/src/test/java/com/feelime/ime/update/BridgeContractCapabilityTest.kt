@@ -69,4 +69,17 @@ class BridgeContractCapabilityTest {
         assertFalse(BridgeContract.isCompatible(BridgeContract.NATIVE_API_VERSION + 1L, caps))
         assertTrue(BridgeContract.isCompatible(BridgeContract.NATIVE_API_VERSION.toLong(), caps))
     }
+
+    @Test
+    fun `t9 composition replays allow digits two through nine only`() {
+        // T9 音节条重写：已选音节字母 + 剩余数字（t9.md §3）。
+        assertTrue(BridgeContract.isValidComposition("ni426", allowDigits = true))
+        assertTrue(BridgeContract.isValidComposition("64426", allowDigits = true))
+        // 1/0 不在 T9 alphabet（死输入），标点/空白照拒。
+        assertFalse(BridgeContract.isValidComposition("ni100", allowDigits = true))
+        assertFalse(BridgeContract.isValidComposition("ni 426", allowDigits = true))
+        assertFalse(BridgeContract.isValidComposition("ni,426", allowDigits = true))
+        // 非 T9 通道维持原语义：数字一律拒绝。
+        assertFalse(BridgeContract.isValidComposition("ni426"))
+    }
 }

@@ -384,12 +384,66 @@ selector:
     bindings: {ISO_Left_Tab: previous_candidate, "Shift+Tab": previous_candidate, Tab: next_candidate}
     linear: {bindings: {ISO_Left_Tab: previous_candidate, "Shift+Tab": previous_candidate, Tab: next_candidate}}
 speller:
-  algebra:
-    # 整段音节表 xlit 成数字拼写；无 abbrev（无简拼），
-    # 校准 derive 全部去掉——数字键面上它们只会制造噪声。
-    - "xlit/abcdefghijklmnopqrstuvwxyz/22233344455566677778889999/"
-  alphabet: 23456789
+  # 混合拼写（docs/design/t9.md §1）：首/末字母保护级联 + xlit 成数字
+  # + 大写还原。列表项缩进必须与 algebra: 平级（2 空格），见文件头说明。
+  alphabet: abcdefghijklmnopqrstuvwxyz23456789
   delimiter: " '"
+  algebra:
+  - "derive/^(.*)a(.*)$/$1A$2/"
+  - "derive/^a(.*)$/A$1/"
+  - "derive/^(.*)b(.*)$/$1B$2/"
+  - "derive/^b(.*)$/B$1/"
+  - "derive/^(.*)c(.*)$/$1C$2/"
+  - "derive/^c(.*)$/C$1/"
+  - "derive/^(.*)d(.*)$/$1D$2/"
+  - "derive/^d(.*)$/D$1/"
+  - "derive/^(.*)e(.*)$/$1E$2/"
+  - "derive/^e(.*)$/E$1/"
+  - "derive/^(.*)f(.*)$/$1F$2/"
+  - "derive/^f(.*)$/F$1/"
+  - "derive/^(.*)g(.*)$/$1G$2/"
+  - "derive/^g(.*)$/G$1/"
+  - "derive/^(.*)h(.*)$/$1H$2/"
+  - "derive/^h(.*)$/H$1/"
+  - "derive/^(.*)i(.*)$/$1I$2/"
+  - "derive/^i(.*)$/I$1/"
+  - "derive/^(.*)j(.*)$/$1J$2/"
+  - "derive/^j(.*)$/J$1/"
+  - "derive/^(.*)k(.*)$/$1K$2/"
+  - "derive/^k(.*)$/K$1/"
+  - "derive/^(.*)l(.*)$/$1L$2/"
+  - "derive/^l(.*)$/L$1/"
+  - "derive/^(.*)m(.*)$/$1M$2/"
+  - "derive/^m(.*)$/M$1/"
+  - "derive/^(.*)n(.*)$/$1N$2/"
+  - "derive/^n(.*)$/N$1/"
+  - "derive/^(.*)o(.*)$/$1O$2/"
+  - "derive/^o(.*)$/O$1/"
+  - "derive/^(.*)p(.*)$/$1P$2/"
+  - "derive/^p(.*)$/P$1/"
+  - "derive/^(.*)q(.*)$/$1Q$2/"
+  - "derive/^q(.*)$/Q$1/"
+  - "derive/^(.*)r(.*)$/$1R$2/"
+  - "derive/^r(.*)$/R$1/"
+  - "derive/^(.*)s(.*)$/$1S$2/"
+  - "derive/^s(.*)$/S$1/"
+  - "derive/^(.*)t(.*)$/$1T$2/"
+  - "derive/^t(.*)$/T$1/"
+  - "derive/^(.*)u(.*)$/$1U$2/"
+  - "derive/^u(.*)$/U$1/"
+  - "derive/^(.*)v(.*)$/$1V$2/"
+  - "derive/^v(.*)$/V$1/"
+  - "derive/^(.*)w(.*)$/$1W$2/"
+  - "derive/^w(.*)$/W$1/"
+  - "derive/^(.*)x(.*)$/$1X$2/"
+  - "derive/^x(.*)$/X$1/"
+  - "derive/^(.*)y(.*)$/$1Y$2/"
+  - "derive/^y(.*)$/Y$1/"
+  - "derive/^(.*)z(.*)$/$1Z$2/"
+  - "derive/^z(.*)$/Z$1/"
+  - "xlit/abcdefghijklmnopqrstuvwxyz/22233344455566677778889999/"
+  - "xlit/ABCDEFGHIJKLMNOPQRSTUVWXYZ/abcdefghijklmnopqrstuvwxyz/"
+
 switches:
   - abbrev: ["中", "Ａ"]
     name: ascii_mode
