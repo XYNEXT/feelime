@@ -205,7 +205,7 @@
         });
     }
 
-    const KEYBOARD_VERSION = '3.36.0';
+    const KEYBOARD_VERSION = '3.36.1';
     const MIN_NATIVE_API = 1;
     const REQUIRED_CAPABILITIES = [
         'candidate-revision-v1',
