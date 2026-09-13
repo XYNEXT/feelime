@@ -78,7 +78,8 @@ class MockSettingsNative {
     restoreBuiltInKeyboard(...a) { this._rec('restoreBuiltInKeyboard', a); }
     setUiLanguage(...a) { this._rec('setUiLanguage', a); }
     setAutoUpdateCheck(...a) { this._rec('setAutoUpdateCheck', a); }
-    setBottomPadding(...a) { this._rec('setBottomPadding', a); }
+    setBottomPadPortrait(...a) { this._rec('setBottomPadPortrait', a); }
+    setBottomPadLandscape(...a) { this._rec('setBottomPadLandscape', a); }
     setFeelOptions(...a) { this._rec('setFeelOptions', a); }
     setCandidateFont(...a) { this._rec('setCandidateFont', a); }
     setFuzzyPinyinMask(...a) { this._rec('setFuzzyPinyinMask', a); }
@@ -691,8 +692,9 @@ test('double-pinyin key map renders the active scheme chart from dp-data.js', ()
 
 test('feel card renders state values and commits each control with the token', () => {
     const world = new SettingsWorld();
-    world.push({ ...BASE_STATE, bottomPad: 24, holdMs: 450, scrubSpeed: 2, popupSnap: 2, candidateFont: 2 });
-    equal(world.$('bottomPad').value, '24', 'bottom pad from state');
+    world.push({ ...BASE_STATE, bottomPadPortrait: 24, bottomPadLandscape: 12, holdMs: 450, scrubSpeed: 2, popupSnap: 2, candidateFont: 2 });
+    equal(world.$('bottomPadPortrait').value, '24', 'portrait pad from state');
+    equal(world.$('bottomPadLandscape').value, '12', 'landscape pad from state');
     equal(world.$('holdMs').value, '450', 'hold ms from state');
     equal(world.$('scrubSpeed').value, '2', 'scrub speed from state');
     equal(world.$('popupSnap').value, '2', 'popup snap from state');
@@ -709,8 +711,10 @@ test('feel card renders state values and commits each control with the token', (
     equal(world.lastCall('setFeelOptions').args, [2, 450, 2, world.token], 'feel triple + token');
     fire('scrubSpeed');
     equal(world.lastCall('setFeelOptions').args, [2, 450, 2, world.token], 'unchanged values still complete');
-    fire('bottomPad');
-    equal(world.lastCall('setBottomPadding').args, [24, world.token], 'bottom pad + token');
+    fire('bottomPadPortrait');
+    equal(world.lastCall('setBottomPadPortrait').args, [24, world.token], 'portrait pad + token');
+    fire('bottomPadLandscape');
+    equal(world.lastCall('setBottomPadLandscape').args, [12, world.token], 'landscape pad + token');
     fire('candidateFont');
     equal(world.lastCall('setCandidateFont').args, [2, world.token], 'candidate font + token');
 });
@@ -718,14 +722,16 @@ test('feel card renders state values and commits each control with the token', (
 test('feel card defaults when state omits the values and never adopts off-whitelist ones', () => {
     const world = new SettingsWorld();
     world.push({ ...BASE_STATE });
-    equal(world.$('bottomPad').value, '0', 'pad default 0');
+    equal(world.$('bottomPadPortrait').value, '0', 'portrait pad default 0');
+    equal(world.$('bottomPadLandscape').value, '0', 'landscape pad default 0');
     equal(world.$('holdMs').value, '350', 'hold default 350');
     equal(world.$('scrubSpeed').value, '3', 'scrub default 3x');
     equal(world.$('popupSnap').value, '1', 'snap default standard');
     equal(world.$('candidateFont').value, '0', 'candidate font default 100%');
     // Native validates too, but the page must not blindly mirror junk.
-    world.push({ ...BASE_STATE, bottomPad: 7, holdMs: 1234, scrubSpeed: 99, popupSnap: 9, candidateFont: 5 });
-    equal(world.$('bottomPad').value, '0', 'off-list pad ignored');
+    world.push({ ...BASE_STATE, bottomPadPortrait: 7, bottomPadLandscape: 9, holdMs: 1234, scrubSpeed: 99, popupSnap: 9, candidateFont: 5 });
+    equal(world.$('bottomPadPortrait').value, '0', 'off-list portrait pad ignored');
+    equal(world.$('bottomPadLandscape').value, '0', 'off-list landscape pad ignored');
     equal(world.$('holdMs').value, '350', 'off-list hold ignored');
     equal(world.$('scrubSpeed').value, '3', 'off-list scrub ignored');
     equal(world.$('popupSnap').value, '1', 'off-list snap ignored');

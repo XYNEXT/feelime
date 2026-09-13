@@ -159,9 +159,16 @@
       <div class="row language-row">
         <span class="row-label">
           <span data-i18n="input.feel.pad">底部留白</span>
-          <small data-i18n="input.feel.padHint">键盘下方的空白高度，0 保持贴底（终端场景）。</small>
+          <small data-i18n="input.feel.padHint">键盘下方的空白高度，0 保持贴底（终端场景）。横竖屏分开保存，补偿全面屏手势条或 ColorOS 收起键等系统元素。</small>
         </span>
-        <select id="bottomPad" class="select" aria-label="底部留白" data-i18n-aria="input.feel.pad">
+        <select id="bottomPadPortrait" class="select" aria-label="底部留白 · 竖屏" data-i18n-aria="input.feel.padPortrait">
+          <option value="0">0 dp</option>
+          <option value="12">12 dp</option>
+          <option value="24">24 dp</option>
+          <option value="36">36 dp</option>
+          <option value="48">48 dp</option>
+        </select>
+        <select id="bottomPadLandscape" class="select" aria-label="底部留白 · 横屏" data-i18n-aria="input.feel.padLandscape">
           <option value="0">0 dp</option>
           <option value="12">12 dp</option>
           <option value="24">24 dp</option>

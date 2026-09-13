@@ -122,7 +122,11 @@ rime 预热（round-2 B2.6 风险清单）→ backlog；自动循环重试 → �
   pad ∈ {0,12,24,36,48}dp，默认 0=现状；用户拖拽/保存的高度值仍是内容
   单位，**原生保存协议不变**（heightCssPx==0 删除覆盖值的语义保留，
   FeelimeService.kt:1721）。
-- 原生：pref 放 `feelime_keyboard`（新 int 键 `bottom_pad_dp`）；
+- **方向独立（issue #5 追加）**：pref 拆成 `bottom_pad_dp_portrait` /
+  `bottom_pad_dp_landscape` 两键，设置页两条档位；旧单键 `bottom_pad_dp`
+  保留作迁移默认源（新键缺省回落旧值，改任一方向后分叉）。IME hello 的
+  `bottomPad` 由原生按当前方向取值后下发，键盘 JS 无感知。
+- 原生：pref 放 `feelime_keyboard`；
   FixedHeightInputView 测量 = `min(content, contentCeil) + pad +
   navBottomInset()`（横屏 ceil 公式同步，FeelimeService.kt:2263 一处）；
   setter 落 pref + requestLayout + 重推 hello。**原生高度上下限（

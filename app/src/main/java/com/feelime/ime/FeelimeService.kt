@@ -2,6 +2,7 @@ package com.feelime.ime
 
 import android.Manifest
 import android.content.Intent
+import android.provider.Settings
 import android.content.pm.PackageManager
 import android.graphics.Color
 import android.inputmethodservice.InputMethodService
@@ -2374,15 +2375,25 @@ class FeelimeService : InputMethodService(), AsrEngine.Listener {
         return effectiveBottomInset(reported)
     }
 
-    /** ColorOS landscape reports navigationBars.bottom == 0
-     * while the gesture strip still overlays the screen bottom (observed
-     * on device: the last key row sat half under it). When the system refuses to
-     * report the inset, fall back to the platform navigation_bar_height
-     * dimen - capped at 32dp because the strip this guards is a thin band.
-     * This legacy resource estimate stays landscape-only. Portrait uses
+    /** ColorOS/OxygenOS (oplus 代码库) draw their collapse-keyboard /
+     * IME-switcher buttons OVER the keyboard window while reporting
+     * navigationBars.bottom == 0 (issue #5, portrait included) - those
+     * buttons are a SystemUI overlay outside every public inset. On such
+     * devices, when the system refuses to report the inset, fall back to
+     * the platform navigation_bar_height dimen - capped at 32dp because
+     * the strip this guards is a thin band. Stock ROMs keep the legacy
+     * behaviour: the dimen estimate stays landscape-only, portrait uses
      * measured system areas and never adds a fixed guessed inset. */
     private fun effectiveBottomInset(reported: Int): Int {
         if (reported > 0) return reported
+        if (isOplusRom && android.os.Build.VERSION.SDK_INT >= 29 && isGestureNavigation()) {
+            if (navInsetFallback < 0) {
+                val id = resources.getIdentifier("navigation_bar_height", "dimen", "android")
+                val raw = if (id > 0) resources.getDimensionPixelSize(id) else 0
+                navInsetFallback = minOf(raw, (32 * resources.displayMetrics.density).toInt())
+            }
+            return navInsetFallback
+        }
         if (resources.configuration.orientation !=
             android.content.res.Configuration.ORIENTATION_LANDSCAPE
         ) return 0
@@ -2392,6 +2403,31 @@ class FeelimeService : InputMethodService(), AsrEngine.Listener {
             navInsetFallback = minOf(raw, (32 * resources.displayMetrics.density).toInt())
         }
         return navInsetFallback
+    }
+
+    /** oplus 代码库探测（ColorOS 与 OxygenOS 同源，营销名不参与判定）。
+     * SystemProperties 是 hide API，反射取值，失败一律视为非 oplus。 */
+    private val isOplusRom: Boolean by lazy {
+        sequenceOf(
+            "ro.build.version.oplusrom",
+            "ro.oplus.version",
+            "ro.vendor.oplus.market.name",
+        ).any { key -> getSystemProperty(key).isNotEmpty() }
+    }
+
+    private fun getSystemProperty(key: String): String = try {
+        val getMethod = Class.forName("android.os.SystemProperties")
+            .getMethod("get", String::class.java)
+        (getMethod.invoke(null, key) as? String) ?: ""
+    } catch (error: Exception) {
+        ""
+    }
+
+    /** Settings.Secure.navigation_mode: 2 = 手势导航（API 29+）。 */
+    private fun isGestureNavigation(): Boolean = try {
+        Settings.Secure.getString(contentResolver, "navigation_mode") == "2"
+    } catch (error: Exception) {
+        false
     }
 
     /** Watch the decor view's insets so a navigation-bar inset

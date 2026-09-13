@@ -49,6 +49,11 @@ const val ACTION_KEYBOARD_PREFS_CHANGED = "com.feelime.ime.KEYBOARD_PREFS_CHANGE
 // 双方共用同一份定义；非法持久值一律回落默认。
 const val KEYBOARD_PREFS_FILE = "feelime_keyboard"
 const val PREF_BOTTOM_PAD_DP = "bottom_pad_dp"
+
+// 留白按方向独立（横竖屏系统条高度不同，横屏高度预算也紧张）；旧单键
+// 保留作迁移默认源——新键缺省时回落旧值，用户改任一方向后开始分叉。
+const val PREF_BOTTOM_PAD_DP_PORTRAIT = "bottom_pad_dp_portrait"
+const val PREF_BOTTOM_PAD_DP_LANDSCAPE = "bottom_pad_dp_landscape"
 val BOTTOM_PAD_STEPS = intArrayOf(0, 12, 24, 36, 48)
 const val PREF_FEEL_SCRUB_SPEED = "feel_scrub_speed"
 const val PREF_FEEL_HOLD_MS = "feel_hold_ms"
@@ -57,11 +62,25 @@ const val PREF_FEEL_POPUP_SNAP = "feel_popup_snap"
 const val PREF_CANDIDATE_FONT = "candidate_font"
 
 /** 键盘侧偏好读取（非法持久值回落默认）；设置页 state 与 IME hello 共用。 */
+fun readBottomPadPortraitDp(context: Context): Int =
+    readBottomPadDpForKey(context, PREF_BOTTOM_PAD_DP_PORTRAIT)
+
+fun readBottomPadLandscapeDp(context: Context): Int =
+    readBottomPadDpForKey(context, PREF_BOTTOM_PAD_DP_LANDSCAPE)
+
+/** IME hello 用：按当前显示方向取值（IME context 的 configuration 跟随方向）。 */
 fun readBottomPadDp(context: Context): Int =
-    context.getSharedPreferences(KEYBOARD_PREFS_FILE, Context.MODE_PRIVATE)
-        .getInt(PREF_BOTTOM_PAD_DP, 0)
-        .takeIf { it in BOTTOM_PAD_STEPS }
-        ?: 0
+    if (context.resources.configuration.orientation ==
+        android.content.res.Configuration.ORIENTATION_LANDSCAPE
+    ) readBottomPadLandscapeDp(context) else readBottomPadPortraitDp(context)
+
+private fun readBottomPadDpForKey(context: Context, key: String): Int {
+    val prefs = context.getSharedPreferences(KEYBOARD_PREFS_FILE, Context.MODE_PRIVATE)
+    val legacy = prefs.getInt(PREF_BOTTOM_PAD_DP, 0)
+        .takeIf { it in BOTTOM_PAD_STEPS } ?: 0
+    return prefs.getInt(key, Int.MIN_VALUE)
+        .takeIf { it in BOTTOM_PAD_STEPS } ?: legacy
+}
 
 fun readFeelScrubSpeed(context: Context): Int =
     context.getSharedPreferences(KEYBOARD_PREFS_FILE, Context.MODE_PRIVATE)
@@ -309,7 +328,8 @@ class SettingsBridge(
             .put("dpScheme", com.feelime.ime.engine.DoublePinyinScheme.resolve(context))
             .put("fuzzyPinyinMask", com.feelime.ime.engine.FuzzyPinyin.mask(context))
             .put("associationOn", readAssociation(context))
-            .put("bottomPad", readBottomPadDp(context))
+            .put("bottomPadPortrait", readBottomPadPortraitDp(context))
+            .put("bottomPadLandscape", readBottomPadLandscapeDp(context))
             .put("scrubSpeed", readFeelScrubSpeed(context))
             .put("holdMs", readFeelHoldMs(context))
             .put("popupSnap", readFeelPopupSnap(context))
@@ -657,7 +677,14 @@ class SettingsBridge(
     /** 底部留白（mode-fallback §3）：档位离散，非法值报错不落盘。写完
      *  广播让 IME 重推 hello，运行中的键盘即时采用新 pad。 */
     @JavascriptInterface
-    fun setBottomPadding(dp: Int, token: String) = guarded(token) {
+    fun setBottomPadPortrait(dp: Int, token: String) =
+        setBottomPadFor(PREF_BOTTOM_PAD_DP_PORTRAIT, dp, token)
+
+    @JavascriptInterface
+    fun setBottomPadLandscape(dp: Int, token: String) =
+        setBottomPadFor(PREF_BOTTOM_PAD_DP_LANDSCAPE, dp, token)
+
+    private fun setBottomPadFor(key: String, dp: Int, token: String) = guarded(token) {
         if (dp !in BOTTOM_PAD_STEPS) {
             pushEvent(
                 JSONObject()
@@ -669,7 +696,7 @@ class SettingsBridge(
             return@guarded
         }
         context.getSharedPreferences(KEYBOARD_PREFS_FILE, Context.MODE_PRIVATE)
-            .edit().putInt(PREF_BOTTOM_PAD_DP, dp).apply()
+            .edit().putInt(key, dp).apply()
         context.sendBroadcast(
             Intent(ACTION_KEYBOARD_PREFS_CHANGED).setPackage(context.packageName),
         )

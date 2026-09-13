@@ -234,7 +234,9 @@ const I18N = {
         "input.feel.title": "键盘手感",
         "input.feel.badge": "微调",
         "input.feel.pad": "底部留白",
-        "input.feel.padHint": "键盘下方的空白高度，0 保持贴底（终端场景）。",
+        "input.feel.padHint": "键盘下方的空白高度，0 保持贴底（终端场景）。横竖屏分开保存，补偿全面屏手势条或 ColorOS 收起键等系统元素。",
+        "input.feel.padPortrait": "底部留白 · 竖屏",
+        "input.feel.padLandscape": "底部留白 · 横屏",
         "input.feel.candFont": "候选字号",
         "input.feel.candFontHint": "候选词文字的大小，不改变键盘行高。",
         "input.feel.hold": "长按触发时长",
@@ -519,7 +521,9 @@ const I18N = {
         "input.feel.title": "Keyboard feel",
         "input.feel.badge": "Tuning",
         "input.feel.pad": "Bottom padding",
-        "input.feel.padHint": "Blank strip under the keys; 0 keeps the keyboard flush with the screen (terminal use).",
+        "input.feel.padHint": "Blank strip under the keys; 0 keeps the keyboard flush with the screen (terminal use). Saved per orientation to compensate gesture bars or OEM IME buttons.",
+        "input.feel.padPortrait": "Bottom padding · Portrait",
+        "input.feel.padLandscape": "Bottom padding · Landscape",
         "input.feel.candFont": "Candidate text size",
         "input.feel.candFontHint": "Size of the candidate words; keyboard row height is unchanged.",
         "input.feel.hold": "Long-press trigger",
@@ -829,7 +833,8 @@ function renderFeel(state) {
         const text = String(value);
         if (allowed.includes(text) && document.activeElement !== node) node.value = text;
     };
-    setSelect("bottomPad", state.bottomPad ?? 0, ["0", "12", "24", "36", "48"]);
+    setSelect("bottomPadPortrait", state.bottomPadPortrait ?? 0, ["0", "12", "24", "36", "48"]);
+    setSelect("bottomPadLandscape", state.bottomPadLandscape ?? 0, ["0", "12", "24", "36", "48"]);
     setSelect("candidateFont", state.candidateFont ?? 0, ["0", "1", "2"]);
     setSelect("holdMs", state.holdMs ?? 350, ["200", "300", "350", "450", "600"]);
     setSelect("scrubSpeed", state.scrubSpeed ?? 3, ["1", "2", "3", "4", "5"]);
@@ -1263,7 +1268,8 @@ function submitFeelOptions() {
         parseInt($("popupSnap").value, 10),
     );
 }
-$("bottomPad").addEventListener("change", event => call("setBottomPadding", parseInt(event.target.value, 10)));
+$("bottomPadPortrait").addEventListener("change", event => call("setBottomPadPortrait", parseInt(event.target.value, 10)));
+$("bottomPadLandscape").addEventListener("change", event => call("setBottomPadLandscape", parseInt(event.target.value, 10)));
 $("candidateFont").addEventListener("change", event => call("setCandidateFont", parseInt(event.target.value, 10)));
 $("holdMs").addEventListener("change", submitFeelOptions);
 $("scrubSpeed").addEventListener("change", submitFeelOptions);
