@@ -124,6 +124,11 @@ def main():
               " && !!document.querySelector('[data-role=\"t9sym\"]')") is True)
     record("t9: mic carries data-key 0",
            ev("document.getElementById('spaceKey').dataset.key") == "0")
+    # 改进点 1：空格右上角 0 角标 + 长按圆点挪左上（.t9-space 挂钩）。
+    record("t9: space 0 badge + corner-dot class",
+           ev("document.getElementById('spaceKey').classList.contains('t9-space')"
+              " && !!document.getElementById('spaceKey')"
+              ".querySelector('.t9-sup')") is True)
     cells = side_cells()
     record("t9: idle strip shows common characters",
            "，" in cells and "。" in cells, f"{cells[:6]}")
@@ -229,6 +234,53 @@ def main():
                f"field={committed!r}")
     else:
         record("t9: tap zhong narrows candidates", False, "no zhong cell")
+
+    # ===== 六项改进：词频序 / 确认边界 / 读音回显 =====
+    d.clear_field(kb)
+    type_digits(geo, "64426")
+    time.sleep(0.8)
+    cells = side_cells()
+    record("t9: 64 ranks ni first by weight", bool(cells) and cells[0] == "ni",
+           f"cells={cells[:8]}")
+    record("t9: second-char readings banned pre-confirm",
+           not any(c in cells for c in ("hao", "gan", "ha", "ga")),
+           f"cells={cells[:8]}")
+    pre = preedit_text()
+    record("t9: preedit shows readings not digits",
+           bool(pre) and all(ch in "abcdefghijklmnopqrstuvwxyz'" for ch in pre),
+           f"preedit={pre!r}")
+    if tap_side_cell("ni"):
+        time.sleep(0.8)
+        cells2 = side_cells()
+        record("t9: after ni pick pending 426 lists hao",
+               "hao" in cells2 and "ni" not in cells2, f"cells={cells2[:8]}")
+    else:
+        record("t9: after ni pick pending 426 lists hao", False, "no ni cell")
+    d.clear_field(kb)
+
+    # ===== 1 键：长按 chrome（工具栏让位 + × 取消）/ 上滑字面 1 =====
+    x1, y1 = geo["1"]
+    d.synth_touch("start", x1, y1)
+    time.sleep(0.65)
+    # 松手后再读：longFired 必须保住 chrome（touchend 补发 click 会把它
+    # 冲回普通符号行，codex round-4 P2-2）。
+    d.synth_touch("end", x1, y1)
+    time.sleep(0.4)
+    chrome = ev("""(() => ({
+        setup: document.getElementById('setupButton').hidden,
+        clear: !document.getElementById('composeClear').hidden }))()""")
+    record("t9: 1-key long-press chrome hides toolbar + shows ×",
+           bool(chrome) and chrome.get("setup") is True and chrome.get("clear") is True,
+           f"chrome={chrome}")
+    x_at = element_center('#composeClear')
+    if x_at:
+        d.tap(*css2phys(x_at), wait=0.5)
+    restored = ev("!document.getElementById('setupButton').hidden")
+    record("t9: × restores the toolbar", restored is True, f"restored={restored}")
+    d.synth_swipe(x1, y1, x1, y1 - 160)
+    time.sleep(0.6)
+    field = (d.field_text_retry() or "").strip()
+    record("t9: 1 up-swipe commits literal 1", field == "1", f"field={field!r}")
 
     # ===== 长按全后选浮层 =====
     d.clear_field(kb)

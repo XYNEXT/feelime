@@ -600,7 +600,8 @@ body[data-cand-font="xlarge"] { --cand-font-scale: 1.35; }
     font-size: 10px;
     color: var(--key-subtext);
 }
-.t9-group { font-size: min(20px, calc(var(--kb-row-h, 44px) * 0.46)); }
+/* 字母组主字形不加重——kb-key 的 550 在大号字母组上显得过粗（用户反馈） */
+.t9-group { font-size: min(20px, calc(var(--kb-row-h, 44px) * 0.46)); font-weight: 400; }
 /* 底行：123 与中英各 2/3 键宽，省出的空间全给 mic/空格（5/3 键宽）。 */
 .t9-r4 { display: flex; gap: 5px; min-width: 0; }
 .t9-r4 .kb-key { flex: 3; min-width: 0; }
@@ -611,6 +612,8 @@ body[data-cand-font="xlarge"] { --cand-font-scale: 1.35; }
 /* 横屏高度预算按 qwerty 的 4px gap 计算——T9 保持 5px 会侵入底部
  * 预留（codex round-2 P2-7 实测 3px）。 */
 body.landscape .t9-grid { gap: 4px 5px; }
+/* T9 空格键：长按圆点（::after）挪到左上角，右上角留给字面 0 角标。 */
+#spaceKey.t9-space::after { right: auto; left: 3px; }
 /* Emoji sub-view: snapping page scroller over the category strip.
  * No edge mask - the pages are exactly full width and a mask would dim
  * the first/last emoji column. */

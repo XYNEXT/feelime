@@ -2093,6 +2093,11 @@ test('t9 renders the five-column grid and selects via the menu', {since: '3.35.0
     // mic 挂 data-key=0：上滑字面 0 + 横滑 scrub 的手势选择器依赖
     // （T9 下唯一保留 scrub 的键）。
     equal(world.$('spaceKey').dataset.key, '0', 'mic carries data-key 0');
+    // 右上角 0 角标提示上滑字面 0；长按圆点由 .t9-space 的 CSS 挪到左上。
+    assert(world.$('spaceKey').classList.contains('t9-space'),
+        'space marked for the corner-dot swap');
+    assert([...world.$('spaceKey').querySelectorAll('.t9-sup')]
+        .some(s => s.textContent === '0'), 'space shows the 0 badge');
     // 菜单可选。
     const world2 = fresh();
     world2.touchDown(world2.$('modeToggle'));
@@ -4481,57 +4486,119 @@ test('t9 mic key: literal 0 up, horizontal scrub, tap space', {since: '3.35.0'},
     equal(world.native.of('space').slice(-1).length, 1, 'mic tap sends space');
 });
 
-test('t9 syllable strip lists readings for the trailing segment', {since: '3.35.0'}, () => {
+test('t9 syllable strip: freq order, confirmed boundary, reading echo', {since: '3.35.0'}, () => {
     const world = fresh({ mode: 't9' });
-    // 尾段 n426：n 属于同一未完成音节（滑动确认的首字母），不是「已
-    // 确认音节」——候选必须与 n 一致（ni/nian/niao），hao/gan 这类
-    // 不一致读音绝不出现（codex round-2 P2-5 复现用例）。
-    world.engineState({ phase: 'READY', mode: 't9', revision: 1, composing: 'n426',
-        rawInput: 'n426', candidates: [], hasNextPage: false });
-    const labels = [...world.document.querySelectorAll('#t9Strip .t9-side-cell')]
+    // 64426 首字未确认：左列只出首字读法、按词典词频全局降序（64 的 ni
+    // 压过 6 的 o/mi），第二字的 ga/ha/gan/gao 绝不提前出现——引擎回显的
+    // 段空格（'64 426'）是切分猜测，不能当确认边界（用户定稿）。
+    world.engineState({ phase: 'READY', mode: 't9', revision: 1, composing: '64 426',
+        rawInput: '64 426', candidates: [], hasNextPage: false });
+    const cells = () => [...world.document.querySelectorAll('#t9Strip .t9-side-cell')]
         .map(c => c.textContent);
-    assert(labels.includes('ni'), 'ni listed');
-    assert(labels.includes('nian') && labels.includes('niao'), 'longer n-readings listed');
+    let labels = cells();
+    equal(labels[0], 'ni', '64 ranks ni first by dictionary weight');
+    assert(labels.includes('mi') && labels.includes('o'), 'other readings of 6/64 follow');
     assert(!labels.includes('hao') && !labels.includes('gan'),
-        'inconsistent readings never offered');
-    assert(labels.includes('n'), 'initial prefix listed');
-    // 点 nian → 整段重写为 nian。
-    const nian = [...world.document.querySelectorAll('#t9Strip .t9-side-cell')]
-        .find(c => c.textContent === 'nian');
-    world.tap(nian);
-    equal(world.native.of('setComposition').slice(-1)[0].args[0], 'nian',
-        'syllable pick rewrites the whole trailing segment atomically');
-    // 目标回声落地，重写完成（variantReplaying 解除）。
-    world.engineState({ phase: 'READY', mode: 't9', revision: 2, composing: 'nian',
-        rawInput: 'nian', candidates: [{ id: 'c1', text: '年' }], hasNextPage: false });
-    // 引擎回显带段空格（ni 已确认）：待确认段只剩 426 → hao 可选，
-    // 点 hao → nihao（确认边界不能吞掉剩余段的候选，codex round-3 P2）。
-    world.engineState({ phase: 'READY', mode: 't9', revision: 3, composing: 'ni 426',
+        'second-char readings banned before the first char is confirmed');
+    equal(world.$('preeditLine').textContent, "ni'hao",
+        'preedit shows the top reading of each segment, not digits');
+    // 点 ni → 未确认段重写为 ni426（原子 setComposition）；确认边界=首段。
+    world.tap([...world.document.querySelectorAll('#t9Strip .t9-side-cell')]
+        .find(c => c.textContent === 'ni'));
+    equal(world.native.of('setComposition').slice(-1)[0].args[0], 'ni426',
+        'syllable pick rewrites the pending segment atomically');
+    // 重放期间再点选必须被丢弃：switchToVariant 会早退，边界不能先挪
+    // （codex round-4 P2-5）。
+    world.tap([...world.document.querySelectorAll('#t9Strip .t9-side-cell')]
+        .find(c => c.textContent === 'o'));
+    equal(world.native.of('setComposition').length, 1, 'pick during replay is refused');
+    // 引擎回声落地：待确认段只剩 426 → hao/gan 上位，ni 不再重复出现。
+    world.engineState({ phase: 'READY', mode: 't9', revision: 2, composing: 'ni 426',
         rawInput: 'ni 426', candidates: [], hasNextPage: false });
-    const seg2 = [...world.document.querySelectorAll('#t9Strip .t9-side-cell')]
-        .map(c => c.textContent);
-    assert(seg2.includes('hao') && seg2.includes('gan'), 'pending 426 lists hao/gan');
-    assert(!seg2.includes('nian'), 'confirmed ni is not re-offered');
-    const hao = [...world.document.querySelectorAll('#t9Strip .t9-side-cell')]
-        .find(c => c.textContent === 'hao');
-    world.tap(hao);
+    labels = cells();
+    assert(labels.includes('hao') && labels.includes('gan'), 'pending 426 lists hao/gan');
+    assert(!labels.includes('ni'), 'confirmed ni is not re-offered');
+    // 点 hao → nihao；全部确认后待确认段为空，左列回到常用字符。
+    world.tap([...world.document.querySelectorAll('#t9Strip .t9-side-cell')]
+        .find(c => c.textContent === 'hao'));
     equal(world.native.of('setComposition').slice(-1)[0].args[0], 'nihao',
         'hao after confirmed ni rewrites to nihao');
-    // hao 的回声落地（解除 replay 冻结）。
-    world.engineState({ phase: 'READY', mode: 't9', revision: 4, composing: 'nihao',
+    world.engineState({ phase: 'READY', mode: 't9', revision: 3, composing: 'nihao',
         rawInput: 'nihao', candidates: [{ id: 'c1', text: '你好' }], hasNextPage: false });
-    // 纯数字段行为不变：94664 仍列 zhong。
-    world.engineState({ phase: 'READY', mode: 't9', revision: 5, composing: '94664',
+    assert(cells().includes('，'), 'fully confirmed strip returns to symbols');
+    // 退格删进已确认段 = 边界作废：读音从头重算（段内字母仍约束候选）。
+    world.engineState({ phase: 'READY', mode: 't9', revision: 4, composing: 'nih',
+        rawInput: 'nih', candidates: [], hasNextPage: false });
+    assert(cells().includes('ni'), 'deletion re-enumerates readings from scratch');
+    // 独立场景：滑动输入的裸字母段 n426 只列 n- 一致读音（codex round-2
+    // P2-5 复现用例），hao/gan 绝不出现；声母前缀缀尾。
+    const world2 = fresh({ mode: 't9' });
+    world2.engineState({ phase: 'READY', mode: 't9', revision: 1, composing: 'n 426',
+        rawInput: 'n 426', candidates: [], hasNextPage: false });
+    const mixed = [...world2.document.querySelectorAll('#t9Strip .t9-side-cell')]
+        .map(c => c.textContent);
+    assert(mixed.includes('ni') && mixed.includes('nian') && mixed.includes('niao'),
+        'letter-consistent readings listed');
+    assert(!mixed.includes('hao') && !mixed.includes('gan'),
+        'inconsistent readings never offered');
+    assert(mixed.includes('n'), 'initial prefix listed');
+    // 无段空格的单段读音也要贪婪覆盖整段（P2-1）：64426 → ni'hao。
+    world2.engineState({ phase: 'READY', mode: 't9', revision: 2, composing: '64426',
+        rawInput: '64426', candidates: [], hasNextPage: false });
+    equal(world2.$('preeditLine').textContent, "ni'hao",
+        'single-segment reading greedily covers the whole input');
+    // 纯数字段行为不变：94664 仍列 zhong/xiong。
+    world2.engineState({ phase: 'READY', mode: 't9', revision: 3, composing: '94664',
         rawInput: '94664', candidates: [], hasNextPage: false });
-    const digits = [...world.document.querySelectorAll('#t9Strip .t9-side-cell')]
+    const digits = [...world2.document.querySelectorAll('#t9Strip .t9-side-cell')]
         .map(c => c.textContent);
     assert(digits.includes('zhong') && digits.includes('xiong'), 'digit segment lists zhong/xiong');
     // 组合结束后左列回到常用字符。
-    world.engineState({ phase: 'READY', mode: 't9', revision: 6, composing: '', rawInput: '',
+    world2.engineState({ phase: 'READY', mode: 't9', revision: 4, composing: '', rawInput: '',
         candidates: [], hasNextPage: false });
-    const idle = [...world.document.querySelectorAll('#t9Strip .t9-side-cell')]
+    const idle = [...world2.document.querySelectorAll('#t9Strip .t9-side-cell')]
         .map(c => c.textContent);
     assert(idle.includes('，') && idle.includes('。'), 'idle strip shows common characters');
+    // 尾段内退格不动确认边界：ni 426 → ni 42 仍出第二段读音（codex
+    // round-4 P2-4 的保留面）；删进已确认段才从头重算。
+    const world3 = fresh({ mode: 't9' });
+    world3.engineState({ phase: 'READY', mode: 't9', revision: 1, composing: '64 426',
+        rawInput: '64 426', candidates: [], hasNextPage: false });
+    world3.tap([...world3.document.querySelectorAll('#t9Strip .t9-side-cell')]
+        .find(c => c.textContent === 'ni'));
+    world3.engineState({ phase: 'READY', mode: 't9', revision: 2, composing: 'ni 426',
+        rawInput: 'ni 426', candidates: [], hasNextPage: false });
+    world3.engineState({ phase: 'READY', mode: 't9', revision: 3, composing: 'ni 42',
+        rawInput: 'ni 42', candidates: [], hasNextPage: false });
+    const tail = [...world3.document.querySelectorAll('#t9Strip .t9-side-cell')]
+        .map(c => c.textContent);
+    assert(tail.includes('ha') || tail.includes('ga'), 'tail deletion keeps the boundary');
+    assert(!tail.includes('nian'), 'boundary kept: no from-scratch readings');
+    // 连续造词：librime 把已选汉字写进 preedit（'你 426'）——已选文字
+    // 不进音节枚举，剩余段照常可点，点选重写保留汉字前缀（codex
+    // round-2 P2-2）。
+    const world4 = fresh({ mode: 't9' });
+    world4.engineState({ phase: 'READY', mode: 't9', revision: 1, composing: '你 426',
+        rawInput: '你 426', candidates: [{ id: 'c1', text: '你' }], hasNextPage: false });
+    const afterHan = [...world4.document.querySelectorAll('#t9Strip .t9-side-cell')]
+        .map(c => c.textContent);
+    assert(afterHan.includes('hao') && afterHan.includes('gan'),
+        'hanzi preedit prefix leaves the tail selectable');
+    world4.tap([...world4.document.querySelectorAll('#t9Strip .t9-side-cell')]
+        .find(c => c.textContent === 'hao'));
+    equal(world4.native.of('setComposition').slice(-1)[0].args[0], '你hao',
+        'hao pick preserves the committed hanzi prefix');
+    // 目标回声落地解除重放冻结，再喂新输入。
+    world4.engineState({ phase: 'READY', mode: 't9', revision: 2, composing: '你 hao',
+        rawInput: '你 hao', candidates: [{ id: 'c1', text: '你好' }], hasNextPage: false });
+    // 科学计数词频（了 le 1.49e+06）入索引：53 → le 排 ke 前（codex
+    // round-2 P2-3）。
+    world4.engineState({ phase: 'READY', mode: 't9', revision: 3, composing: '53',
+        rawInput: '53', candidates: [], hasNextPage: false });
+    world4.engineState({ phase: 'READY', mode: 't9', revision: 2, composing: '53',
+        rawInput: '53', candidates: [], hasNextPage: false });
+    equal([...world4.document.querySelectorAll('#t9Strip .t9-side-cell')]
+        .map(c => c.textContent)[0], 'le', 'scientific-notation weights: 53 lists le first');
 });
 
 test('t9 mic scrub cancels the pending voice hold timer', {since: '3.35.0'}, () => {
@@ -4583,6 +4650,51 @@ test('t9 function keys: confirm/重输/1/123/emoji', {since: '3.35.0'}, () => {
     world.tap(world.document.querySelector('[data-role="t9emoji"]'));
     assert(!world.$('numPadLayer').hidden, 'emoji opens the nine-pad');
     assert(world.document.querySelector('.emoji-area'), 'emoji view is showing');
+});
+
+test('t9 1-key chrome: toolbar yields, × restores, up-flick commits 1', {since: '3.35.0'}, () => {
+    const world = fresh({ mode: 't9' });
+    world.engineState({ phase: 'READY', mode: 't9', revision: 1, composing: '', rawInput: '',
+        candidates: [], hasNextPage: false });
+    const one = world.key('1');
+    // 长按 1：chrome 态——工具栏图标全部隐藏，仅最右 × 保留用于取消。
+    world.touchDown(one);
+    world.clock.advance(360);
+    // 松手：longFired 置位后 touchend 不补发 click，chrome 态必须保住
+    // （codex round-4 P2-2）。
+    world.touchUp(one);
+    assert(world.$('setupButton').hidden, 'setup tool hidden in chrome mode');
+    assert(world.$('clipboardButton').hidden, 'clipboard tool hidden');
+    assert(!world.$('composeClear').hidden, '× visible to cancel the bar');
+    // 联想事件让符号行让位时工具栏必须复原（onAssoc 不经过
+    // updateComposing，codex round-4 P2-3）。
+    world.assoc(['的', '是']);
+    assert(!world.$('setupButton').hidden, 'assoc yield restores the toolbar');
+    assert(world.$('composeClear').hidden, 'assoc yield hides ×');
+    // 重新进 chrome 态再验 × 取消路径（先清掉联想词，让位分支不再触发）。
+    world.assoc([]);
+    world.touchDown(one);
+    world.clock.advance(360);
+    world.touchUp(one);
+    assert(world.$('setupButton').hidden, 'chrome re-enters after assoc yield');
+    // 空闲引擎事件/原生状态刷新不得翻回工具栏（× 是唯一取消入口，
+    // codex round-2 P2-4）。
+    world.engineState({ phase: 'READY', mode: 't9', revision: 2, composing: '', rawInput: '',
+        candidates: [], hasNextPage: false });
+    assert(world.$('setupButton').hidden, 'idle refresh holds the chrome');
+    assert(!world.$('composeClear').hidden, '× survives idle refresh');
+    // × 单击 = 只关符号行并恢复工具栏，绝不清组合。
+    world.tap(world.$('composeClear'));
+    assert(!world.$('setupButton').hidden, 'toolbar restored');
+    assert(world.$('composeClear').hidden, '× hidden again');
+    equal(world.native.of('clearComposing').length, 0, '× must not clear the composition');
+    // 上滑 1 = 字面数字 1（1 不在引擎 alphabet，sendSymbol 旁路上屏）。
+    world.touchDown(one, 20, 20);
+    world.move(one, 20, -30);
+    world.touchUp(one);
+    world.clock.advance(2);
+    equal(world.native.of('commitText').slice(-1)[0].args[0], '1',
+        'up-flick commits literal 1');
 });
 
 test('t9 7/9 down-swipe opens the split popup (下左/下右)', {since: '3.35.0'}, () => {

@@ -707,9 +707,10 @@
         za zai zan zang zao ze zei zen zeng zha zhai zhan zhang zhao zhe zhei zhen zheng zhi zhong zhou zhu zhua zhuai zhuan zhuang zhui zhun zhuo zi zong zou zu zuan zui zun zuo`.trim().split(/\s+/);
 
 // BEGIN GENERATED T9_SYLLABLE_INDEX
-    // 由 scripts/generate-t9-syllables.py 生成：数字串 → 音节/
-    // 声母前缀（424 音节，源 luna_pinyin.table.txt）。
-    const T9_SYLLABLE_INDEX = {"full":{"2":["a"],"24":["ai","bi","ci"],"26":["an","ao","bo"],"264":["ang"],"22":["ba","ca"],"224":["bai","cai"],"226":["ban","bao","can","cao"],"2264":["bang","cang"],"234":["bei","cei"],"236":["ben","cen"],"2364":["beng","ceng"],"2426":["bian","biao","chan","chao"],"24264":["biang","chang"],"243":["bie","che"],"246":["bin"],"2464":["bing"],"28":["bu","cu"],"23":["ce"],"242":["cha"],"2424":["chai"],"2436":["chen"],"24364":["cheng"],"244":["chi"],"24664":["chong"],"2468":["chou"],"248":["chu"],"2482":["chua"],"24824":["chuai"],"24826":["chuan"],"248264":["chuang"],"2484":["chui"],"2486":["chun","chuo"],"2664":["cong"],"268":["cou"],"2826":["cuan"],"284":["cui"],"286":["cun","cuo"],"32":["da","fa"],"324":["dai"],"326":["dan","dao","fan"],"3264":["dang","fang"],"33":["de"],"334":["dei","fei"],"336":["den","fen"],"3364":["deng","feng"],"34":["di","eh","ei"],"342":["dia"],"3426":["dian","diao","fiao"],"343":["die"],"346":["din"],"3464":["ding"],"348":["diu"],"3664":["dong","fong"],"368":["dou","fou"],"38":["du","fu"],"3826":["duan"],"384":["dui"],"386":["dun","duo"],"3":["e"],"36":["en","fo"],"364":["eng"],"37":["er"],"42":["ga","ha"],"424":["gai","hai"],"426":["gan","gao","han","hao"],"4264":["gang","hang"],"43":["ge","he"],"434":["gei","hei"],"436":["gen","hen"],"4364":["geng","heng"],"4664":["gong","hong"],"468":["gou","hou"],"48":["gu","hu"],"482":["gua","hua"],"4824":["guai","huai"],"4826":["guan","huan"],"48264":["guang","huang"],"484":["gui","hui"],"486":["gun","guo","hun","huo"],"54":["ji","li"],"542":["jia","lia"],"5426":["jian","jiao","lian","liao"],"54264":["jiang","liang"],"543":["jie","lie"],"546":["jin","lin"],"5464":["jing","ling"],"54664":["jiong"],"548":["jiu","liu"],"58":["ju","ku","lu","lv"],"5826":["juan","kuan","luan","lvan"],"583":["jue","lve"],"586":["jun","kun","kuo","lun","luo"],"52":["ka","la"],"524":["kai","lai"],"526":["kan","kao","lan","lao"],"5264":["kang","lang"],"53":["ke","le"],"534":["kei","lei"],"536":["ken"],"5364":["keng","leng"],"5664":["kong","long"],"568":["kou","lou"],"582":["kua"],"5824":["kuai"],"58264":["kuang"],"584":["kui"],"56":["lo"],"62":["ma","na"],"624":["mai","nai"],"626":["man","mao","nan","nao"],"6264":["mang","nang"],"63":["me","ne"],"634":["mei","nei"],"636":["men","nen"],"6364":["meng","neng"],"64":["mi","ni"],"6426":["mian","miao","nian","niao"],"643":["mie","nie"],"646":["min","nin"],"6464":["ming","ning"],"648":["miu","niu"],"66":["mo"],"668":["mou","nou"],"68":["mu","nu","nv","ou"],"642":["nia"],"64264":["niang"],"6664":["nong"],"6826":["nuan"],"686":["nun","nuo"],"683":["nve"],"6":["o"],"72":["pa","sa"],"724":["pai","sai"],"726":["pan","pao","ran","rao","san","sao"],"7264":["pang","rang","sang"],"734":["pei","sei"],"736":["pen","ren","sen"],"7364":["peng","reng","seng"],"74":["pi","qi","ri","si"],"742":["pia","qia","sha"],"7426":["pian","piao","qian","qiao","shan","shao"],"743":["pie","qie","she"],"746":["pin","qin"],"7464":["ping","qing"],"76":["po"],"768":["pou","rou","sou"],"78":["pu","qu","ru","su"],"74264":["qiang","shang"],"74664":["qiong"],"748":["qiu","shu"],"7826":["quan","ruan","suan"],"783":["que"],"786":["qun","run","ruo","sun","suo"],"73":["re","se"],"7664":["rong","song"],"782":["rua"],"784":["rui","sui"],"7424":["shai"],"7434":["shei"],"7436":["shen"],"74364":["sheng"],"744":["shi"],"7468":["shou"],"7482":["shua"],"74824":["shuai"],"74826":["shuan"],"748264":["shuang"],"7484":["shui"],"7486":["shun","shuo"],"82":["ta"],"824":["tai"],"826":["tan","tao"],"8264":["tang"],"83":["te"],"834":["tei"],"8364":["teng"],"84":["ti"],"8426":["tian","tiao"],"843":["tie"],"8464":["ting"],"8664":["tong"],"868":["tou"],"88":["tu"],"8826":["tuan"],"884":["tui"],"886":["tun","tuo"],"92":["wa","ya","za"],"924":["wai","yai","zai"],"926":["wan","yan","yao","zan","zao"],"9264":["wang","yang","zang"],"934":["wei","zei"],"936":["wen","zen"],"9364":["weng","zeng"],"96":["wo","yo"],"9664":["wong","yong","zong"],"98":["wu","xu","yu","zu"],"94":["xi","yi","zi"],"942":["xia","zha"],"9426":["xian","xiao","zhan","zhao"],"94264":["xiang","zhang"],"943":["xie","zhe"],"946":["xin","yin"],"9464":["xing","ying"],"94664":["xiong","zhong"],"948":["xiu","zhu"],"9826":["xuan","yuan","zuan"],"983":["xue","yue"],"986":["xun","yun","zun","zuo"],"93":["ye","ze"],"968":["you","zou"],"9424":["zhai"],"9434":["zhei"],"9436":["zhen"],"94364":["zheng"],"944":["zhi"],"9468":["zhou"],"9482":["zhua"],"94824":["zhuai"],"94826":["zhuan"],"948264":["zhuang"],"9484":["zhui"],"9486":["zhun","zhuo"],"984":["zui"]},"pre":{"2":["b","c"],"7":["p","q","r","s"],"6":["m","n"],"3":["f","d"],"8":["t"],"5":["l","k","j"],"4":["g","h"],"9":["x","z","y","w"],"94":["zh"],"24":["ch"],"74":["sh"]}};
+    // 由 scripts/generate-t9-syllables.py 生成：数字串 → 音节
+    // （组内按词典词频降序）+ 音节词重表 + 声母前缀层
+    // （424 音节，源 luna_pinyin.table.txt）。
+    const T9_SYLLABLE_INDEX = {"full":{"33":["de"],"53":["le","ke"],"96":["wo","yo"],"744":["shi"],"924":["zai","wai","yai"],"64":["ni","mi"],"548":["jiu","liu"],"43":["he","ge"],"94":["yi","zi","xi"],"968":["you","zou"],"28":["bu","cu"],"326":["dan","dao","fan"],"943":["zhe","xie"],"786":["suo","qun","run","sun","ruo"],"636":["men","nen"],"934":["wei","zei"],"946":["yin","xin"],"486":["guo","huo","hun","gun"],"78":["ru","qu","pu","su"],"54":["ji","li"],"468":["hou","gou"],"424":["hai","gai"],"93":["ye","ze"],"926":["yao","yan","wan","zao","zan"],"368":["dou","fou"],"22":["ba","ca"],"426":["hao","gan","gao","han"],"634":["mei","nei"],"82":["ta"],"7486":["shuo","shun"],"386":["duo","dun"],"436":["hen","gen"],"63":["me","ne"],"743":["she","qie","pie"],"7436":["shen"],"74264":["shang","qiang"],"9426":["xian","xiao","zhan","zhao"],"98":["xu","yu","wu","zu"],"384":["dui"],"94664":["zhong","xiong"],"726":["ran","san","pan","pao","rao","sao"],"62":["na","ma"],"944":["zhi"],"24":["bi","ci","ai"],"736":["ren","sen","pen"],"37":["er"],"74":["qi","si","ri","pi"],"526":["kan","lao","kao","lan"],"524":["lai","kai"],"4826":["huan","guan"],"4664":["gong","hong"],"482":["hua","gua"],"9826":["xuan","yuan","zuan"],"984":["zui"],"484":["hui","gui"],"5464":["jing","ling"],"8664":["tong"],"38":["fu","du"],"6364":["neng","meng"],"784":["sui","rui"],"434":["gei","hei"],"546":["jin","lin"],"9464":["xing","ying"],"3364":["deng","feng"],"986":["zuo","yun","xun","zun"],"983":["xue","yue"],"3264":["dang","fang"],"9264":["yang","wang","zang"],"2426":["chan","biao","bian","chao"],"746":["pin","qin"],"936":["zen","wen"],"84":["ti"],"9436":["zhen"],"9664":["yong","zong","wong"],"543":["jie","lie"],"32":["da","fa"],"542":["jia","lia"],"94826":["zhuan"],"5426":["jiao","jian","liao","lian"],"942":["xia","zha"],"36":["en","fo"],"7664":["rong","song"],"7426":["qian","shao","pian","piao","qiao","shan"],"94264":["xiang","zhang"],"3426":["dian","diao","fiao"],"234":["bei","cei"],"226":["ban","bao","cao","can"],"248":["chu"],"24264":["chang","biang"],"334":["fei","dei"],"58":["ju","lv","lu","ku"],"748":["shu","qiu"],"2664":["cong"],"3664":["dong","fong"],"34":["di","eh","ei"],"42":["ha","ga"],"54264":["jiang","liang"],"6426":["mian","nian","miao","niao"],"68":["mu","nu","nv","ou"],"74364":["sheng"],"236":["ben","cen"],"884":["tui"],"2464":["bing"],"8426":["tian","tiao"],"48":["hu","gu"],"286":["cun","cuo"],"52":["la","ka"],"7468":["shou"],"624":["mai","nai"],"336":["fen","den"],"586":["kuo","lun","luo","jun","kun"],"583":["jue","lve"],"7264":["rang","pang","sang"],"7464":["ping","qing"],"824":["tai"],"364":["eng"],"24364":["cheng"],"948":["zhu","xiu"],"7364":["peng","reng","seng"],"224":["cai","bai"],"7826":["quan","ruan","suan"],"2":["a"],"94364":["zheng"],"534":["lei","kei"],"92":["ya","za","wa"],"26":["an","bo","ao"],"724":["pai","sai"],"783":["que"],"58264":["kuang"],"244":["chi"],"868":["tou"],"3464":["ding"],"243":["bie","che"],"7484":["shui"],"83":["te"],"948264":["zhuang"],"5664":["kong","long"],"4364":["geng","heng"],"324":["dai"],"66":["mo"],"9486":["zhun","zhuo"],"8826":["tuan"],"6464":["ming","ning"],"7434":["shei"],"9364":["zeng","weng"],"626":["nan","man","nao","mao"],"3826":["duan"],"24664":["chong"],"2264":["bang","cang"],"5824":["kuai"],"536":["ken"],"826":["tao","tan"],"4264":["hang","gang"],"646":["nin","min"],"88":["tu"],"48264":["guang","huang"],"742":["sha","qia","pia"],"242":["cha"],"2364":["ceng","beng"],"5826":["kuan","luan","juan","lvan"],"8464":["ting"],"24826":["chuan"],"23":["ce"],"73":["se","re"],"7424":["shai"],"9484":["zhui"],"668":["mou","nou"],"768":["sou","rou","pou"],"5264":["kang","lang"],"248264":["chuang"],"9468":["zhou"],"6264":["mang","nang"],"76":["po"],"72":["pa","sa"],"8364":["teng"],"56":["lo"],"734":["pei","sei"],"2486":["chun","chuo"],"6664":["nong"],"748264":["shuang"],"4824":["guai","huai"],"568":["kou","lou"],"284":["cui"],"3":["e"],"648":["niu","miu"],"6":["o"],"584":["kui"],"7482":["shua"],"843":["tie"],"2436":["chen"],"64264":["niang"],"9424":["zhai"],"9482":["zhua"],"343":["die"],"6826":["nuan"],"643":["mie","nie"],"886":["tuo","tun"],"8264":["tang"],"686":["nuo","nun"],"2468":["chou"],"5364":["leng","keng"],"74824":["shuai"],"2484":["chui"],"348":["diu"],"2424":["chai"],"582":["kua"],"74664":["qiong"],"246":["bin"],"264":["ang"],"54664":["jiong"],"268":["cou"],"9434":["zhei"],"342":["dia"],"94824":["zhuai"],"24824":["chuai"],"683":["nve"],"642":["nia"],"2826":["cuan"],"74826":["shuan"],"834":["tei"],"782":["rua"],"2482":["chua"],"346":["din"]},"pre":{"2":["b","c"],"7":["p","q","r","s"],"6":["m","n"],"3":["f","d"],"8":["t"],"5":["l","k","j"],"4":["g","h"],"9":["x","z","y","w"],"94":["zh"],"24":["ch"],"74":["sh"]},"w":{"ling":101601.0,"tian":110731.0,"wu":75447.0,"pi":23423.0,"qia":10561.0,"chu":133824.0,"ye":404779.0,"jia":167401.0,"xue":177616.0,"ao":9136.0,"zan":23242.0,"gong":234244.0,"zong":52879.0,"xing":187596.0,"qin":32100.0,"xi":190700.0,"xie":268736.0,"bo":27491.0,"e":16452.0,"zheng":82665.0,"bao":100006.0,"yuan":58764.0,"qing":72567.0,"che":27023.3,"le":1495850.0,"zhan":91754.0,"san":36542.0,"shi":1180110.0,"die":9582.0,"qu":331354.0,"meng":16382.0,"yi":635391.0,"zhuo":8404.0,"si":234244.0,"ding":68928.0,"ba":385554.0,"chang":129032.0,"wei":474154.0,"xian":283910.0,"huan":235076.0,"xuan":216102.0,"kao":62877.0,"qiao":34543.0,"qi":245931.0,"shang":285526.0,"xia":164421.0,"han":19592.0,"mo":62488.0,"wan":87086.0,"zhang":76398.0,"ji":444292.0,"bu":590801.0,"yu":258188.0,"gai":98472.0,"mian":117698.0,"chou":7917.0,"qie":250274.0,"pei":27136.0,"qiu":109014.0,"bing":112978.0,"cheng":95999.0,"diu":6453.0,"liang":106330.0,"you":613999.0,"gun":10790.0,"shu":128574.0,"jiu":664963.0,"ya":79996.0,"qiang":30519.0,"zhong":278588.0,"xun":50467.0,"jie":167731.0,"feng":62257.0,"guan":118727.0,"kuang":72567.0,"chuan":36437.0,"chan":174020.0,"dian":138948.0,"zhu":92763.0,"dan":567022.0,"dong":126783.0,"jing":209044.0,"li":137141.0,"pie":1124.0,"fu":199709.0,"ai":32742.0,"nai":11863.0,"tuo":8898.0,"zhe":559659.0,"ma":221081.0,"me":295927.0,"yao":397297.0,"cha":40313.0,"zhi":253997.0,"zha":8619.0,"hu":109383.0,"fa":125666.0,"ping":98670.0,"pang":17570.0,"guai":19261.0,"sheng":114814.0,"yin":474154.0,"mie":8995.0,"nie":5001.0,"ge":635391.0,"he":664831.0,"dou":385949.0,"nang":1929.0,"ru":448056.0,"yan":93375.0,"sha":41314.0,"na":269940.0,"gan":76480.0,"qian":148413.0,"suo":531858.0,"chi":71344.0,"luan":13475.0,"gui":32535.0,"jun":23295.0,"lin":16405.0,"jue":99870.0,"liao":51026.0,"er":250274.0,"xu":281927.0,"yun":58476.0,"sui":195165.0,"gen":102983.0,"geng":63482.0,"zhai":13091.0,"zi":444292.0,"tou":70242.0,"wang":84561.0,"kang":31203.0,"da":167401.0,"dai":62548.0,"tai":98670.0,"jiao":165124.0,"hai":419427.0,"heng":20540.0,"xiang":142577.0,"ting":37642.0,"xin":89682.0,"zhen":169887.0,"lian":50794.0,"men":479209.0,"ren":250956.0,"shen":295927.0,"ze":216102.0,"pu":52398.0,"jin":187596.0,"ning":5348.0,"reng":26909.0,"bi":252143.0,"fo":4861.59,"zai":974219.0,"ta":344401.0,"gang":39563.0,"hong":13906.2,"tong":205273.0,"chao":50445.0,"miao":35376.0,"sa":18783.0,"mu":117345.0,"fan":36047.0,"yang":175106.0,"jian":130635.0,"cang":12327.0,"fen":101065.0,"di":122902.0,"fang":124842.0,"diao":21526.0,"dun":19588.0,"wen":171932.0,"xiu":46492.0,"bei":138923.0,"chen":13953.0,"nu":50784.0,"tang":8801.0,"huo":316870.0,"cui":16752.0,"bai":22808.0,"gu":50581.0,"ni":972978.0,"ban":138040.0,"zhou":30479.0,"ci":121514.0,"beng":10814.0,"ga":9129.0,"leng":7003.0,"mai":101135.0,"que":72660.0,"zhao":78886.0,"zuo":177744.0,"ben":114170.0,"ti":171932.0,"she":295927.0,"gou":121192.0,"ju":128574.0,"kou":17559.0,"yong":168923.0,"wa":16583.0,"ka":30144.4,"huai":14775.0,"hui":209791.0,"ke":483983.0,"lao":142562.0,"ming":58948.0,"hen":303301.0,"gua":12581.0,"quan":87086.0,"tiao":39431.0,"kan":245657.0,"kai":195561.0,"lai":235090.0,"kua":5745.0,"guang":41722.0,"an":79643.0,"mi":22343.0,"lu":34625.0,"mou":32366.0,"lun":54594.0,"hou":429078.0,"cuo":47595.0,"hao":378951.0,"lv":50289.0,"cen":1308.0,"nan":52601.0,"xiao":94151.0,"bian":56107.0,"pian":42408.0,"tui":113080.0,"cu":11827.0,"ku":18936.0,"lang":11455.0,"zu":38108.0,"hun":16690.0,"pai":76278.0,"su":37579.0,"biao":58039.0,"fei":129032.0,"lia":6011.19,"dao":297457.0,"tan":25105.0,"chui":6883.0,"peng":91420.0,"kong":64026.0,"juan":5922.0,"wo":1191910.0,"luo":42291.0,"song":21713.0,"kun":15121.0,"cai":89512.0,"ying":113623.0,"ruan":55503.0,"chun":25230.0,"nuo":8505.0,"ruo":12110.9,"dang":176920.0,"huang":19128.0,"chai":6395.0,"sai":43689.0,"duan":52510.0,"ce":36183.0,"ou":27887.0,"za":36774.0,"kui":15691.0,"sou":31598.0,"rong":152208.0,"jiang":120425.0,"bang":50819.0,"shan":16446.0,"can":26598.0,"lei":82236.0,"zao":46076.0,"zhuan":165885.0,"chuang":31122.0,"shuang":20483.0,"lou":17439.0,"piao":37045.0,"man":37783.0,"lan":15083.0,"jiong":3690.0,"zun":18406.0,"deng":183329.0,"tie":14576.0,"seng":1527.0,"zhuang":66733.0,"min":15706.0,"nong":25174.6,"kuai":48871.0,"bin":4378.0,"neng":195401.0,"qiong":5437.0,"lie":49671.0,"du":70250.0,"teng":28492.0,"long":10914.0,"rang":99107.0,"xiong":27136.0,"chong":52476.0,"dui":280800.0,"tu":43913.0,"mao":19588.0,"nei":152208.0,"liu":34574.0,"ran":272554.0,"guo":448056.0,"pan":35462.0,"mei":347575.0,"zhun":60056.0,"cou":2624.0,"cun":104597.0,"hua":222801.0,"yue":66349.0,"bie":67379.0,"pao":22665.0,"duo":303301.0,"shua":15120.0,"kei":4642.0,"la":103305.0,"pou":2930.0,"lve":33719.0,"tuan":59868.0,"fou":83210.0,"cao":63889.0,"cuan":1527.0,"zuan":7542.0,"keng":5752.0,"shao":63342.0,"gao":50087.0,"shuo":339890.0,"cong":128082.0,"tao":45568.0,"nao":33941.0,"zang":9907.0,"suan":43385.0,"nian":106172.0,"shuai":6908.0,"ang":3740.0,"yai":1449.0,"mang":30469.0,"zui":212671.0,"rou":26113.0,"shou":101593.0,"re":15158.0,"rui":5667.0,"po":30451.0,"a":84662.0,"tun":3151.0,"hang":45453.0,"shun":19588.0,"ne":240457.0,"chuo":1408.0,"pen":2844.0,"lo":28146.0,"pin":174020.0,"ha":122324.0,"o":16231.4,"miu":1415.0,"yo":8481.0,"zou":49021.0,"nou":629.0,"ken":48286.0,"pa":29829.0,"pia":928.0,"wai":101601.0,"sang":6696.0,"sun":17818.0,"sao":4953.0,"se":35144.0,"weng":1766.0,"en":162561.0,"eng":96536.0,"dia":2018.0,"chuai":1773.0,"hei":30819.0,"ceng":39759.0,"zeng":53937.0,"ca":4711.0,"nin":45322.0,"ri":199709.0,"de":4821480.0,"zhui":32887.0,"nv":33977.0,"niu":16350.0,"kuo":100006.0,"niang":13390.0,"shui":66967.0,"niao":10283.6,"nen":3402.0,"nun":3402.0,"rao":8421.0,"nia":1532.0,"lvan":1035.0,"qun":27195.0,"kuan":39744.0,"sen":5670.0,"dei":16843.0,"te":66798.0,"tei":807.092,"zen":173763.0,"zei":4785.0,"zhua":10209.0,"shuan":1170.0,"zhuai":1869.63,"rua":426.0,"run":23259.0,"nuan":9493.0,"shai":35144.0,"ei":2139.5,"chua":418.0,"fong":340.0,"nve":1689.0,"gei":192977.0,"fiao":400.0,"eh":2139.5,"shei":54727.0,"zhei":2563.04}};
     // END GENERATED T9_SYLLABLE_INDEX
 
     // Double-pinyin parse variants and the displayed key map come from the
@@ -1059,7 +1060,14 @@
             // and restores the toolbar; ˅ expands the candidate area over the
             // whole keyboard; inside, ˄ collapses (the
             // single chevron - aborting stays with the toolbar's ×).
-            document.getElementById('composeClear').addEventListener('click', () => this.clearComposing());
+            document.getElementById('composeClear').addEventListener('click', () => {
+                // T9 符号行（1 键长按）的 × = 取消本次符号选择，工具栏恢复。
+                if (this.t9SymBar) {
+                    this.t9CloseSymbolBar();
+                    return;
+                }
+                this.clearComposing();
+            });
             document.getElementById('composeExpand').addEventListener('click', () => this.setExpanded(true));
             document.getElementById('expandCollapse').addEventListener('click', () => this.setExpanded(false));
             // Infinite horizontal strip: dragging near the right edge (or a
@@ -1374,6 +1382,8 @@
                     const one = document.createElement('button');
                     one.className = 'kb-key t9-key';
                     one.dataset.key = '1';
+                    // 长按 = 符号行 + 工具栏收起（× 取消）；点按 = 仅符号行。
+                    one.dataset.lp = 'popup';
                     one.innerHTML = '<span class="t9-sup">1</span><span class="t9-group">@#.</span>';
                     one.addEventListener('click', () => this.t9SymbolBar());
                     this.bindTouch(one);
@@ -1400,8 +1410,14 @@
             const space = this.spaceKey();
             // data-key 让通用手势层认领 mic：上滑字面 0、横滑光标 scrub
             // 都走 .kb-key[data-key] 选择器（T9 下唯一保留 scrub 的键）。
+            // 右上角 0 角标提示字面 0；长按圆点由 CSS 挪到左上角。
             space.dataset.key = '0';
             space.classList.add('t9-wide');
+            space.classList.add('t9-space');
+            const zero = document.createElement('span');
+            zero.className = 't9-sup';
+            zero.textContent = '0';
+            space.append(zero);
             r4.append(space);
             // 中英键同样压成 2/3 键宽——cnEnKey 自带的 kb-wide-1_15 会被
             // .t9-r4 .kb-key{flex:3} 盖掉，不补窄类会吃掉空格的宽度
@@ -1419,6 +1435,9 @@
             grid.append(enter);
             layer.append(grid);
             this.t9SideSig = null;
+            // 确认边界跟随组合生命周期（updateComposing 管理），不随键面
+            // 重绘清零——横竖屏切换重建键面，清零会丢掉有效边界
+            // （codex round-2 P2-1）。
             this.renderT9Side();
             this.updateLabels();
         }
@@ -1443,22 +1462,10 @@
             return button;
         }
 
-        /** 当前未完成段：引擎回显按已确认音节边界插显示空格（'ni 426'），
-         * 取最后一个空格后的待确认段；无段结构时退化为尾部连续 [a-z2-9]
-         * （n426 的 n 属于同一未完成音节，不能把 hao 排在它后面接，
-         * codex round-2 P2-5；点选 ni 后要能继续选 426 的 hao，
-         * codex round-3 P2）。不用 RegExp.lastMatch（可变全局）。 */
-        t9TrailingSegment(raw) {
-            const text = raw || '';
-            const cut = text.lastIndexOf(' ');
-            const tail = cut >= 0 ? text.slice(cut + 1) : text;
-            const m = tail.match(/[a-z2-9]+$/);
-            return m ? m[0] : '';
-        }
-
-        /** 尾段音节枚举：段的数字投影做前缀枚举，且逐位校验字母一致性
-         * （段中已确认的字母必须与音节同位字母相同或该位是数字）。
-         * pre 声母层全表枚举 + 同一一致性过滤（zh/ch/sh 因此可达）。 */
+        /** 待确认段音节枚举：对「未确认前缀之后的输入」做前缀枚举，逐位
+         * 校验字母一致性（段中已确认的字母必须与音节同位相同或该位是
+         * 数字）。候选跨前缀长度按词典词频全局降序（输入 64 → ni 在
+         * mi/o 之前），声母前缀层缀尾。 */
         t9SegmentSyllables(seg) {
             const digits = t9ToDigits(seg);
             const consistent = (form, n) => {
@@ -1469,12 +1476,14 @@
                 }
                 return true;
             };
+            const w = T9_SYLLABLE_INDEX.w || {};
             const full = [];
             for (let n = 1; n <= seg.length; n++) {
                 (T9_SYLLABLE_INDEX.full[digits.slice(0, n)] || []).forEach(s => {
                     if (consistent(s, n)) full.push(s);
                 });
             }
+            full.sort((a, b) => (w[b] || 0) - (w[a] || 0));
             const pre = [];
             const seen = new Set();
             Object.values(T9_SYLLABLE_INDEX.pre).forEach(list => list.forEach(p => {
@@ -1486,16 +1495,61 @@
             return { full, pre };
         }
 
+        /** 未确认段：键盘侧记录的「用户点选确认」边界之后的输入。引擎回显
+         * 的段空格是切分猜测不是用户确认（64426 会被引擎猜成 64|426，
+         * 首字还没定就展示第二字读法是错的，用户定稿：只出首字读法）。 */
+        t9PendingSegment() {
+            const raw = (this.lastRawInput || '').replace(/ /g, '');
+            const cut = Math.min(this.t9ConfirmedLen || 0, raw.length);
+            // librime 连续造词会把已选汉字写进 preedit（'你426'）：已选
+            // 文字不属于待确认拼写，剥掉前缀非拼写字符，音节枚举才有得
+            // 可选（codex round-2 P2-2）。边界按 raw 坐标先切再剥。
+            return raw.slice(cut).replace(/^[^a-z2-9]+/i, '');
+        }
+
+        /** 当前读音（候选字上方的拼音提示）：按引擎回显的段切分，段内
+         * 贪婪最长覆盖（同长取词频高）拼出 'ni'hao'——取词频首位会把
+         * nian 截成 ni（codex round-4 P2-1），读音必须覆盖整段；剩余
+         * 无匹配时原样保留。 */
+        t9Reading() {
+            const parts = (this.lastRawInput || '').trim().split(/ +/).filter(Boolean);
+            if (!this.composing || !parts.length) return '';
+            const w = T9_SYLLABLE_INDEX.w || {};
+            const out = [];
+            parts.forEach(part => {
+                let i = 0;
+                while (i < part.length) {
+                    // 已选汉字（连续造词的 preedit 前缀）原样保留，读音只
+                    // 对拼写段重建（codex round-2 P2-2）。
+                    if (!/[a-z2-9]/.test(part.charAt(i))) {
+                        let j = i + 1;
+                        while (j < part.length && !/[a-z2-9]/.test(part.charAt(j))) j++;
+                        out.push(part.slice(i, j));
+                        i = j;
+                        continue;
+                    }
+                    let best = null;
+                    this.t9SegmentSyllables(part.slice(i)).full.forEach(s => {
+                        if (!best || s.length > best.length ||
+                            (s.length === best.length && (w[s] || 0) > (w[best] || 0))) {
+                            best = s;
+                        }
+                    });
+                    if (!best) { out.push(part.slice(i)); break; }
+                    out.push(best);
+                    i += best.length;
+                }
+            });
+            return out.join("'");
+        }
+
         /** 左列双态：空闲=常用字符（中文标点，sendSymbol 直上屏）；组合中=
             拼音音节候选（完整音节可点重写组合，声母前缀置灰提示）。
             内容签名不变不重建——滚动位置在竖拖时不被引擎事件打断。 */
         renderT9Side() {
             const strip = document.getElementById('t9Strip');
             if (!strip || this.mode !== 't9') return;
-            // lastRawInput 保留引擎回显的段空格（'ni 426'），段提取靠它
-            // 区分「已确认音节」与「待确认段」。
-            const raw = this.lastRawInput || '';
-            const seg = this.composing ? this.t9TrailingSegment(raw) : '';
+            const seg = this.composing ? this.t9PendingSegment() : '';
             const sig = this.composing && seg ? `syl:${seg}` : 'sym';
             if (sig === this.t9SideSig) return;
             this.t9SideSig = sig;
@@ -1534,9 +1588,17 @@
          * 变体的原子 setComposition 通道。段前的已确认部分（含回显空格）
          * 原样保留。 */
         t9PickSyllable(syllable, seg) {
-            const raw = this.lastRawInput || '';
-            const head = raw.slice(0, raw.length - seg.length).replace(/ /g, '');
-            this.switchToVariant(head + syllable + seg.slice(syllable.length));
+            // 重放期间的点选直接丢弃：switchToVariant 会早退，先挪边界
+            // 会把确认段和实际组合错开（codex round-4 P2-5）。
+            if (this.variantReplaying) return;
+            const raw = (this.lastRawInput || '').replace(/ /g, '');
+            const head = raw.slice(0, raw.length - seg.length);
+            // 键盘侧确认边界 = 已确认前缀 + 本段选中音节（引擎回显的段
+            // 空格只是切分猜测，不能当确认边界用）。文本锚定给退格失效
+            // 判定用。
+            this._t9ConfirmedText = head + syllable;
+            this.t9ConfirmedLen = this._t9ConfirmedText.length;
+            this.switchToVariant(this._t9ConfirmedText + seg.slice(syllable.length));
         }
 
         /** preedit 观感：字母段与数字段之间插窄空格（64426 → ni·426 观感），
@@ -1545,11 +1607,44 @@
             return (raw || '').replace(/([a-z]+)([2-9])/g, '$1 $2');
         }
 
-        /** 1 键点按：候选条展开西文/技术符号行（sendSymbol 直上屏）。 */
-        t9SymbolBar() {
+        /** 1 键（点按/长按）：候选条展开西文/技术符号行（sendSymbol 直
+         * 上屏）。长按（chrome=true）额外收起工具栏图标，仅保留最右的
+         * × 供取消本次符号行——取消后工具栏原样恢复。 */
+        t9SymbolBar(chrome = false) {
             if (this.composing) return;
             this.t9SymBar = true;
+            this.t9BarChrome = chrome;
+            const ids = ['setupButton', 'ctrlTool', 'imeSwitchButton',
+                'clipboardButton', 'favoritesButton'];
+            ids.forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.hidden = chrome;
+            });
+            const clear = document.getElementById('composeClear');
+            if (clear) clear.hidden = !chrome;
             this.renderT9SymbolBar();
+        }
+
+        /** 撤掉符号行 chrome：工具栏图标复位、× 隐藏。联想等引擎事件
+         * 也会走这条路（onAssoc 直调 renderCandidates，不经过
+         * updateComposing——不恢复的话工具栏会一直空着，codex round-4
+         * P2-3）；组合态例外，可见性由 updateComposing 统一管。 */
+        t9RestoreBarChrome(composing) {
+            this.t9SymBar = false;
+            this.t9BarChrome = false;
+            if (composing) return;
+            ['setupButton', 'ctrlTool', 'imeSwitchButton',
+                'clipboardButton', 'favoritesButton'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.hidden = false;
+            });
+            const clear = document.getElementById('composeClear');
+            if (clear) clear.hidden = true;
+        }
+
+        t9CloseSymbolBar() {
+            this.t9RestoreBarChrome(false);
+            this.renderCandidates(this.lastEngineState || {});
         }
 
         renderT9SymbolBar() {
@@ -1834,10 +1929,16 @@
                 } else if (button.dataset.lp === 'popup' && button.dataset.key) {
                     holdTimer = setTimeout(() => {
                         if (this.swiping) return;
-                        // T9：长按=数字+字母组全后选（引擎通道）；
-                        // qwerty 维持 accent 备选弹层。
-                        if (this.mode === 't9') this.openT9HoldPopup(button);
-                        else this.openPopup(button);
+                        // T9：长按=数字+字母组全后选（引擎通道）；1 键=
+                        // 符号行并收起工具栏；qwerty 维持 accent 备选弹层。
+                        if (this.mode === 't9') {
+                            // longFired：松手的 touchend 会补发 click，不
+                            // 置位会把 chrome 态立刻冲回普通符号行。
+                            if (button.dataset.key === '1') {
+                                longFired = true;
+                                this.t9SymbolBar(true);
+                            } else this.openT9HoldPopup(button);
+                        } else this.openPopup(button);
                     }, this.holdMs);
                 } else if (button.dataset.lp === 'lock') {
                     holdTimer = setTimeout(() => {
@@ -2080,6 +2181,14 @@
                 return true;
             }
             const key = button.dataset.key;
+            // 1 键（@#.）：上滑=字面 1；下滑/横滑无语义（符号行走点按/长按）。
+            if (this.mode === 't9' && key === '1') {
+                if (vertical && dy < 0) {
+                    this.sendSymbol('1');
+                    this.showFlick(button, dy, dx);
+                }
+                return true;
+            }
             if (this.mode !== 't9' || !/^[2-9]$/.test(key)) return false;
             const letters = (LAYOUTS.t9.alts[key] || '').split('');
             if (vertical) {
@@ -4372,7 +4481,8 @@
         renderExpanded() {
             const strip = document.getElementById('expandGrid');
             document.getElementById('expandPreedit').textContent =
-                this.mode === 't9' ? this.t9PreeditLabel(this.lastRawInput)
+                this.mode === 't9'
+                    ? (this.t9Reading() || this.t9PreeditLabel(this.lastRawInput))
                     : (this.lastRawInput || '');
             strip.replaceChildren();
             this.expandRendered = 0;
@@ -4444,7 +4554,7 @@
             // T9：左列改渲染音节候选（与键盘左列同一枚举），右侧仍是
             // 该组合的候选字词——用户要的「完整候选界面」（t9.md §3）。
             if (this.mode === 't9') {
-                const seg = this.t9TrailingSegment(this.lastRawInput || '');
+                const seg = this.t9PendingSegment();
                 if (!seg) { column.hidden = true; return; }
                 column.hidden = false;
                 const makeSyllable = (syllable, disabled) => {
@@ -4653,7 +4763,7 @@
             if (this.t9SymBar) {
                 if (state.composing || this.mode !== 't9' ||
                     (this.expandCandidates || []).length || this.assocWords.length) {
-                    this.t9SymBar = false;
+                    this.t9RestoreBarChrome(state.composing);
                 } else {
                     this.renderT9SymbolBar();
                     return;
@@ -4728,8 +4838,24 @@
             document.body.classList.toggle('composing', this.composing);
             const preedit = document.getElementById('preeditLine');
             preedit.textContent = this.composing
-                ? (this.mode === 't9' ? this.t9PreeditLabel(this.lastRawInput) : this.lastRawInput)
+                ? (this.mode === 't9'
+                    ? (this.t9Reading() || this.t9PreeditLabel(this.lastRawInput))
+                    : this.lastRawInput)
                 : '';
+            if (!this.composing) {
+                this.t9ConfirmedLen = 0;
+                this._t9ConfirmedText = '';
+            } else if (this.mode === 't9' && this.t9ConfirmedLen) {
+                // 边界失效只看确认前缀本身有没有被动过：未确认尾段里退格
+                // （ni 426 → ni 42）边界保留；删进已确认段（前缀对不上）
+                // 才从头重算（codex round-4 P2-4）。变体重放的中间事件不
+                // 会走到这里（variantReplaying 早退）。
+                const raw = (this.lastRawInput || '').replace(/ /g, '');
+                if (!raw.startsWith(this._t9ConfirmedText || '')) {
+                    this.t9ConfirmedLen = 0;
+                    this._t9ConfirmedText = '';
+                }
+            }
             const recording = this.voiceState !== 'idle';
             // Composing hides the setup/mode/clipboard tools but never the mic
             // while a voice session is active (the stop entry must survive).
@@ -4758,6 +4884,17 @@
             // ASR partial that shares the editor span .
             const voiceBusy = recording;
             document.getElementById('composeClear').hidden = !this.composing || voiceBusy;
+            // T9 符号行 chrome 态：空闲刷新（onNativeState 回声、空引擎事
+            // 件）不得把工具栏翻回来——× 是唯一取消入口（codex round-2
+            // P2-4）。组合/语音中的可见性仍由上面的通用规则管。
+            if (this.mode === 't9' && this.t9BarChrome && !this.composing && !voiceBusy) {
+                ['setupButton', 'ctrlTool', 'imeSwitchButton',
+                    'clipboardButton', 'favoritesButton'].forEach(id => {
+                    const el = document.getElementById(id);
+                    if (el) el.hidden = true;
+                });
+                document.getElementById('composeClear').hidden = false;
+            }
             document.getElementById('composeExpand').hidden = !this.composing || voiceBusy;
             if (!this.composing && this.expanded && !this.variantReplaying) this.setExpanded(false);
             const mic = document.getElementById('mic');
