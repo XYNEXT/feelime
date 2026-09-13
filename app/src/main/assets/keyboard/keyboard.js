@@ -205,7 +205,7 @@
         });
     }
 
-    const KEYBOARD_VERSION = '3.36.1';
+    const KEYBOARD_VERSION = '3.37.0';
     const MIN_NATIVE_API = 1;
     const REQUIRED_CAPABILITIES = [
         'candidate-revision-v1',
@@ -1917,8 +1917,19 @@
             }
         }
 
+        /** 按键声音/触感（issue #5 问题 2）：开关在设置页、默认全关，
+         * 原生按偏好决定发声/振动。走 call() 门闸：桥未就绪不发；
+         * 旧 APK 无此通道时 typeof 守卫静默跳过。 */
+        nativeKeyFeedback() {
+            this.call(() => {
+                if (typeof Native.keyFeedback === 'function') {
+                    Native.keyFeedback(this.token);
+                }
+            });
+        }
+
         bindTouch(button, options = {}) {
- if (!button) return; // Toolbar tools may not exist
+            if (!button) return; // Toolbar tools may not exist
             if (button.dataset.bound) return;
             button.dataset.bound = '1';
             let holdTimer = 0;
@@ -1937,6 +1948,7 @@
                 event.preventDefault();
                 this.pressedKeys.add(button);
                 button.classList.add('active-touch');
+                this.nativeKeyFeedback();
                 longFired = false;
                 const touch = event.changedTouches[0];
                 if (!this.touchOrigin) {

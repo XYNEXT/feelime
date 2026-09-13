@@ -114,6 +114,19 @@ fun readAssociation(context: Context): Boolean =
     context.getSharedPreferences(KEYBOARD_PREFS_FILE, Context.MODE_PRIVATE)
         .getBoolean(PREF_ASSOCIATION, false)
 
+/** 按键反馈开关（issue #5 问题 2，借鉴 WeType「按键效果」）：
+ * 声音/触感各自独立，默认都关。 */
+const val PREF_KEY_SOUND = "key_sound_on"
+const val PREF_KEY_HAPTIC = "key_haptic_on"
+
+fun readKeySoundEnabled(context: Context): Boolean =
+    context.getSharedPreferences(KEYBOARD_PREFS_FILE, Context.MODE_PRIVATE)
+        .getBoolean(PREF_KEY_SOUND, false)
+
+fun readKeyHapticEnabled(context: Context): Boolean =
+    context.getSharedPreferences(KEYBOARD_PREFS_FILE, Context.MODE_PRIVATE)
+        .getBoolean(PREF_KEY_HAPTIC, false)
+
 /** The full-settings WebView bridge (design §6.2).
  *
  * Same handshake as the IME bridge (design §5.3): the activity mints a
@@ -328,6 +341,8 @@ class SettingsBridge(
             .put("dpScheme", com.feelime.ime.engine.DoublePinyinScheme.resolve(context))
             .put("fuzzyPinyinMask", com.feelime.ime.engine.FuzzyPinyin.mask(context))
             .put("associationOn", readAssociation(context))
+            .put("keySound", readKeySoundEnabled(context))
+            .put("keyHaptic", readKeyHapticEnabled(context))
             .put("bottomPadPortrait", readBottomPadPortraitDp(context))
             .put("bottomPadLandscape", readBottomPadLandscapeDp(context))
             .put("scrubSpeed", readFeelScrubSpeed(context))
@@ -733,6 +748,24 @@ class SettingsBridge(
         context.sendBroadcast(
             Intent(ACTION_KEYBOARD_PREFS_CHANGED).setPackage(context.packageName),
         )
+        pushState()
+    }
+
+    /** 按键反馈开关（issue #5 问题 2）：落盘即可生效——键盘每次按键都
+     * 调 keyFeedback，原生按当前偏好决定发声/振动，无需广播重推。 */
+    @JavascriptInterface
+    fun setKeySound(on: Boolean, token: String) = guarded(token) {
+        applyKeyFeedbackPref(PREF_KEY_SOUND, on)
+    }
+
+    @JavascriptInterface
+    fun setKeyHaptic(on: Boolean, token: String) = guarded(token) {
+        applyKeyFeedbackPref(PREF_KEY_HAPTIC, on)
+    }
+
+    private fun applyKeyFeedbackPref(key: String, on: Boolean) {
+        context.getSharedPreferences(KEYBOARD_PREFS_FILE, Context.MODE_PRIVATE)
+            .edit().putBoolean(key, on).apply()
         pushState()
     }
 

@@ -224,6 +224,14 @@
           <option value="2" data-i18n="input.feel.snapTight">紧</option>
         </select>
       </div>
+      <label class="row switch-row" for="keySound">
+        <span class="row-label"><span data-i18n="input.feel.keySound">按键声音</span><small data-i18n="input.feel.keySoundHint">按键时轻响一声，跟随系统音量，静音时不响。</small></span>
+        <input type="checkbox" id="keySound" class="toggle">
+      </label>
+      <label class="row switch-row" for="keyHaptic">
+        <span class="row-label"><span data-i18n="input.feel.keyHaptic">按键振动</span><small data-i18n="input.feel.keyHapticHint">按键时轻短振动一下，强度跟随机型；系统触感总开关关闭时不震。</small></span>
+        <input type="checkbox" id="keyHaptic" class="toggle">
+      </label>
       <p id="feelNote" class="hint block"></p>
     </section>
 

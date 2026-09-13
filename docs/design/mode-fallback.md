@@ -176,6 +176,27 @@ hello**，不用 merged-store 整镜像替换（round-2 C7.1：会删其他键�
 - 变更链路：设置页写桥接端点 → pref + 广播 → IME 重推 hello → 键盘即时
   应用；首次拉取不删任何本地键。
 
+### 4.1 按键声音/振动反馈（issue #5 问题 2，借鉴 WeType「按键效果」）
+
+- 形态：设置页「键盘手感」两个独立开关（按键声音/按键振动），
+  **默认全关**（与 WeType 默认一致）；无音量/强度滑杆（v1 不做，走系统
+  通道已获得合理强度，见下）。
+- 通道：键盘 JS 在每个按键 `touchstart` 调一次 `FeelimeNative.keyFeedback
+  (token)`（走 `call()` 门闸：桥未就绪不发；旧 APK 无此方法时 typeof
+  守卫静默跳过）。原生 `ImeBridge.keyFeedback` 按当前偏好分别触发：
+  - 振动 = `performHapticFeedback(KEYBOARD_TAP,
+    FLAG_IGNORE_GLOBAL_SETTING)`：跟随机型调校；IGNORE 标志让本开关
+    成为唯一权威（否则系统触感总开关关闭时「开了没反应」）。
+  - 声音 = `AudioManager.playSoundEffect(FX_KEY_CLICK)`：跟随系统音量、
+    静音模式不响（WeType 页面同款提示语义）。
+  - 偏好 `key_sound_on`/`key_haptic_on`（feelime_keyboard，Boolean，
+    默认 false）每次按键时读取，开关即时生效，无需广播重推 hello。
+- 边界：反馈只挂在 touchstart——退格长按的 75ms 重复、滑动消歧的
+  中途 move 都不追加反馈；候选条/浮层选字不在本范围（WeType 也只对
+  按键生效）。
+- 备份：`UserdataBackup.BOOL_KEYS` 登记 `feelime_keyboard` 的
+  association_on + key_sound_on + key_haptic_on。
+
 ## 5. 剪贴板清空后残留修复
 
 根因：clear() 只清历史；编辑器聚焦 captureCurrent()（FeelimeService

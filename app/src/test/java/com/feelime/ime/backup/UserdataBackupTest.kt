@@ -31,6 +31,9 @@ class UserdataBackupTest {
         val prefs = FakePrefs()
         prefs.put("feelime_ui", "theme", "dark")
         prefs.put("feelime_keyboard", "keyboard_height_portrait", 640)
+        prefs.put("feelime_keyboard", "association_on", true)
+        prefs.put("feelime_keyboard", "key_sound_on", true)
+        prefs.put("feelime_keyboard", "key_haptic_on", false)
         prefs.put("feelime_custom_keys", "enabled", true)
         prefs.put("feelime_custom_keys", "json", """{"rows":[]}""")
         prefs.put("feelime_favorites", "items", "f1\t1730000000000\tcode1\t常用语\\t细\t3")
@@ -58,6 +61,9 @@ class UserdataBackupTest {
 
         // 类型保真：Int 仍是 Int、Boolean 仍是 Boolean（串型会让读侧崩）。
         assertEquals(640, target.all("feelime_keyboard")["keyboard_height_portrait"])
+        assertEquals(true, target.all("feelime_keyboard")["association_on"])
+        assertEquals(true, target.all("feelime_keyboard")["key_sound_on"])
+        assertEquals(false, target.all("feelime_keyboard")["key_haptic_on"])
         assertEquals(true, target.all("feelime_custom_keys")["enabled"])
         assertEquals(true, target.all("keyboard_update")["update_auto_check_enabled"])
         assertEquals("dark", target.all("feelime_ui")["theme"])

@@ -589,6 +589,10 @@ class MockNative {
     key(char, token) {
         this._record('key', [char, token]);
     }
+    // issue #5 问题 2：按键声音/触感，开关在设置页、默认全关。
+    keyFeedback(token) {
+        this._record('keyFeedback', [token]);
+    }
     setComposition(keys, token) {
         this._record('setComposition', [keys, token]);
     }

@@ -1,8 +1,11 @@
 package com.feelime.ime
 
 import android.Manifest
+import android.content.Context
 import android.content.Intent
+import android.media.AudioManager
 import android.provider.Settings
+import android.view.HapticFeedbackConstants
 import android.content.pm.PackageManager
 import android.graphics.Color
 import android.inputmethodservice.InputMethodService
@@ -1645,6 +1648,26 @@ class FeelimeService : InputMethodService(), AsrEngine.Listener {
                 return@guarded
             }
             coordinator.setComposition(keys)
+        }
+
+        /** 按键反馈（issue #5 问题 2）：声音/触感各自受设置页开关控制，
+         * 默认都关——都关时这里只是一次空操作。走系统通道：
+         * 触感 KEYBOARD_TAP（跟随机型调校；FLAG_IGNORE_GLOBAL_SETTING
+         * 让本开关成为唯一权威，避免「开了没反应」），声音
+         * FX_KEY_CLICK（跟随系统音量与静音，与 WeType 行为一致）。 */
+        @JavascriptInterface
+        fun keyFeedback(token: String) = guarded(token, limited = false) {
+            val view = keyboardView
+            if (readKeyHapticEnabled(this@FeelimeService) && view != null) {
+                view.performHapticFeedback(
+                    HapticFeedbackConstants.KEYBOARD_TAP,
+                    HapticFeedbackConstants.FLAG_IGNORE_GLOBAL_SETTING,
+                )
+            }
+            if (readKeySoundEnabled(this@FeelimeService)) {
+                (getSystemService(Context.AUDIO_SERVICE) as? AudioManager)
+                    ?.playSoundEffect(AudioManager.FX_KEY_CLICK)
+            }
         }
 
         @JavascriptInterface

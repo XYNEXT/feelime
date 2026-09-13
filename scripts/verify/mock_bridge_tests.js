@@ -124,6 +124,28 @@ test('letter taps send one scalar each', () => {
     equal(keys, 'hello', 'typed letters');
 });
 
+test('key press feedback fires once per touchstart with the token', () => {
+    const world = fresh();
+    const token = world.native.of('keyboardReady')[0].args[3];
+    const key = world.key('h');
+    world.touchDown(key);
+    world.touchUp(key);
+    const feedback = world.native.of('keyFeedback');
+    equal(feedback.length, 1, 'one feedback per key touchstart');
+    equal(feedback[0].args[0], token, 'feedback carries the page token');
+
+    // 退格长按的 75ms 重复不触发额外反馈（反馈只在 touchstart）。
+    const backspace = [...world.document.querySelectorAll('.kb-special')].find(
+        el => el.dataset.role === 'backspace',
+    );
+    world.touchDown(backspace);
+    world.clock.advance(400);
+    world.clock.advance(300);
+    world.touchUp(backspace);
+    const backspaceFeedback = world.native.of('keyFeedback').length;
+    assert(backspaceFeedback === 2, `touchstart-only feedback, got ${backspaceFeedback}`);
+});
+
 test('space tap sends space', () => {
     const world = fresh();
     world.tap(world.$('spaceKey'));

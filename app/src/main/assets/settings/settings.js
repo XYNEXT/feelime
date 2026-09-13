@@ -248,6 +248,10 @@ const I18N = {
         "input.feel.snapLoose": "松",
         "input.feel.snapStandard": "标准",
         "input.feel.snapTight": "紧",
+        "input.feel.keySound": "按键声音",
+        "input.feel.keySoundHint": "按键时轻响一声，跟随系统音量，静音时不响。",
+        "input.feel.keyHaptic": "按键振动",
+        "input.feel.keyHapticHint": "按键时轻短振动一下，强度跟随机型；系统触感总开关关闭时不震。",
         "error.INVALID_FEEL_OPTION": "手感参数无效，已还原为原值。",
         "error.EMPTY_SOURCE": "请先填入更新源地址（metainfo.json）。",
         "error.EMPTY_URL": "请先填入键盘包地址。",
@@ -532,6 +536,10 @@ const I18N = {
         "input.feel.scrubHint": "Distance the caret moves per drag step.",
         "input.feel.snap": "Swipe selection range",
         "input.feel.snapHint": "How far the finger may drift during popup swipe before the pick cancels: loose = forgiving, tight = early cancel.",
+        "input.feel.keySound": "Key sound",
+        "input.feel.keySoundHint": "A soft click on each key press; follows system volume, silent in mute mode.",
+        "input.feel.keyHaptic": "Key vibration",
+        "input.feel.keyHapticHint": "A light tap on each key press; strength follows the device tuning. No vibration while the system haptics master switch is off.",
         "input.feel.snapLoose": "Loose",
         "input.feel.snapStandard": "Standard",
         "input.feel.snapTight": "Tight",
@@ -839,6 +847,12 @@ function renderFeel(state) {
     setSelect("holdMs", state.holdMs ?? 350, ["200", "300", "350", "450", "600"]);
     setSelect("scrubSpeed", state.scrubSpeed ?? 3, ["1", "2", "3", "4", "5"]);
     setSelect("popupSnap", state.popupSnap ?? 1, ["0", "1", "2"]);
+    const setToggle = (id, value) => {
+        const node = $(id);
+        if (node && document.activeElement !== node) node.checked = !!value;
+    };
+    setToggle("keySound", state.keySound);
+    setToggle("keyHaptic", state.keyHaptic);
 }
 
 /** 双拼方案 + 键位图（dp-data.js 的 window.FeelimeDp 提供各方案键位）。 */
@@ -1328,6 +1342,8 @@ $("btnCustomTemplate").addEventListener("click", () => {
 $("btnCheckUpdate").addEventListener("click", () => call("checkUpdate", $("updateSource").value));
 $("autoUpdateCheck").addEventListener("change", event => call("setAutoUpdateCheck", event.target.checked));
 $("associationOn").addEventListener("change", event => call("setAssociation", event.target.checked));
+$("keySound").addEventListener("change", event => call("setKeySound", event.target.checked));
+$("keyHaptic").addEventListener("change", event => call("setKeyHaptic", event.target.checked));
 document.querySelectorAll("input[data-fuzzy-bit]").forEach(box => {
     box.addEventListener("change", () => {
         let mask = 0;

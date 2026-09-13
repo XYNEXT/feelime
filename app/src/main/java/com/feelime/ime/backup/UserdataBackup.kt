@@ -2,10 +2,13 @@ package com.feelime.ime.backup
 
 import com.feelime.ime.BOTTOM_PAD_STEPS
 import com.feelime.ime.FEEL_HOLD_STEPS
+import com.feelime.ime.PREF_ASSOCIATION
 import com.feelime.ime.PREF_BOTTOM_PAD_DP
 import com.feelime.ime.PREF_FEEL_HOLD_MS
 import com.feelime.ime.PREF_FEEL_POPUP_SNAP
 import com.feelime.ime.PREF_FEEL_SCRUB_SPEED
+import com.feelime.ime.PREF_KEY_HAPTIC
+import com.feelime.ime.PREF_KEY_SOUND
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -348,6 +351,11 @@ class UserdataBackup(
         private val BOOL_KEYS = mapOf(
             "feelime_custom_keys" to setOf("enabled"),
             "feelime_asr" to setOf("strip_final_period"),
+            "feelime_keyboard" to setOf(
+                PREF_ASSOCIATION,
+                PREF_KEY_SOUND,
+                PREF_KEY_HAPTIC,
+            ),
             UPDATE_PREFS to setOf("update_auto_check_enabled"),
         )
 

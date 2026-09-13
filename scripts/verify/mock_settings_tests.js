@@ -84,6 +84,8 @@ class MockSettingsNative {
     setCandidateFont(...a) { this._rec('setCandidateFont', a); }
     setFuzzyPinyinMask(...a) { this._rec('setFuzzyPinyinMask', a); }
     setAssociation(...a) { this._rec('setAssociation', a); }
+    setKeySound(...a) { this._rec('setKeySound', a); }
+    setKeyHaptic(...a) { this._rec('setKeyHaptic', a); }
     // /R8: page reporting (BACK returns home first) + about-page
     // one-tap copy.
     reportPage(...a) { this._rec('reportPage', a); }
@@ -781,6 +783,26 @@ test('association toggle reflects state and commits with the token', () => {
     change.handler({ target: box });
     equal(world.lastCall('setAssociation').args, [true, world.token],
         'association toggle + token');
+});
+
+test('key feedback toggles reflect state and commit with the token (default off)', () => {
+    const world = new SettingsWorld();
+    // Both default off: empty state renders unchecked.
+    world.push({ ...BASE_STATE });
+    equal(world.$('keySound').checked, false, 'key sound default off');
+    equal(world.$('keyHaptic').checked, false, 'key haptic default off');
+    world.push({ ...BASE_STATE, keySound: true, keyHaptic: true });
+    equal(world.$('keySound').checked, true, 'key sound follows state');
+    equal(world.$('keyHaptic').checked, true, 'key haptic follows state');
+
+    for (const [id, method] of [['keySound', 'setKeySound'], ['keyHaptic', 'setKeyHaptic']]) {
+        const box = world.$(id);
+        const change = box.listeners.find(listener => listener.type === 'change');
+        assert(change, `#${id} has a change listener`);
+        box.checked = true;
+        change.handler({ target: box });
+        equal(world.lastCall(method).args, [true, world.token], `${id} toggle + token`);
+    }
 });
 
 test('bridge validation errors surface on the feel note', () => {
