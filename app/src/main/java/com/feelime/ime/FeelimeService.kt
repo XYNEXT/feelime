@@ -129,8 +129,10 @@ class FeelimeService : InputMethodService(), AsrEngine.Listener {
     private var lastShownSafeBottom = 0
     // JS notified once per settled height value (see FixedHeightInputView).
     private var lastMeasuredHeight = -1
-    /** Resolved once per process - navigation_bar_height
-     * capped at 32dp, -1 = not resolved yet (see effectiveBottomInset). */
+    /** Legacy path only (non-oplus, or insets unavailable): resolved once
+     * per process - navigation_bar_height capped at 32dp, -1 = not
+     * resolved yet (see effectiveBottomInset). The oplus gesture floor
+     * lives in oplusInsetFloor(). */
     private var navInsetFallback = -1
     private var insetWatcherInstalled = false
     // Set while an inset change is pending its settle re-read.
@@ -2340,7 +2342,10 @@ class FeelimeService : InputMethodService(), AsrEngine.Listener {
             // bar. Reserve drawing/tap occlusion, not that entire region.
             val types = android.view.WindowInsets.Type.navigationBars() or
                 android.view.WindowInsets.Type.tappableElement()
-            val reserved = metrics.windowInsets.getInsets(types).bottom
+            // oplus gesture nav: the collapse/switch handles sit higher than
+            // the reported nav reserve (ace: reserve 16px, handles ~24dp).
+            val floor = oplusInsetFloor()
+            val reserved = maxOf(metrics.windowInsets.getInsets(types).bottom, floor)
             if (reserved == 0) return 0
             if (reserved > 0) {
                 // Decor insets may already be consumed by InputMethodService.
@@ -2375,25 +2380,15 @@ class FeelimeService : InputMethodService(), AsrEngine.Listener {
         return effectiveBottomInset(reported)
     }
 
-    /** ColorOS/OxygenOS (oplus 代码库) draw their collapse-keyboard /
-     * IME-switcher buttons OVER the keyboard window while reporting
-     * navigationBars.bottom == 0 (issue #5, portrait included) - those
-     * buttons are a SystemUI overlay outside every public inset. On such
-     * devices, when the system refuses to report the inset, fall back to
-     * the platform navigation_bar_height dimen - capped at 32dp because
-     * the strip this guards is a thin band. Stock ROMs keep the legacy
-     * behaviour: the dimen estimate stays landscape-only, portrait uses
-     * measured system areas and never adds a fixed guessed inset. */
+    /** API≤29 fallback (navBottomInset reads WindowMetrics on 30+ and
+     * applies oplusInsetFloor() there): apply the oplus gesture floor,
+     * otherwise the legacy behaviour - keep a reported inset, and when
+     * the system reports none, estimate from navigation_bar_height
+     * (landscape only, capped at 32dp). */
     private fun effectiveBottomInset(reported: Int): Int {
+        val floor = oplusInsetFloor()
+        if (floor > 0) return maxOf(reported, floor)
         if (reported > 0) return reported
-        if (isOplusRom && android.os.Build.VERSION.SDK_INT >= 29 && isGestureNavigation()) {
-            if (navInsetFallback < 0) {
-                val id = resources.getIdentifier("navigation_bar_height", "dimen", "android")
-                val raw = if (id > 0) resources.getDimensionPixelSize(id) else 0
-                navInsetFallback = minOf(raw, (32 * resources.displayMetrics.density).toInt())
-            }
-            return navInsetFallback
-        }
         if (resources.configuration.orientation !=
             android.content.res.Configuration.ORIENTATION_LANDSCAPE
         ) return 0
@@ -2405,23 +2400,36 @@ class FeelimeService : InputMethodService(), AsrEngine.Listener {
         return navInsetFallback
     }
 
-    /** oplus 代码库探测（ColorOS 与 OxygenOS 同源，营销名不参与判定）。
-     * SystemProperties 是 hide API，反射取值，失败一律视为非 oplus。 */
-    private val isOplusRom: Boolean by lazy {
-        sequenceOf(
-            "ro.build.version.oplusrom",
-            "ro.oplus.version",
-            "ro.vendor.oplus.market.name",
-        ).any { key -> getSystemProperty(key).isNotEmpty() }
+    /** 24dp floor on oplus gesture nav - the collapse-keyboard /
+     * IME-switcher handles draw above the reported nav reserve (ace:
+     * reserve 16px, handles ~24dp, issue #5). Resolved once per process;
+     * 0 = not an oplus gesture device. */
+    private var oplusFloorResolved = -1
+    private fun oplusInsetFloor(): Int {
+        if (oplusFloorResolved < 0) {
+            val hit = isOplusRom && android.os.Build.VERSION.SDK_INT >= 29 &&
+                isGestureNavigation()
+            oplusFloorResolved = if (hit) {
+                (24 * resources.displayMetrics.density).toInt()
+            } else 0
+            if (BuildConfig.DEBUG) {
+                android.util.Log.d(
+                    "FeelimeService",
+                    "oplus inset floor=$oplusFloorResolved " +
+                        "(oplus=$isOplusRom gesture=${isGestureNavigation()})",
+                )
+            }
+        }
+        return oplusFloorResolved
     }
 
-    private fun getSystemProperty(key: String): String = try {
-        val getMethod = Class.forName("android.os.SystemProperties")
-            .getMethod("get", String::class.java)
-        (getMethod.invoke(null, key) as? String) ?: ""
-    } catch (error: Exception) {
-        ""
-    }
+    /** oplus 代码库探测（ColorOS 与 OxygenOS/realme UI 同源，营销名不参与判定）。
+     * 只用公共 Build 字段：这三家品牌共享一套 SystemUI，会把收起键盘/切换
+     * 输入法把手画在输入法窗口之上（issue #5）。早期用 SystemProperties
+     * 反射取 ro.build.version.oplusrom，无法证明各 ROM 放行 app 反射，
+     * 换成零风险的公开信号。 */
+    private val isOplusRom: Boolean =
+        android.os.Build.BRAND.lowercase() in setOf("oppo", "oneplus", "realme")
 
     /** Settings.Secure.navigation_mode: 2 = 手势导航（API 29+）。 */
     private fun isGestureNavigation(): Boolean = try {

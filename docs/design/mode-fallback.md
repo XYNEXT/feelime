@@ -122,6 +122,18 @@ rime 预热（round-2 B2.6 风险清单）→ backlog；自动循环重试 → �
   pad ∈ {0,12,24,36,48}dp，默认 0=现状；用户拖拽/保存的高度值仍是内容
   单位，**原生保存协议不变**（heightCssPx==0 删除覆盖值的语义保留，
   FeelimeService.kt:1721）。
+- **oplus 手势机的 inset 地板（issue #5）**：ColorOS/OxygenOS/realme 把
+  「收起键盘/切换输入法」把手画在键盘窗口之上，而系统只报手势小条的
+  高度（ace 实测 reserve 16px，把手却画到屏幕底 ~24dp 处、压住末行按键）。
+  判定用公共字段 `Build.BRAND ∈ {oppo, oneplus, realme}`；手势导航读
+  `Settings.Secure.navigation_mode==2`（进程内各解析一次）。命中时
+  API30+ 的 WindowMetrics 读取（`navBottomInset` 主路径）与 API≤29 的
+  `effectiveBottomInset` 兜底都把底部 reserve 抬到
+  `max(系统值, 24dp)`（24dp = 把手可见带 ~18dp + 点击余量，按 ace 逐像素
+  量得）。**教训：第一版只改了 `effectiveBottomInset`，而 API30+ 设备
+  （如 ace/Android 15）走 WindowMetrics 分支根本不经过它，改造在真机上
+  静默无效**——两条路径必须一起盖。非 oplus ROM 维持「上报为 0 时横屏
+  才按 navigation_bar_height 兜底」的旧行为。
 - **方向独立（issue #5 追加）**：pref 拆成 `bottom_pad_dp_portrait` /
   `bottom_pad_dp_landscape` 两键，设置页两条档位；旧单键 `bottom_pad_dp`
   保留作迁移默认源（新键缺省回落旧值，改任一方向后分叉）。IME hello 的
