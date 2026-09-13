@@ -80,13 +80,21 @@ def main():
     check("F1 settings page renders on first launch", rendered.isdigit() and int(rendered) > 50,
           f"innerText={rendered!r}")
     xml = d.ui_dump()
+    # WebView 的 a11y 树是懒建立的——DOM 渲染完成不等于 uiautomator 能看到
+    # 内容（1.0.8 冒烟实录：DOM 704 字符稳定可见，a11y 树要再等几拍）。
     # The first page follows the device/UI locale. Keep the Chinese markers
     # for zh devices and accept the exact English labels from settings.js on
     # en devices; do not change the locale just to satisfy this smoke.
-    check("F1b settings content in a11y tree",
-          ("语音识别" in xml) or ("模型" in xml) or ("输入法" in xml)
-          or ("Voice recognition" in xml) or ("Voice models" in xml)
-          or ("Input method" in xml))
+    def _has_settings_content(x):
+        return (("语音识别" in x) or ("模型" in x) or ("输入法" in x)
+                or ("Voice recognition" in x) or ("Voice models" in x)
+                or ("Input method" in x))
+    for _ in range(6):
+        if _has_settings_content(xml):
+            break
+        time.sleep(2)
+        xml = d.ui_dump()
+    check("F1b settings content in a11y tree", _has_settings_content(xml))
     errors = d.shell("logcat -d | grep -c 'console:.*[Ee]rror' || true").strip()
     check("F2 no settings-page JS errors", errors in ("0", ""), f"count={errors}")
 
