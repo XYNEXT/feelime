@@ -156,6 +156,10 @@ DevTools 合成 TouchEvent 切到符号层（`<123>`）时会触发 qemu **静�
 
 ## 工程约定
 
+- **UI 改动先过 preview**：本版若含任何键盘/设置页的外观变化，发布前
+  必须已走「键盘外观变更流程（demo-first，强制）」并拿到确认；检查单
+  先过这条，再看双 bump/tag/冒烟。外观改动的 hotfix 同样适用（热更
+  ZIP 也是发布）。
 - **版本双 bump**：发版本必须同时改 `app/build.gradle.kts`（versionCode/
   versionName）和键盘版本（`keyboard.js` 的 `KEYBOARD_VERSION` +
   `app/src/main/assets/keyboard/VERSION`，两处一致）。设备上 built-in
@@ -192,7 +196,11 @@ DevTools 合成 TouchEvent 切到符号层（`<123>`）时会触发 qemu **静�
 ## 键盘外观变更流程（demo-first，强制）
 
 所有涉及键盘**外观**的需求（布局、间距、键面、图标、配色、新增可见
-控件），必须先出 demo、确认后再开发：
+控件，以及**任何用户能看见的变化**——现有控件的位置移动、字号/尺寸
+调整、文案排版、显示与隐藏的形态），必须先出 demo、确认后再开发。
+判断标准只看「用户眼睛能不能看到」，不区分「新控件」还是「老控件
+换个样子」；拿不准算外观。**未经预览确认的外观改动禁止进入发布**
+（包括搭其他改动的批次一起发——搭车也是发布）。
 
 1. 外观方案直接实现到**真实键盘源码**
    （`app/src/main/assets/keyboard/`），用

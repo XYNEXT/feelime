@@ -229,7 +229,7 @@
         });
     }
 
-    const KEYBOARD_VERSION = '3.41.0';
+    const KEYBOARD_VERSION = '3.42.0';
     const MIN_NATIVE_API = 1;
     const REQUIRED_CAPABILITIES = [
         'candidate-revision-v1',
@@ -885,6 +885,10 @@
             this.bottomPad = 0;
             // Candidate text scale (issue #2), pre-hello default.
             this.candidateFont = 0;
+            // 拼音字号（issue #8）：0/1/2 三档，hello 回读（旧 APK 的 hello
+            // 没有该字段时保持默认档 = 原始 13px 悬浮带）。加粗开关默认关。
+            this.preeditFont = 0;
+            this.preeditBold = false;
             // 中文联想（docs/design/association.md），hello/onAssoc 驱动。
             this.associationOn = false;
             this.assocWords = [];
@@ -3693,9 +3697,14 @@
         }
 
         /** Fixed vertical space outside the four qwerty rows. Candidate and
-         * control slots have the same total height (design §11). */
+         * control slots have the same total height (design §11). The
+         * composing-preedit band rides the top of that budget; its height
+         * mirrors the CSS --preedit-band levels (18/22/25px — sized to a
+         * CJK font line box so vendor fonts don't clip descenders, issue
+         * #8): the rows shrink by 4/8/11 against the old 14px base. */
         layoutChrome() {
-            return this.landscape ? 78 : 86;
+            const bandExtra = this.preeditFont === 2 ? 11 : this.preeditFont === 1 ? 8 : 4;
+            return (this.landscape ? 78 : 86) + bandExtra;
         }
 
         /** Read the native view's total height back as content height. The
@@ -3723,6 +3732,17 @@
             const level = Number(this.candidateFont) || 0;
             document.body.dataset.candFont =
                 level === 1 ? 'large' : level === 2 ? 'xlarge' : 'normal';
+        }
+
+        // 拼音字号（issue #8）：悬浮带回 1.0.13 的顶部形态，档位驱动
+        // --preedit-font-scale（字号）与 --preedit-band-scale（带高 +
+        // 顶部 padding/横屏 bar margin，随档位让位）。带高变化改写行高
+        // 预算（layoutChrome 按 preeditFont 加增量），切档重算 applyHeight。
+        applyPreeditFont() {
+            const level = Number(this.preeditFont) || 0;
+            document.body.dataset.preeditFont =
+                level === 1 ? 'large' : level === 2 ? 'xlarge' : 'normal';
+            this.applyHeight();
         }
 
         applyHeight() {
@@ -6039,6 +6059,16 @@
                 this.candidateFont = Number(payload.candidateFont);
             }
             this.applyCandidateFont();
+            // 拼音字号（issue #8）：0=标准 1=大 2=特大；旧 APK 不带字段不覆盖。
+            if (Number(payload.preeditFont) in { 0: 1, 1: 1, 2: 1 }) {
+                this.preeditFont = Number(payload.preeditFont);
+            }
+            this.applyPreeditFont();
+            // 拼音加粗开关（issue #8）：默认关；旧 APK 不带字段不覆盖。
+            if (typeof payload.preeditBold === 'boolean') {
+                this.preeditBold = payload.preeditBold;
+            }
+            document.body.dataset.preeditBold = this.preeditBold ? '1' : '0';
             this.associationOn = !!payload.associationOn;
             if (!this.associationOn) this.assocWords = [];
             if (payload.uiLanguage === 'auto' || payload.uiLanguage === 'zh' || payload.uiLanguage === 'en') {
@@ -6054,6 +6084,7 @@
             this.qConfirm('keyHaptic', this.keyHaptic);
             this.qConfirm('uiLocale', this.uiLanguageChoice);
             this.qConfirm('candidateFont', this.candidateFont);
+            this.qConfirm('preeditFont', this.preeditFont);
             this.qConfirm('bottomPad', this.bottomPad);
             this.qConfirm('holdMs', this.holdMs);
             this.qConfirm('popupSnap', this.popupSnap);
@@ -6627,6 +6658,12 @@
         // Suite hook: drives the content-height bridge without
         // synthesizing a drag (the drag gesture itself is covered by ).
         applyKbHeight: content => keyboard.applyKbHeight(content),
+        // Preview/suite hook (issue #8): switch the preedit font level
+        // without a native hello round-trip.
+        setPreeditFont: level => {
+            keyboard.preeditFont = Number(level) || 0;
+            keyboard.applyPreeditFont();
+        },
         // Device-suite hook: driving the newer bridge methods (height/key
         // events) from automation needs the live page token.
         get token() { return keyboard.token; },

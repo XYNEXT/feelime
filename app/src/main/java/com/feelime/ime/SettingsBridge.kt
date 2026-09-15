@@ -61,6 +61,22 @@ val FEEL_HOLD_STEPS = intArrayOf(200, 300, 350, 450, 600)
 const val PREF_FEEL_POPUP_SNAP = "feel_popup_snap"
 const val PREF_CANDIDATE_FONT = "candidate_font"
 
+/** 拼音字号档位：0=标准 1=大 2=特大（issue #8）。 */
+const val PREF_PREEDIT_FONT = "preedit_font"
+
+fun readPreeditFont(context: Context): Int =
+    context.getSharedPreferences(KEYBOARD_PREFS_FILE, Context.MODE_PRIVATE)
+        .getInt(PREF_PREEDIT_FONT, 0)
+        .takeIf { it in 0..2 }
+        ?: 0
+
+/** 拼音加粗开关（issue #8）：默认关。 */
+const val PREF_PREEDIT_BOLD = "preedit_bold"
+
+fun readPreeditBold(context: Context): Boolean =
+    context.getSharedPreferences(KEYBOARD_PREFS_FILE, Context.MODE_PRIVATE)
+        .getBoolean(PREF_PREEDIT_BOLD, false)
+
 /** 键盘侧偏好读取（非法持久值回落默认）；设置页 state 与 IME hello 共用。 */
 fun readBottomPadPortraitDp(context: Context): Int =
     readBottomPadDpForKey(context, PREF_BOTTOM_PAD_DP_PORTRAIT)
@@ -349,6 +365,8 @@ class SettingsBridge(
             .put("holdMs", readFeelHoldMs(context))
             .put("popupSnap", readFeelPopupSnap(context))
             .put("candidateFont", readCandidateFont(context))
+            .put("preeditFont", readPreeditFont(context))
+            .put("preeditBold", readPreeditBold(context))
             .put("appVersion", BuildConfig.VERSION_NAME)
             .put("keyboardVersion", keyboardVersion())
             .put("diagnosticsOn", Diagnostics.enabled(context))
@@ -734,6 +752,38 @@ class SettingsBridge(
         }
         context.getSharedPreferences(KEYBOARD_PREFS_FILE, Context.MODE_PRIVATE)
             .edit().putInt(PREF_CANDIDATE_FONT, size).apply()
+        context.sendBroadcast(
+            Intent(ACTION_KEYBOARD_PREFS_CHANGED).setPackage(context.packageName),
+        )
+        pushState()
+    }
+
+    /** 拼音字号档位（issue #8）：0=标准 1=大 2=特大。 */
+    @JavascriptInterface
+    fun setPreeditFont(size: Int, token: String) = guarded(token) {
+        if (size !in 0..2) {
+            pushEvent(
+                JSONObject()
+                    .put("type", "preeditFontError")
+                    .put("code", "BAD_PREEDIT_FONT")
+                    .put("message", t(context, "拼音字号选项无效", "Invalid preedit font option")),
+            )
+            pushState()
+            return@guarded
+        }
+        context.getSharedPreferences(KEYBOARD_PREFS_FILE, Context.MODE_PRIVATE)
+            .edit().putInt(PREF_PREEDIT_FONT, size).apply()
+        context.sendBroadcast(
+            Intent(ACTION_KEYBOARD_PREFS_CHANGED).setPackage(context.packageName),
+        )
+        pushState()
+    }
+
+    /** 拼音加粗开关（issue #8）：默认关。 */
+    @JavascriptInterface
+    fun setPreeditBold(on: Boolean, token: String) = guarded(token) {
+        context.getSharedPreferences(KEYBOARD_PREFS_FILE, Context.MODE_PRIVATE)
+            .edit().putBoolean(PREF_PREEDIT_BOLD, on).apply()
         context.sendBroadcast(
             Intent(ACTION_KEYBOARD_PREFS_CHANGED).setPackage(context.packageName),
         )

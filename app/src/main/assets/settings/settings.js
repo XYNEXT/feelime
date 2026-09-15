@@ -239,6 +239,10 @@ const I18N = {
         "input.feel.padLandscape": "底部留白 · 横屏",
         "input.feel.candFont": "候选字号",
         "input.feel.candFontHint": "候选词文字的大小，不改变键盘行高。",
+        "input.feel.preeditFont": "拼音字号",
+        "input.feel.preeditFontHint": "打字时拼音字母的大小；特大档会占一行更多高度。",
+        "input.feel.preeditBold": "拼音加粗",
+        "input.feel.preeditBoldHint": "打字时的拼音字母用粗体显示，默认关。",
         "input.feel.hold": "长按触发时长",
         "input.feel.holdHint": "长按弹出选字、锁定大写、打开模式菜单的等待时间。",
         "input.feel.scrub": "光标移动速度",
@@ -537,6 +541,10 @@ const I18N = {
         "input.feel.padLandscape": "Bottom padding · Landscape",
         "input.feel.candFont": "Candidate text size",
         "input.feel.candFontHint": "Size of the candidate words; keyboard row height is unchanged.",
+        "input.feel.preeditFont": "Pinyin text size",
+        "input.feel.preeditFontHint": "Size of the pinyin letters while typing; the largest level takes extra band height.",
+        "input.feel.preeditBold": "Bold pinyin",
+        "input.feel.preeditBoldHint": "Show the composing pinyin letters in bold; off by default.",
         "input.feel.hold": "Long-press trigger",
         "input.feel.holdHint": "How long a press waits before popup selection, caps lock, or the mode menu opens.",
         "input.feel.scrub": "Cursor speed",
@@ -788,6 +796,7 @@ window.FeelimeSettings = {
                 break;
             case "bottomPadError":
             case "candidateFontError":
+            case "preeditFontError":
             case "feelOptionsError":
             case "fuzzyPinyinError":
                 setNote("feelNote", eventText(event, "error.INVALID_FEEL_OPTION"));
@@ -858,6 +867,7 @@ function renderFeel(state) {
     setSelect("bottomPadPortrait", state.bottomPadPortrait ?? 0, ["0", "12", "24", "36", "48"]);
     setSelect("bottomPadLandscape", state.bottomPadLandscape ?? 0, ["0", "12", "24", "36", "48"]);
     setSelect("candidateFont", state.candidateFont ?? 0, ["0", "1", "2"]);
+    setSelect("preeditFont", state.preeditFont ?? 0, ["0", "1", "2"]);
     setSelect("holdMs", state.holdMs ?? 350, ["200", "300", "350", "450", "600"]);
     setSelect("scrubSpeed", state.scrubSpeed ?? 3, ["1", "2", "3", "4", "5"]);
     setSelect("popupSnap", state.popupSnap ?? 1, ["0", "1", "2"]);
@@ -867,6 +877,7 @@ function renderFeel(state) {
     };
     setToggle("keySound", state.keySound);
     setToggle("keyHaptic", state.keyHaptic);
+    setToggle("preeditBold", state.preeditBold);
 }
 
 /** 双拼方案 + 键位图（dp-data.js 的 window.FeelimeDp 提供各方案键位）。 */
@@ -1306,6 +1317,8 @@ function submitFeelOptions() {
 $("bottomPadPortrait").addEventListener("change", event => call("setBottomPadPortrait", parseInt(event.target.value, 10)));
 $("bottomPadLandscape").addEventListener("change", event => call("setBottomPadLandscape", parseInt(event.target.value, 10)));
 $("candidateFont").addEventListener("change", event => call("setCandidateFont", parseInt(event.target.value, 10)));
+$("preeditFont").addEventListener("change", event => call("setPreeditFont", parseInt(event.target.value, 10)));
+$("preeditBold").addEventListener("change", event => call("setPreeditBold", event.target.checked));
 $("holdMs").addEventListener("change", submitFeelOptions);
 $("scrubSpeed").addEventListener("change", submitFeelOptions);
 $("popupSnap").addEventListener("change", submitFeelOptions);

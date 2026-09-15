@@ -125,7 +125,12 @@ button { font: inherit; }
     right: 0;
     bottom: 0;
     height: calc(100% - var(--band, 0px));
-    padding: 14px 4px calc(5px + var(--safe-bottom, 0px) + var(--kb-bottom-pad, 0px));
+    /* Top padding hosts the composing preedit band (issue #8); the band
+     * grows with the user's preedit font level AND with vendor font
+     * metrics (18px base covers a CJK line box at 13px). layoutChrome()
+     * mirrors the same growth so the row budget shrinks instead of
+     * overflowing. */
+    padding: var(--preedit-band, 18px) 4px calc(5px + var(--safe-bottom, 0px) + var(--kb-bottom-pad, 0px));
     background: var(--bg);
     /* clip, not hidden: a focused editor-strip input auto-SCROLLS a
        hidden-overflow container (programmatic scroll), shoving every
@@ -191,32 +196,43 @@ body.landscape #engineStatus { min-height: 40px; }
 /* The landscape bar grew (26 -> 40) and moved DOWN (margin-top
  * 2 -> 14) so the pinyin preedit line (0-14px) no longer overlaps the
  * candidates; applyHeight() reserves 78px for the landscape chrome. */
-body.landscape #candidateBar { height: 40px; margin-top: 14px; margin-bottom: 4px; }
+body.landscape #candidateBar { height: 40px; margin-top: var(--preedit-band, 18px); margin-bottom: 4px; }
 body.landscape #candidateBar .tool,
 body.landscape #settingsPageBar .tool { width: 30px; height: 30px; }
 body.landscape #candidates { min-height: 40px; }
-body.landscape .candidate { height: 40px; line-height: 40px; font-size: calc(16px * var(--cand-font-scale, 1)); }
+body.landscape .candidate { min-height: 40px; line-height: normal; font-size: calc(16px * var(--cand-font-scale, 1)); display: flex; align-items: center; }
 body.landscape .kb-row { gap: 4px; margin-bottom: 3px; }
 body.landscape #symCatBar { margin-top: 3px; gap: 4px; }
 
-/* Composing preedit（issue #8）：拼音行改成候选条内的行内前缀（工具按钮
- * 之后、#candidates 滚动区之前）——搜狗式「拼音跟候选字」同一行，字号跟
- * 候选字号档位一起缩放（--cand-font-scale），不再悬浮在顶部 14px 死区里
- * 被大号候选反衬得难以辨认。键盘高度预算零变化（行仍在原位）。 */
+/* Composing preedit（issue #8 定稿）：拼音悬浮在顶部 padding 带里
+ * （1.0.13 形态），字号可在设置里三档调整（--preedit-font-scale）。
+ * 带高不再用固定行高：真机厂商字体（OPPO Sans 等）行盒明显大于
+ * Noto，固定 height/line-height 会把 g/j 的下缘裁掉。改为
+ * line-height:normal + min-height=--preedit-band（按档位给足 CJK
+ * 行盒，18/22/25px），顶部 padding / 横屏 bar margin-top 用同一个
+ * 变量让位，行高预算由 layoutChrome() 按档位同步收缩。 */
 #preeditLine {
     display: none;
-    flex: none;
-    align-self: center;
-    max-width: 45%;
+    position: absolute;
+    top: 0;
+    left: 8px;
+    min-height: var(--preedit-band, 18px);
+    max-width: calc(100% - 16px);
     overflow: hidden;
     white-space: nowrap;
     text-overflow: ellipsis;
+    align-items: center;
     /* Raw pinyin must be legible at a glance (review note b). */
-    font-size: calc(13px * var(--cand-font-scale, 1));
-    font-weight: 600;
+    font-size: calc(13px * var(--preedit-font-scale, 1));
+    line-height: normal;
     color: var(--text);
+    z-index: 5;
 }
-body.composing #preeditLine { display: block; }
+body.composing #preeditLine { display: flex; }
+/* 拼音加粗（issue #8）：设置开关，默认关。 */
+body[data-preedit-bold="1"] #preeditLine { font-weight: 600; }
+body[data-preedit-font="large"] { --preedit-font-scale: 1.2; --preedit-band: 22px; }
+body[data-preedit-font="xlarge"] { --preedit-font-scale: 1.35; --preedit-band: 25px; }
 
 /* ===== Candidate / tool bar ===== */
 #candidateBar {
@@ -316,14 +332,21 @@ body.settings-page .compose-tool { display: none; }
 #candidates::-webkit-scrollbar { display: none; }
 .candidate {
     flex: none;
-    height: 34px;
+    /* 垂直布局防弹化（issue #8 真机反馈）：厂商 CJK 字体（OPPO Sans 等）
+     * 的行高 metrics 明显大于 Noto，固定 height+line-height 会在手机
+     * 浏览器/大字号下把 descender（g/j/y）下缘裁掉、下方却留白。改为
+     * min-height + flex 居中 + line-height:normal，行盒随字体自适应，
+     * 药丸在候选条（40px，overflow hidden）内始终容得下完整字形。 */
+    min-height: 34px;
     padding: 0 8px;
     border: 0;
     border-radius: 8px;
     background: transparent;
     color: var(--text);
     font-size: calc(17px * var(--cand-font-scale, 1));
-    line-height: 34px;
+    line-height: normal;
+    display: flex;
+    align-items: center;
 }
 
 /* 联想词（docs/design/association.md）：与引擎候选同尺寸，降调配色 +

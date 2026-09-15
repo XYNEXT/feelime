@@ -1336,6 +1336,8 @@ class FeelimeService : InputMethodService(), AsrEngine.Listener {
             .put("holdMs", feelHoldMs())
             .put("popupSnap", feelPopupSnap())
             .put("candidateFont", candidateFont())
+            .put("preeditFont", preeditFont())
+            .put("preeditBold", readPreeditBold(this))
             .put("associationOn", readAssociation(this))
             // 按键反馈开关（issue #5 问题 2）也进 hello：快捷设置方块的
             // 开/关状态要跟原生偏好走（设置页改动同样经这里回读）。
@@ -1720,6 +1722,17 @@ class FeelimeService : InputMethodService(), AsrEngine.Listener {
                     val size = value.toIntOrNull()
                     if (size == null || size !in 0..2) return@guarded
                     keyboardPrefs.edit().putInt(PREF_CANDIDATE_FONT, size).apply()
+                    ACTION_KEYBOARD_PREFS_CHANGED
+                }
+                "preeditFont" -> {
+                    val size = value.toIntOrNull()
+                    if (size == null || size !in 0..2) return@guarded
+                    keyboardPrefs.edit().putInt(PREF_PREEDIT_FONT, size).apply()
+                    ACTION_KEYBOARD_PREFS_CHANGED
+                }
+                "preeditBold" -> {
+                    val on = boolArg() ?: return@guarded
+                    keyboardPrefs.edit().putBoolean(PREF_PREEDIT_BOLD, on).apply()
                     ACTION_KEYBOARD_PREFS_CHANGED
                 }
                 "bottomPad" -> {
@@ -2444,6 +2457,9 @@ class FeelimeService : InputMethodService(), AsrEngine.Listener {
 
     /** 候选字号档位（issue #2）：0=正常 1=大 2=更大。 */
     private fun candidateFont(): Int = readCandidateFont(this)
+
+    /** 拼音字号档位（issue #8）：0=标准 1=大 2=特大。 */
+    private fun preeditFont(): Int = readPreeditFont(this)
 
     /** Current system area overlapped by the keyboard. WindowMetrics avoids
      * decor insets already consumed by InputMethodService; layout callbacks

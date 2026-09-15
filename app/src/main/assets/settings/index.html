@@ -202,6 +202,21 @@
       </div>
       <div class="row language-row">
         <span class="row-label">
+          <span data-i18n="input.feel.preeditFont">拼音字号</span>
+          <small data-i18n="input.feel.preeditFontHint">打字时拼音字母的大小；特大档会占一行更多高度。</small>
+        </span>
+        <select id="preeditFont" class="select" aria-label="拼音字号" data-i18n-aria="input.feel.preeditFont">
+          <option value="0">100%</option>
+          <option value="1">120%</option>
+          <option value="2">135%</option>
+        </select>
+      </div>
+      <label class="row switch-row" for="preeditBold">
+        <span class="row-label"><span data-i18n="input.feel.preeditBold">拼音加粗</span><small data-i18n="input.feel.preeditBoldHint">打字时的拼音字母用粗体显示，默认关。</small></span>
+        <input type="checkbox" id="preeditBold" class="toggle">
+      </label>
+      <div class="row language-row">
+        <span class="row-label">
           <span data-i18n="input.feel.scrub">光标移动速度</span>
           <small data-i18n="input.feel.scrubHint">光标拖拽时每个刻度移动的距离。</small>
         </span>
