@@ -1966,4 +1966,74 @@ class TextInputCoordinatorTest {
         assertEquals(0, editor.operations.count { it.startsWith("commitText") })
         assertEquals(1, editor.operations.count { it == "finishComposing" })
     }
+
+    // 诊断链路（双拼字母直上屏故障分析）：sink 收到降级链关键事件，
+    // 包括「隐式恢复清徽标」的证据（endVoiceSession → startEngine
+    // target=direct 而 degradedBefore 仍是双拼降级）。
+    @Test
+    fun diagnosticsSinkCapturesTheDegradeChain() {
+        val lines = mutableListOf<String>()
+        events = mutableListOf()
+        val c = TextInputCoordinator(
+            editor = RecordingEditor().also { editor = it },
+            listener = { events.add(it) },
+            engineFactory = { mode ->
+                if (mode == InputMode.PINYIN) throw IllegalStateException("boom")
+                DirectTextEngine()
+            },
+            asrGuard = {},
+            diagnosticSink = { lines.add(it) },
+        )
+        c.onEditorStarted(sensitive = false)
+        c.selectMode(InputMode.PINYIN)
+        assertTrue("editorStart logged", lines.any { it.startsWith("editorStart ") })
+        assertTrue("startEngine with clean degrade state", lines.any { it == "startEngine target=pinyin degradedBefore=none" })
+        assertTrue("degrade event", lines.any { it.contains("degrade failedMode=pinyin reason=ENGINE_FACTORY_FAILED") })
+        assertTrue("replayQueue logged", lines.any { it.startsWith("replayQueue") })
+        // 降级后 endVoiceSession：重试失败模式（旧实现是 target=direct
+        // 的静默恢复并清角标，1.0.12 修复）。
+        val before = lines.size
+        c.endVoiceSession()
+        assertTrue(
+            "endVoiceSession logged",
+            lines.drop(before).any { it == "endVoiceSession mode=direct inPasswordField=false" },
+        )
+        assertTrue(
+            "voice end retries the failed mode over a degraded state",
+            lines.any { it == "startEngine target=pinyin degradedBefore=pinyin/ENGINE_FACTORY_FAILED/seq=1" },
+        )
+        assertEquals(DegradeReason.ENGINE_FACTORY_FAILED, c.engineDegrade?.reason)
+    }
+
+    // 1.0.12 自愈：降级态下语音结束/会话重建 = 重试失败模式，重试中
+    // 保留降级角标，真引擎 READY 落地后清除并发恢复通知。
+    @Test
+    fun degradedVoiceEndRetriesTheFailedModeInsteadOfSilentDirect() {
+        var throwForPinyin = true
+        events = mutableListOf()
+        val c = TextInputCoordinator(
+            editor = RecordingEditor().also { editor = it },
+            listener = { events.add(it) },
+            engineFactory = { mode ->
+                if (mode == InputMode.PINYIN && throwForPinyin) throw IllegalStateException("boom")
+                FakeEngine()
+            },
+            asrGuard = {},
+            // pending warmup 的 Start 在 background 里派发，同步执行让
+            // READY 在本次调用内落地。
+            background = java.util.concurrent.Executor { it.run() },
+        )
+        c.onEditorStarted(sensitive = false)
+        c.selectMode(InputMode.PINYIN)
+        assertEquals(DegradeReason.ENGINE_FACTORY_FAILED, c.engineDegrade?.reason)
+        throwForPinyin = false
+        c.endVoiceSession()
+        // 重试失败模式而不是续跑 Direct；同步引擎下 READY 当场落地 →
+        // 清除 + 恢复通知（自愈）。重试中保留角标的中间态由
+        // diagnosticsSinkCapturesTheDegradeChain 的诊断行断言覆盖。
+        assertEquals(InputMode.PINYIN, c.currentMode)
+        assertNull(c.engineDegrade)
+        val recovered = events.last { it.degrade != null && !it.degradedActive }
+        assertEquals(InputMode.PINYIN, recovered.degrade?.failedMode)
+    }
 }

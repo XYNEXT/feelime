@@ -877,7 +877,7 @@ def case_height_reset(keyboard, original_height_pref):
     if not panel_open:
         record("height card opens", False, "settings panel did not open")
         return keyboard
-    shared.keyboard_text_tap_any(("调节 ›", "Adjust ›"), "#settingsPanel .set-nav")
+    shared.keyboard_text_tap_any(("键盘高度", "Keyboard height"), "#settingsPanel .qs-name")
     initial = wait_until(shared.height_state,
                          lambda value: value.get("open") is True, timeout=4.0) or {}
     if not initial.get("open"):
@@ -927,7 +927,7 @@ def case_height_reset(keyboard, original_height_pref):
     shared.keyboard_tap("#setupButton")
     wait_until(lambda: ev("document.getElementById('settingsPanel')?.classList.contains('open')"),
                lambda value: value is True, timeout=3.0)
-    shared.keyboard_text_tap_any(("调节 ›", "Adjust ›"), "#settingsPanel .set-nav")
+    shared.keyboard_text_tap_any(("键盘高度", "Keyboard height"), "#settingsPanel .qs-name")
     reopened = wait_until(shared.height_state,
                           lambda value: value.get("open") is True, timeout=4.0) or {}
     shared.keyboard_tap("#heightCardReset")

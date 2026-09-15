@@ -126,17 +126,17 @@ def case_bottom_pad():
     if 'value="36"' in prefs_body() or 'bottom_pad_dp' not in prefs_body():
         d.ensure_keyboard_down()
         if shared.launch_settings() and open_input_page():
-            pick_select_option("#bottomPad", "0 dp")
+            pick_select_option("#bottomPadPortrait", "0 dp")
             shared.wait_until(
-                lambda: re.search(r'name="bottom_pad_dp" value="0"', prefs_body()),
+                lambda: re.search(r'name="bottom_pad_dp_portrait" value="0"', prefs_body()),
                 lambda value: value is True, timeout=8.0)
 
     def pad_zero_steady():
         d.ensure_keyboard_down()
         return shared.launch_settings() and open_input_page() \
-            and pick_select_option("#bottomPad", "0 dp") and \
+            and pick_select_option("#bottomPadPortrait", "0 dp") and \
             bool(shared.wait_until(
-                lambda: re.search(r'name="bottom_pad_dp" value="0"', prefs_body()),
+                lambda: re.search(r'name="bottom_pad_dp_portrait" value="0"', prefs_body()),
                 lambda value: value is True, timeout=8.0))
 
     d.fresh_kb(refocus=True)
@@ -147,7 +147,7 @@ def case_bottom_pad():
     for attempt in range(2):
         if not shared.launch_settings():
             continue
-        if open_input_page() and pick_select_option("#bottomPad", "36 dp"):
+        if open_input_page() and pick_select_option("#bottomPadPortrait", "36 dp"):
             picked = True
             break
         # A wedged settings WebView (resumed instance, stale a11y tree)
@@ -158,7 +158,7 @@ def case_bottom_pad():
         record("pad: 36 dp picked in the system dialog", False)
         return
     applied = shared.wait_until(
-        lambda: re.search(r'name="bottom_pad_dp" value="36"', prefs_body()),
+        lambda: re.search(r'name="bottom_pad_dp_portrait" value="36"', prefs_body()),
         lambda value: value is True, timeout=8.0)
     record("pad: select commit lands the native pref", bool(applied),
            f"prefs={prefs_body()[:160]!r}")
@@ -193,14 +193,14 @@ def case_bottom_pad():
             for attempt in range(2):
                 if not shared.launch_settings():
                     continue
-                if open_input_page() and pick_select_option("#bottomPad", "36 dp"):
+                if open_input_page() and pick_select_option("#bottomPadPortrait", "36 dp"):
                     picked2 = True
                     break
                 d.shell("am force-stop com.feelime.ime")
                 time.sleep(1.5)
             if picked2:
                 shared.wait_until(
-                    lambda: re.search(r'name="bottom_pad_dp" value="36"', prefs_body()),
+                    lambda: re.search(r'name="bottom_pad_dp_portrait" value="36"', prefs_body()),
                     lambda value: value is True, timeout=8.0)
                 d.fresh_kb(refocus=True)
                 settled0, settled36 = settled0b, wait_rows_settled()

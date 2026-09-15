@@ -93,12 +93,9 @@ def main():
     # ---- #3 the height card owns the top edge ----
     ev("document.getElementById('setupButton').click()")
     time.sleep(0.5)
-    ev("(() => { const rows = document.querySelectorAll('.set-row');"
-       " for (const row of rows) {"
-       "  const lab = row.querySelector('.set-label');"
-       "  if (lab && ['键盘高度', 'Keyboard height'].includes(lab.textContent.trim())) {"
-       "   const nav = row.querySelector('.set-nav'); if (nav) nav.click(); return 'ok';"
-       "  } } return 'no-row'; })()")
+    ev("(() => { const tile = [...document.querySelectorAll('#settingsPanel .qs-tile')]"
+       ".find(t => ['键盘高度', 'Keyboard height'].includes(t.querySelector('.qs-name')?.textContent.trim()));"
+       " tile?.click(); return tile ? 'ok' : 'no-tile'; })()")
     time.sleep(0.8)
     card = ev(GEOM)
     # design §3.4: the card floats in the band ABOVE the keyboard (no

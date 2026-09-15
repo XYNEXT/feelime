@@ -351,6 +351,7 @@ class SettingsBridge(
             .put("candidateFont", readCandidateFont(context))
             .put("appVersion", BuildConfig.VERSION_NAME)
             .put("keyboardVersion", keyboardVersion())
+            .put("diagnosticsOn", Diagnostics.enabled(context))
             .put("device", JSONObject()
                 .put("manufacturer", Build.MANUFACTURER)
                 .put("model", Build.MODEL)
@@ -751,8 +752,9 @@ class SettingsBridge(
         pushState()
     }
 
-    /** 按键反馈开关（issue #5 问题 2）：落盘即可生效——键盘每次按键都
-     * 调 keyFeedback，原生按当前偏好决定发声/振动，无需广播重推。 */
+    /** 按键反馈开关（issue #5 问题 2）：落盘生效（键盘每次按键都调
+     * keyFeedback，原生按当前偏好决定发声/振动）+ 广播重推 hello——
+     * 快捷设置 tile 的开/关回读靠它。 */
     @JavascriptInterface
     fun setKeySound(on: Boolean, token: String) = guarded(token) {
         applyKeyFeedbackPref(PREF_KEY_SOUND, on)
@@ -766,6 +768,9 @@ class SettingsBridge(
     private fun applyKeyFeedbackPref(key: String, on: Boolean) {
         context.getSharedPreferences(KEYBOARD_PREFS_FILE, Context.MODE_PRIVATE)
             .edit().putBoolean(key, on).apply()
+        context.sendBroadcast(
+            Intent(ACTION_KEYBOARD_PREFS_CHANGED).setPackage(context.packageName),
+        )
         pushState()
     }
 
@@ -822,6 +827,41 @@ class SettingsBridge(
             .edit().putBoolean(STATE_AUTO_CHECK_ENABLED, enabled).apply()
         pushState()
         if (enabled) maybeAutoCheck()
+    }
+
+    /** 诊断记录开关（双拼字母直上屏故障分析）：打开后 IME 采集引擎
+     *  降级链路事件（不含任何文本内容），「复制诊断信息」导出。 */
+    @JavascriptInterface
+    fun setDiagnostics(on: Boolean, token: String) = guarded(token) {
+        Diagnostics.setEnabled(context, on)
+        pushState()
+    }
+
+    /** 组装诊断导出并直接进剪贴板（标记敏感），返回条数供 JS 提示。 */
+    @JavascriptInterface
+    fun copyDiagnostics(token: String) = guarded(token) {
+        val events = Diagnostics.snapshot()
+        val header = listOf(
+            "Feelime 诊断导出 ${java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.US)
+                .format(java.util.Date())}",
+            "app=${BuildConfig.VERSION_NAME} keyboard=${keyboardVersion()} " +
+                "android=${android.os.Build.VERSION.SDK_INT} device=${android.os.Build.MODEL}",
+            Diagnostics.liveState,
+            "events=${events.size}",
+            "--- events ---",
+        )
+        val text = (header + events).joinToString("\n")
+        Handler(Looper.getMainLooper()).post {
+            runCatching {
+                val clip = ClipData.newPlainText("feelime", text)
+                if (Build.VERSION.SDK_INT >= 33) {
+                    clip.description.extras = PersistableBundle().apply {
+                        putBoolean(ClipDescription.EXTRA_IS_SENSITIVE, true)
+                    }
+                }
+                clipboardManager().setPrimaryClip(clip)
+            }.onFailure { Log.w(TAG, "copyDiagnostics failed", it) }
+        }
     }
 
     @JavascriptInterface

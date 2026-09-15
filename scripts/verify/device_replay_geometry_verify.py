@@ -503,8 +503,8 @@ def open_height_card():
     # is not a tappable row. Scroll with real input before selecting it.
     for _ in range(5):
         visible = ev(
-            "(() => { const e=[...document.querySelectorAll('#settingsPanel .set-nav')]"
-            ".find(e=>['调节 ›','Adjust ›'].includes(e.textContent.trim()));"
+            "(() => { const e=[...document.querySelectorAll('#settingsPanel .qs-tile')]"
+            ".find(t=>['键盘高度','Keyboard height'].includes(t.querySelector('.qs-name')?.textContent.trim()));"
             "if(!e)return false;const r=e.getBoundingClientRect();"
             "return e.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2));})()")
         if visible:
@@ -518,8 +518,8 @@ def open_height_card():
         y2 = round((panel["top"] + panel["height"] * 0.15) * d._DT_SCALE + d._DT_OFFSET[1])
         d.shell(f"input swipe {x} {y1} {x} {y2} 400")
         time.sleep(0.4)
-    shared.keyboard_text_tap_any(("调节 ›", "Adjust ›"),
-                              "#settingsPanel .set-nav", wait=0.7)
+    shared.keyboard_text_tap_any(("键盘高度", "Keyboard height"),
+                              "#settingsPanel .qs-name", wait=0.7)
     state = wait_until(shared.height_state,
                        lambda value: value.get("open") is True,
                        timeout=4.0) or {}

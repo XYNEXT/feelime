@@ -230,9 +230,9 @@ def main():
     time.sleep(0.4)
 
     # ---- #12 pair editor: rows, tick, order save ----
-    ev("(() => { const b = [...document.querySelectorAll('#settingsPanel .set-row')]"
-       ".find(r => ['快捷切换', 'Quick switch'].includes(r.querySelector('.set-label')?.textContent.trim()))"
-       "?.querySelector('.set-opt'); if (b) b.click(); return 1; })()")
+    ev("(() => { const tile = [...document.querySelectorAll('#settingsPanel .qs-tile')]"
+       ".find(t => ['快捷切换', 'Quick switch'].includes(t.querySelector('.qs-name')?.textContent.trim()));"
+       " tile?.click(); return 1; })()")
     time.sleep(0.4)
     rows = ev("[...document.querySelectorAll('#pairEditor .pair-row')]"
               ".map(r => r.dataset.mode)") or []

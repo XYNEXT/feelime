@@ -251,6 +251,13 @@ const I18N = {
         "input.feel.keySound": "按键声音",
         "input.feel.keySoundHint": "按键时轻响一声，跟随系统音量，静音时不响。",
         "input.feel.keyHaptic": "按键振动",
+        "diag.title": "诊断记录",
+        "diag.badge": "调试",
+        "diag.toggle": "记录引擎诊断事件",
+        "diag.toggleHint": "复现「按键字母直接上屏」这类故障前打开。只记录引擎与编辑器事件（包名、inputType、降级原因），不含任何输入内容。",
+        "diag.copy": "复制诊断信息",
+        "diag.on": "诊断记录已开启，复现问题后回到这里复制诊断信息。",
+        "diag.off": "诊断记录未开启。",
         "input.feel.keyHapticHint": "按键时轻短振动一下，强度跟随机型；系统触感总开关关闭时不震。",
         "error.INVALID_FEEL_OPTION": "手感参数无效，已还原为原值。",
         "error.EMPTY_SOURCE": "请先填入更新源地址（metainfo.json）。",
@@ -539,6 +546,13 @@ const I18N = {
         "input.feel.keySound": "Key sound",
         "input.feel.keySoundHint": "A soft click on each key press; follows system volume, silent in mute mode.",
         "input.feel.keyHaptic": "Key vibration",
+        "diag.title": "Diagnostics",
+        "diag.badge": "Debug",
+        "diag.toggle": "Record engine diagnostic events",
+        "diag.toggleHint": "Enable before reproducing issues like raw letters landing directly. Records engine/editor events only (package, inputType, degrade reason) — never any typed content.",
+        "diag.copy": "Copy diagnostics",
+        "diag.on": "Recording. Reproduce the issue, then come back and copy the diagnostics.",
+        "diag.off": "Diagnostics recording is off.",
         "input.feel.keyHapticHint": "A light tap on each key press; strength follows the device tuning. No vibration while the system haptics master switch is off.",
         "input.feel.snapLoose": "Loose",
         "input.feel.snapStandard": "Standard",
@@ -1243,6 +1257,7 @@ function aboutRows(state) {
 
 function renderAbout(state) {
     $("btnAppStore").hidden = !state.playDistribution;
+    setToggleSafe("diagnosticsOn", state.diagnosticsOn);
     const host = $("aboutRows");
     host.replaceChildren();
     aboutRows(state).forEach(([label, value]) => {
@@ -1260,6 +1275,12 @@ function renderAbout(state) {
     if ($("noticesText").textContent !== (state.notices || "")) {
         $("noticesText").textContent = state.notices || "";
     }
+}
+
+/** 关于页等处的开关回读（与 renderFeel 的 setToggle 同语义：焦点不回写）。 */
+function setToggleSafe(id, value) {
+    const node = $(id);
+    if (node && document.activeElement !== node) node.checked = !!value;
 }
 
 /* --- wiring ------------------------------------------------------------ */
@@ -1390,6 +1411,18 @@ function renderBackupStatus(event) {
     }
 }
 
+$("diagnosticsOn").addEventListener("change", event => {
+    call("setDiagnostics", event.target.checked);
+    setNote("diagNote", event.target.checked ? t("diag.on") : t("diag.off"));
+});
+$("btnCopyDiagnostics").addEventListener("click", () => {
+    if (!lastState || !lastState.diagnosticsOn) {
+        setNote("diagNote", t("diag.off"));
+        return;
+    }
+    call("copyDiagnostics");
+    setNote("diagNote", t("note.copied"));
+});
 $("btnAppStore").addEventListener("click", () => call("openAppStore"));
 $("btnCopyAbout").addEventListener("click", () => {
     if (!lastState) return;

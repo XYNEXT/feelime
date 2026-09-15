@@ -27,6 +27,9 @@ class TextInputCoordinator(
     private val background: Executor? = null,
     private val modeStore: ModeStore? = null,
     private val delayPoster: ((Long, () -> Unit) -> Unit)? = null,
+    /** 诊断事件出口（Diagnostics 环形缓冲）。本类保持 JVM 无 android 依赖，
+     *  由 service 注入；关闭诊断时 sink 内部直接丢弃。行内绝无文本内容。 */
+    val diagnosticSink: ((String) -> Unit)? = null,
 ) {
     /** process-death-safe persistence of the user's selected mode. */
     interface ModeStore {
@@ -37,11 +40,21 @@ class TextInputCoordinator(
 
     private var editorGeneration = 0L
     private var engineSessionGeneration = 0L
+    /** 诊断用：当前 startEngine 的打点（warmup 耗时 = READY - start）。 */
+    private var engineStartAt = 0L
     private var mode: InputMode = InputMode.DIRECT
     private var savedUserMode: InputMode = modeStore?.load() ?: InputMode.DIRECT
     /** True once the LIVE engine is the real target (not interim/fallback). */
     private var engineMatchesMode = true
     private var inPasswordField = false
+
+    /** 诊断埋点（双拼字母直上屏故障分析）：只有开关打开时 sink 才落盘。 */
+    private fun diag(message: String) {
+        diagnosticSink?.invoke(message)
+    }
+
+    private fun degradeSummary(): String =
+        degraded?.let { "${it.failedMode?.wireName}/${it.reason.name}/seq=${it.seq}" } ?: "none"
 
     private var engine: TextEngine = DirectTextEngine()
     private var stamp: EngineStamp = EngineStamp(editorGeneration, engineSessionGeneration, mode)
@@ -224,6 +237,7 @@ class TextInputCoordinator(
         editorGeneration += 1
         newSession()
         inPasswordField = sensitive
+        diag("editorStart gen=$editorGeneration sensitive=$sensitive terminal=$terminalLike")
         if (sensitive) {
             // Password fields must stay on Direct: composition spans must
             // never render into them (see enterPasswordField).
@@ -315,7 +329,9 @@ class TextInputCoordinator(
             if (gen != recreateGeneration) return@mainPoster
             abandonPending()
             newSession()
-            startEngine(mode)
+            diag("recreateBegin mode=${mode.wireName}")
+            // 与 endVoiceSession 同规则：降级态下重建 = 重试失败模式。
+            startEngine(if (inPasswordField) InputMode.DIRECT else degraded?.failedMode ?: mode)
         }
 
         fun swapAndBegin() {
@@ -526,8 +542,12 @@ class TextInputCoordinator(
 
     fun endVoiceSession() {
         invalidateWordUndo()
+        diag("endVoiceSession mode=${mode.wireName} inPasswordField=$inPasswordField")
         newSession()
-        startEngine(if (inPasswordField) InputMode.DIRECT else mode)
+        // 降级态下语音结束 = 重试失败模式（mode-fallback §2.2：与重绑同
+        // 规则，重试中保留降级、落地 READY 清除）。旧实现用 mode（降级
+        // 后已是 DIRECT）→ 静默续跑英文直出还清了角标，用户无感知。
+        startEngine(if (inPasswordField) InputMode.DIRECT else degraded?.failedMode ?: mode)
     }
 
     fun key(unicodeScalar: Int): DispatchAck {
@@ -810,6 +830,7 @@ class TextInputCoordinator(
      */
     private fun replayWarmupQueue() {
         if (takeOverflowDegrade()) return
+        diag("replayQueue n=${warmupQueue.size} mode=${mode.wireName}")
         replaying = true
         val generation = ++warmupReplayGeneration
         fun next() {
@@ -901,6 +922,8 @@ class TextInputCoordinator(
             "FeelimeEngine: engine degraded failedMode=$failedMode reason=$reason " +
                 "seq=$degradeSeq queue=${warmupQueue.size} mode=$mode",
         )
+        diag("degrade failedMode=${failedMode?.wireName ?: "none"} reason=${reason.name} " +
+            "seq=$degradeSeq queue=${warmupQueue.size}")
         notifyDegrade()
         replayWarmupQueue()
     }
@@ -928,6 +951,7 @@ class TextInputCoordinator(
 
     private fun clearDegrade(notify: Boolean) {
         val previous = degraded ?: return
+        diag("clearDegrade prev=${previous.failedMode?.wireName}/${previous.reason.name}/seq=${previous.seq}")
         degraded = null
         if (notify) {
             mainPoster {
@@ -962,7 +986,12 @@ class TextInputCoordinator(
         // degraded state — EXCEPT the retry of the very mode that failed,
         // which stays degraded until the real engine's READY lands (or the
         // warmup fails again, degrading anew with a fresh seq).
-        if (degraded != null && next != degraded?.failedMode) clearDegrade(notify = true)
+        diag("startEngine target=${next.wireName} degradedBefore=${degradeSummary()}")
+        engineStartAt = System.nanoTime()
+        if (degraded != null && next != degraded?.failedMode) {
+            diag("clearDegrade reason=deliberateStart")
+            clearDegrade(notify = true)
+        }
         mode = next
         stamp = EngineStamp(editorGeneration, engineSessionGeneration, mode)
         lastAppliedRevision = 0
@@ -1202,6 +1231,8 @@ class TextInputCoordinator(
                 pendingLastRevision = event.revision
                 // The target engine can now serve keys: swap over, then
                 // replay whatever was typed during warmup into it ().
+                diag("engineReady mode=${event.stamp.mode.wireName} " +
+                    "warmupMs=${(System.nanoTime() - engineStartAt) / 1_000_000} queue=${warmupQueue.size}")
                 engineMatchesMode = true
                 engine = pendingEngine!!
                 stamp = pendingStamp!!

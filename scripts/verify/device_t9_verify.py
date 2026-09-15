@@ -295,30 +295,32 @@ def main():
     field = (d.field_text_retry() or "").strip()
     record("t9: 1 up-swipe commits literal 1", field == "1", f"field={field!r}")
 
-    # ===== 长按全后选浮层 =====
+    # ===== 长按三行弹层（3.38.0，issue #9：小写/符号·数字·符号/大写）=====
     d.clear_field(kb)
     if d.synth_touch("start", x4, y4) == "ok":
         time.sleep(0.65)  # holdMs 350 + 余量
         cell = ev("""(() => {
             const items = [...document.querySelectorAll('#keyPopup .kp-item')];
             const texts = items.map(i => i.textContent);
-            const h = items.find(i => i.textContent === 'h');
+            const h = items.find(i => i.textContent === 'H');
             if (!h) return { items: texts };
             const r = h.getBoundingClientRect();
             return { items: texts, at: [r.left + r.width/2, r.top + r.height/2] }; })()""")
-        ok = isinstance(cell, dict) and cell.get("items") == ["4", "g", "h", "i"]
-        record("t9: long-press offers digit+letters", ok,
+        # 三行：小写 g h i / 左符号 · 4 · 右符号 / 大写 G H I（预选中格=4）。
+        ok = isinstance(cell, dict) and cell.get("items") == ["g", "h", "i", "「", "4", "」", "G", "H", "I"]
+        record("t9: long-press offers the three-row grid", ok,
                f"cells={cell.get('items') if isinstance(cell, dict) else cell}")
         if "at" in (cell or {}):
             hx, hy = css2phys(cell["at"])
             d.synth_touch("move", hx, hy)
+            # 收尾坐标=最后移动位置（touchend 的 changedTouches 语义）。
             d.synth_touch("end", hx, hy)
             time.sleep(0.5)
             type_digits(geo, "26", wait=0.25)
             time.sleep(0.8)
             cands = wait_candidates()
             joined = "".join(cands)
-            record("t9: h from hold popup + 26 reaches hao family",
+            record("t9: H from hold popup + 26 reaches hao family",
                    any(ch in joined for ch in "好号豪毫"), f"cands={cands[:6]}")
         else:
             d.synth_touch("cancel", x4, y4)

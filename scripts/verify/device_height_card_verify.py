@@ -193,7 +193,7 @@ def case_height_card(keyboard):
                       lambda value: value is True, timeout=3.0):
         record("height card opens from keyboard settings", False, "settings panel did not open")
         return
-    keyboard_text_tap_any(("调节 ›", "Adjust ›"), "#settingsPanel .set-nav", contains=False)
+    keyboard_text_tap_any(("键盘高度", "Keyboard height"), "#settingsPanel .qs-name", contains=False)
     initial = wait_until(height_state, lambda value: value and value.get("open"), timeout=3.0)
     if not initial or not initial.get("open"):
         record("height card opens from keyboard settings", False, "height card did not open")

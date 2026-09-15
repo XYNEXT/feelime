@@ -295,6 +295,7 @@ class FeelimeService : InputMethodService(), AsrEngine.Listener {
 
     override fun onCreate() {
         super.onCreate()
+        Diagnostics.refresh(this)
         UiLanguage.preferences(this)
             .registerOnSharedPreferenceChangeListener(uiLanguageListener)
         engine = AsrEngine(applicationContext, this)
@@ -449,6 +450,7 @@ class FeelimeService : InputMethodService(), AsrEngine.Listener {
             background = background,
             modeStore = sharedPreferencesModeStore(),
             delayPoster = { delay, block -> main.postDelayed(block, delay) },
+            diagnosticSink = { Diagnostics.log("engine", it) },
         )
     }
 
@@ -1335,6 +1337,10 @@ class FeelimeService : InputMethodService(), AsrEngine.Listener {
             .put("popupSnap", feelPopupSnap())
             .put("candidateFont", candidateFont())
             .put("associationOn", readAssociation(this))
+            // 按键反馈开关（issue #5 问题 2）也进 hello：快捷设置方块的
+            // 开/关状态要跟原生偏好走（设置页改动同样经这里回读）。
+            .put("keySound", readKeySoundEnabled(this))
+            .put("keyHaptic", readKeyHapticEnabled(this))
             .put(
                 "engineDataReady",
                 JSONObject().apply {
@@ -1343,6 +1349,11 @@ class FeelimeService : InputMethodService(), AsrEngine.Listener {
                     }
                 },
             )
+        Diagnostics.noteLiveState(
+            "mode=${coordinator.currentMode.wireName} " +
+                "degraded=${coordinator.engineDegrade != null} warming=${coordinator.engineWarming} " +
+                "pkg=${currentInputEditorInfo?.packageName}",
+        )
         evaluate("window.Feelime && window.Feelime.onBridgeHello && window.Feelime.onBridgeHello($payload)")
     }
 
@@ -1354,6 +1365,11 @@ class FeelimeService : InputMethodService(), AsrEngine.Listener {
             .put("packageName", info?.packageName ?: "")
             .put("sensitive", isSensitiveEditor(info))
             .put("terminalLike", isTerminalLikeEditor(info))
+        Diagnostics.log(
+            "editor",
+            "pkg=${info?.packageName} inputType=0x${Integer.toHexString(info?.inputType ?: 0)} " +
+                "imeOptions=0x${Integer.toHexString(info?.imeOptions ?: 0)}",
+        )
         evaluate("window.Feelime && window.Feelime.onEditorInfo($payload)")
     }
 
@@ -1670,6 +1686,80 @@ class FeelimeService : InputMethodService(), AsrEngine.Listener {
             }
         }
 
+        /** 快捷设置方块面板的偏好写通道：与设置页写同一批偏好
+         *  （feelime_keyboard / feelime_engine / feelime_ui），落盘后广播
+         *  对应 action——keyboardPrefsReceiver 重推 hello 让方块回读新
+         *  状态，双拼方案广播让引擎按新 schema 重建。白名单外的键与
+         *  非法值一律拒绝，不落半个值。 */
+        @JavascriptInterface
+        fun setQuickPref(key: String, value: String, token: String) = guarded(token, limited = false) {
+            // 布尔参数只认 "1"/"0"：其他值一律拒绝，不落盘不广播。
+            fun boolArg(): Boolean? = when (value) {
+                "1" -> true
+                "0" -> false
+                else -> null
+            }
+            val keyboardPrefs = getSharedPreferences(KEYBOARD_PREFS_FILE, MODE_PRIVATE)
+            val action = when (key) {
+                "association" -> {
+                    val on = boolArg() ?: return@guarded
+                    keyboardPrefs.edit().putBoolean(PREF_ASSOCIATION, on).apply()
+                    ACTION_KEYBOARD_PREFS_CHANGED
+                }
+                "keySound" -> {
+                    val on = boolArg() ?: return@guarded
+                    keyboardPrefs.edit().putBoolean(PREF_KEY_SOUND, on).apply()
+                    ACTION_KEYBOARD_PREFS_CHANGED
+                }
+                "keyHaptic" -> {
+                    val on = boolArg() ?: return@guarded
+                    keyboardPrefs.edit().putBoolean(PREF_KEY_HAPTIC, on).apply()
+                    ACTION_KEYBOARD_PREFS_CHANGED
+                }
+                "candidateFont" -> {
+                    val size = value.toIntOrNull()
+                    if (size == null || size !in 0..2) return@guarded
+                    keyboardPrefs.edit().putInt(PREF_CANDIDATE_FONT, size).apply()
+                    ACTION_KEYBOARD_PREFS_CHANGED
+                }
+                "bottomPad" -> {
+                    val pad = value.toIntOrNull()
+                    if (pad == null || pad !in BOTTOM_PAD_STEPS) return@guarded
+                    val landscape = resources.configuration.orientation ==
+                        android.content.res.Configuration.ORIENTATION_LANDSCAPE
+                    keyboardPrefs.edit().putInt(
+                        if (landscape) PREF_BOTTOM_PAD_DP_LANDSCAPE else PREF_BOTTOM_PAD_DP_PORTRAIT,
+                        pad,
+                    ).apply()
+                    ACTION_KEYBOARD_PREFS_CHANGED
+                }
+                "holdMs" -> {
+                    val hold = value.toIntOrNull()
+                    if (hold == null || hold !in FEEL_HOLD_STEPS) return@guarded
+                    keyboardPrefs.edit().putInt(PREF_FEEL_HOLD_MS, hold).apply()
+                    ACTION_KEYBOARD_PREFS_CHANGED
+                }
+                "popupSnap" -> {
+                    val snap = value.toIntOrNull()
+                    if (snap == null || snap !in 0..2) return@guarded
+                    keyboardPrefs.edit().putInt(PREF_FEEL_POPUP_SNAP, snap).apply()
+                    ACTION_KEYBOARD_PREFS_CHANGED
+                }
+                "uiLocale" -> {
+                    if (!UiLanguage.setChoice(applicationContext, value)) return@guarded
+                    ACTION_KEYBOARD_PREFS_CHANGED
+                }
+                "dpScheme" -> {
+                    if (!com.feelime.ime.engine.DoublePinyinScheme.set(applicationContext, value)) {
+                        return@guarded
+                    }
+                    ACTION_DP_SCHEME_CHANGED
+                }
+                else -> return@guarded
+            }
+            sendBroadcast(Intent(action).setPackage(packageName))
+        }
+
         @JavascriptInterface
         fun space(token: String) = guarded(token, limited = false) { coordinator.space() }
 
@@ -1833,6 +1923,7 @@ class FeelimeService : InputMethodService(), AsrEngine.Listener {
             val next = InputModeBridge.fromWire(mode)
             val ready = next?.let { engineDataReady(mode) } == true
             android.util.Log.i("FeelimeEngine", "bridge selectMode wire=$mode parsed=$next ready=$ready")
+            Diagnostics.log("selectMode", "mode=${next?.wireName ?: "invalid"} ready=$ready")
             if (next == null || !ready) {
                 rejectedCalls += 1
                 if (next != null && !ready) {

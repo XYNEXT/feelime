@@ -111,6 +111,7 @@ body { height: 100dvh; display: flex; flex-direction: column; overflow: hidden; 
   <button id="actSettings">快捷设置</button>
   <button id="actCtrl">控制键层</button>
   <button id="actNumpad">九宫格</button>
+  <button id="actT9">T9 键盘</button>
   <button id="actVoiceOverlay">语音浮层(mic)</button>
   <button id="actVoiceHold">长按语音浮层</button>
   <label class="dim">上滑 <input type="range" id="voiceSlideRange" min="0" max="100" value="0" style="vertical-align:middle;width:90px"></label>
@@ -152,6 +153,11 @@ const stage = document.getElementById('stage');
 const logBody = document.getElementById('logBody');
 const entries = [];
 let keyboardMode = 'pinyin'; // 假引擎当前键盘（桥 hello 下发）
+// 快捷设置方块的回读状态（真机由原生偏好下发；setQuickPref 在这里
+// 模拟落盘并重推 hello，方块状态即可回读）。
+let previewPrefs = { associationOn: true, keySound: false, keyHaptic: false,
+    candidateFont: 0, holdMs: 350, popupSnap: 1, dpScheme: 'ziranma',
+    uiLanguage: 'zh' };
 
 function log(method, detail) {
     const div = document.createElement('div');
@@ -460,6 +466,25 @@ function makeBridge() {
         switchInputMethod() { log('switchInputMethod', '<span class="dim">→ 系统 IME picker</span>'); },
         hideKeyboard() { log('hideKeyboard', ''); },
         openSetup() { log('openSetup', ''); },
+        setQuickPref(key, value) {
+            log('setQuickPref', `${esc(String(key))}=${esc(String(value))} <span class="dim">→ 重推 hello</span>`);
+            if (key === 'uiLocale') {
+                // 原生 UiLanguage 落盘：hello 带回选择值 + 解析后的 locale。
+                previewPrefs.uiLanguage = value;
+                document.getElementById('previewLocale').value = value === 'auto' ? 'zh' : value;
+                setTimeout(pushHello, 0);
+                return;
+            }
+            const map = { association: 'associationOn', keySound: 'keySound',
+                keyHaptic: 'keyHaptic', candidateFont: 'candidateFont',
+                holdMs: 'holdMs', popupSnap: 'popupSnap', dpScheme: 'dpScheme' };
+            const slot = map[key];
+            if (!slot) return;
+            previewPrefs[slot] = value === '1' || value === '0'
+                ? value === '1'
+                : (Number.isNaN(Number(value)) ? value : Number(value));
+            setTimeout(pushHello, 0);
+        },
         reloadKeyboard() { log('reloadKeyboard', ''); },
         commitText(text) {
             log('commitText', esc(text));
@@ -556,7 +581,16 @@ function pushHello() {
         pageGenerationToken: 'tok-1',
         mode: keyboardMode,
         engineDataReady: { pinyin: true, 'double-pinyin': true, japanese: true,
-            french: true, russian: true },
+            french: true, russian: true, t9: true },
+        // 键盘侧偏好（真机由原生 hello 下发；值同 previewPrefs）。
+        uiLanguage: previewPrefs.uiLanguage,
+        associationOn: previewPrefs.associationOn,
+        keySound: previewPrefs.keySound,
+        keyHaptic: previewPrefs.keyHaptic,
+        candidateFont: previewPrefs.candidateFont,
+        holdMs: previewPrefs.holdMs,
+        popupSnap: previewPrefs.popupSnap,
+        dpScheme: previewPrefs.dpScheme,
     });
 }
 
@@ -715,6 +749,12 @@ document.getElementById('actCtrl').onclick = () => {
 document.getElementById('actNumpad').onclick = () => {
     frame.contentWindow.Feelime.showNumpad();
 };
+document.getElementById('actT9').onclick = () => {
+    keyboardMode = 't9';
+    rawInput = '';
+    pushEngineState('', false);
+    pushHello();
+};
 
 // 语音浮层两种形态：mic（撤销右上角小按钮 + 说完了居中大按钮）与
 // 长按空格（无按钮，松手上屏，上滑撤销——拖动滑块看进度动画）。
@@ -823,6 +863,71 @@ window.__FeelimePreviewBridge = makeBridge();
 // 手机实机打开时视口小，直接铺满；桌面默认竖屏手机尺寸。
 setMode(window.innerWidth < 520 ? 'fill' : 'portrait');
 build();
+
+/* ---- URL 直达状态（截图/评审入口）----
+ * ?act=qs                快捷设置首页（tile 网格）
+ * ?act=qs&page=2         第二页
+ * ?act=t9                T9 键面
+ * ?act=t9popup           T9 长按三行弹层（按住 5 键的瞬间）
+ * ?act=t9track           相对跟手：手往左滑，高亮滑到数字左边的符号
+ * ?act=t9cancel          虚拟光标滑出卡片：缩小变淡 + 「松手撤销」
+ * 可叠加 &theme=light / &locale=en。 */
+(() => {
+    const params = new URLSearchParams(location.search);
+    const act = params.get('act');
+    if (!act) return;
+    const theme = params.get('theme');
+    const locale = params.get('locale');
+    if (theme) document.getElementById('previewTheme').value = theme;
+    if (locale) document.getElementById('previewLocale').value = locale;
+    if (params.get('mode') === 'landscape') setMode('landscape');
+    const touch = (win, el, type, x, y) => el.dispatchEvent(new win.TouchEvent(type, {
+        bubbles: true, cancelable: true,
+        touches: [new win.Touch({ identifier: 1, target: el, clientX: x, clientY: y })],
+        changedTouches: [new win.Touch({ identifier: 1, target: el, clientX: x, clientY: y })],
+    }));
+    setTimeout(() => {
+        const win = frame.contentWindow;
+        if (!win || !win.Feelime) return;
+        if (theme || locale) pushHello();
+        if (act === 'qs') {
+            win.Feelime.toggleSettingsPanel();
+            const page = Number(params.get('page')) || 1;
+            if (page > 1) {
+                setTimeout(() => {
+                    const strip = frame.contentDocument.querySelector('.qs-pages');
+                    if (strip && strip.firstElementChild) {
+                        strip.scrollLeft = strip.firstElementChild.offsetWidth * (page - 1);
+                    }
+                }, 120);
+            }
+        } else if (act === 't9' || act === 't9popup' || act === 't9cancel' || act === 't9track') {
+            document.getElementById('actT9').click();
+        }
+        if (act === 't9popup' || act === 't9cancel' || act === 't9track') {
+            // 按住 5 键到长按阈值，弹层出现；（t9cancel）再滑出取消圈；
+            // （t9track）手指停在键与浮层之间——高亮应已投影跟手。
+            setTimeout(() => {
+                const doc = frame.contentDocument;
+                const key = doc.querySelector('.t9-key[data-key="5"]');
+                if (!key) return;
+                const rect = key.getBoundingClientRect();
+                touch(win, key, 'touchstart', rect.left + rect.width / 2, rect.top + rect.height / 2);
+                if (act === 't9cancel') {
+                    setTimeout(() => {
+                        touch(win, key, 'touchmove', 10, rect.top - 260);
+                    }, 520);
+                } else if (act === 't9track') {
+                    // 手往左滑（手指全程在键附近）→ 高亮应滑到左符号、
+                    setTimeout(() => {
+                        touch(win, key, 'touchmove', rect.left - 34,
+                              rect.top + rect.height / 2);
+                    }, 520);
+                }
+            }, 400);
+        }
+    }, 700);
+})();
 </script>
 </body>
 </html>

@@ -92,6 +92,29 @@
         "{0} 个键盘": "{0} keyboards",
         "键盘高度": "Keyboard height",
         "调节 ›": "Adjust ›",
+        // 快捷设置方块（tile 网格）新增文案。
+        "中文联想": "Associations",
+        "按键声音": "Key sound",
+        "按键振动": "Key vibration",
+        "候选字号": "Candidate size",
+        "界面语言": "Language",
+        "底部留白": "Bottom padding",
+        "长按时长": "Long-press delay",
+        "滑动选字": "Swipe reach",
+        "双拼方案": "Double-pinyin",
+        "调节": "Adjust",
+        "开": "On",
+        "关": "Off",
+        "标准": "Standard",
+        "大": "Large",
+        "更大": "Larger",
+        "松": "Loose",
+        "紧": "Tight",
+        "中文": "Chinese",
+        "自然码": "Ziranma",
+        "小鹤双拼": "Flypy",
+        "搜狗双拼": "Sogou",
+        "松手撤销": "Release to cancel",
         "粘贴 JSON 定义符号键盘（最多 3 行，每行键数不限）：t=键面，": "Paste JSON to define up to 3 key rows: t=label, ",
         "tap=单击行为（文本 / [esc] 单键 / [ctrl+s] 组合，可混排，如 [esc]ggVGD），": "tap=action (text, [esc], or [ctrl+s]; combine them, e.g. [esc]ggVGD), ",
         "note=长按说明。超宽的行可以左右拖动查看。": "note=long-press description. Swipe wide rows to see more keys.",
@@ -205,7 +228,7 @@
         });
     }
 
-    const KEYBOARD_VERSION = '3.37.0';
+    const KEYBOARD_VERSION = '3.38.0';
     const MIN_NATIVE_API = 1;
     const REQUIRED_CAPABILITIES = [
         'candidate-revision-v1',
@@ -271,6 +294,12 @@
                 '4': 'ghi', '5': 'jkl', '6': 'mno',
                 '7': 'pqrs', '8': 'tuv', '9': 'wxyz',
             },
+            // 长按三行浮层的中列符号（issue #9）：每键两个，分列数字
+            // 左右；键面左上角小字展示同一组，长按能出什么不用猜。
+            keySymbols: {
+                '2': ['—', '&'], '3': ['（', '）'], '4': ['「', '」'], '5': ['、', '：'],
+                '6': ['；', '～'], '7': ['《', '》'], '8': ['…', '·'], '9': ['%', '/'],
+            },
         },
         qwerty: {
             rows: [
@@ -331,6 +360,22 @@
         mic: 'M12 14a3 3 0 0 0 3-3V5a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3z M19 12a7 7 0 0 1-14 0H3a9 9 0 0 0 8 8.94V23h2v-2.06A9 9 0 0 0 21 12h-2z',
         arrowLeft: 'M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z',
         smiley: 'M15.5 11c.83 0 1.5-.67 1.5-1.5S16.33 8 15.5 8 14 8.67 14 9.5s.67 1.5 1.5 1.5zm-7 0c.83 0 1.5-.67 1.5-1.5S9.33 8 8.5 8 7 8.67 7 9.5 7.67 11 8.5 11zm3.5 6.5c2.33 0 4.31-1.46 5.11-3.5H6.89c.8 2.04 2.78 3.5 5.11 3.5zM11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8z',
+        // 快捷设置方块图标（wechat 式 tile 网格）。同一构建器，键面不用。
+        theme: 'M12 3a9 9 0 100 18 9 9 0 000-18zm0 2v14a7 7 0 010-14z',
+        assoc: 'M5 4h14a2 2 0 012 2v9a2 2 0 01-2 2H10l-5 4V6a2 2 0 012-2zm2 4h10v2H7V8zm0 4h6v2H7v-2z',
+        sound: 'M3 9v6h4l5 4V5L7 9H3zm11.5 3a3.5 3.5 0 00-2-3.16v6.32a3.5 3.5 0 002-3.16zM12.5 3.8v2.1a6.2 6.2 0 010 12.2v2.1a8.3 8.3 0 000-16.4z',
+        vibrate: 'M8 2h8a1 1 0 011 1v18a1 1 0 01-1 1H8a1 1 0 01-1-1V3a1 1 0 011-1zm1 2v16h6V4H9zM3 8h2v8H3V8zm16 0h2v8h-2V8z',
+        height: 'M12 2l4.5 5.5h-9L12 2zm0 20l-4.5-5.5h9L12 22zM6 11h12v2H6v-2z',
+        swap: 'M6.99 11L3 15l3.99 4v-3H14v-2H6.99v-3zM21 9l-3.99-4v3H10v2h7.01v3L21 9z',
+        font: 'M10 4h4l5 16h-2.6l-1.2-4H8.8l-1.2 4H5L10 4zm-.4 9.5h4.8L12 6.8 9.6 13.5z',
+        lang: 'M12 2a10 10 0 100 20 10 10 0 000-20zm7.9 9h-3.4a15 15 0 00-1.2-5.7A8 8 0 0119.9 11zM12 4c.9 1.2 1.9 3.4 2.2 7H9.8c.3-3.6 1.3-5.8 2.2-7zM8.7 5.3A15 15 0 007.5 11H4.1a8 8 0 014.6-5.7zM4.1 13h3.4a15 15 0 001.2 5.7A8 8 0 014.1 13zM12 20c-.9-1.2-1.9-3.4-2.2-7h4.4c-.3 3.6-1.3 5.8-2.2 7zm3.3-1.3a15 15 0 001.2-5.7h3.4a8 8 0 01-4.6 5.7z',
+        pad: 'M3 5h18a1 1 0 011 1v10a1 1 0 01-1 1H3a1 1 0 01-1-1V6a1 1 0 011-1zm1 2v8h16V7H4zM2 19h20v2H2v-2z',
+        timer: 'M12 3a9 9 0 100 18 9 9 0 000-18zm0 2a7 7 0 110 14 7 7 0 010-14zm-1 2h2v5.4l4 2.4-1 1.6-5-3V7z',
+        snap: 'M12 8a2 2 0 110 4 2 2 0 010-4zM2 11h5v2H2v-2zm15 0h5v2h-5v-2zM11 3h2v5h-2V3zm0 13h2v5h-2v-5z',
+        menu: 'M5 4h3v3H5V4zm5.5 0h3v3h-3V4zM16 4h3v3h-3V4zM5 10.5h3v3H5v-3zm5.5 0h3v3h-3v-3zm5.5 0h3v3h-3v-3zM5 17h3v3H5v-3zm5.5 0h3v3h-3v-3zm5.5 0h3v3h-3v-3z',
+        keyboard: 'M3 6h18a1 1 0 011 1v10a1 1 0 01-1 1H3a1 1 0 01-1-1V7a1 1 0 011-1zm1 2v8h16V8H4zm2 1.5h2v2H6v-2zm3.5 0h2v2h-2v-2zm3.5 0h2v2h-2v-2zM6 13h8v1.5H6V13zm9.5 0H17v1.5h-1.5V13z',
+        dp: 'M8 3.5L3 12l5 8.5 5-8.5-5-8.5zm8 0l-5 8.5 5 8.5 5-8.5-5-8.5z',
+        gear: 'M19.14 12.94c.04-.31.06-.62.06-.94s-.02-.63-.07-.94l2.03-1.58a.49.49 0 00.12-.61l-1.92-3.32a.49.49 0 00-.59-.22l-2.39.96a7.03 7.03 0 00-1.62-.94l-.36-2.54a.484.484 0 00-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96a.49.49 0 00-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58a.49.49 0 00-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32a.49.49 0 00-.12-.61l-2.01-1.58zM12 15.6A3.6 3.6 0 1112 8.4a3.6 3.6 0 010 7.2z',
     };
     const SVG_NS = 'http://www.w3.org/2000/svg';
     const ICONS = {};
@@ -849,6 +894,19 @@
             // 中文联想（docs/design/association.md），hello/onAssoc 驱动。
             this.associationOn = false;
             this.assocWords = [];
+            // 按键反馈开关（issue #5 问题 2）：hello 回读（旧 APK 的 hello
+            // 没有这两个字段，保持默认关）。
+            this.keySound = false;
+            this.keyHaptic = false;
+            // 界面语言「选择值」（auto/zh/en，hello.uiLanguage）；uiLocale
+            // 是解析后的显示语言（英文系统上 auto→en），tile 必须用选择值
+            // 才能在英文系统上切回中文。
+            this.uiLanguageChoice = 'auto';
+            // 快捷偏好的未决意图（快速连点时防在途 hello 快照覆盖，见
+            // quickTileDefs 的 qRead/qFlip/qStep）。
+            this.quickPending = {};
+            // 快捷设置方块网格的当前页（重渲染后恢复，见 renderSettingsHome）。
+            this.qsPage = 0;
             // Degraded-engine state from events/hello (mode-fallback §2).
             // Non-null while a Direct fallback serves for a failed mode.
             this.degrade = null;
@@ -1454,20 +1512,24 @@
             this.updateLabels();
         }
 
-        /** 字母组键：主字形=字母组（ABC），右上角标=数字。点按=整组通配
-         * （数字进引擎）；长按=数字+字母全后选弹层；四向滑动见 setupFlick。 */
+        /** 字母组键：主字形=字母组（ABC），右上角标=数字，左上角小字=
+         * 长按可出的两个符号（issue #9）。点按=整组通配（数字进引擎）；
+         * 长按=三行弹层（大小写+符号）；四向滑动见 setupFlick。 */
         t9LetterKey(digit) {
             const button = document.createElement('button');
             button.className = 'kb-key t9-key';
             button.dataset.key = digit;
             button.dataset.lp = 'popup';
+            const hint = document.createElement('span');
+            hint.className = 't9-hint';
+            hint.textContent = (LAYOUTS.t9.keySymbols[digit] || []).join('');
             const sup = document.createElement('span');
             sup.className = 't9-sup';
             sup.textContent = digit;
             const group = document.createElement('span');
             group.className = 't9-group';
             group.textContent = (LAYOUTS.t9.alts[digit] || '').toUpperCase();
-            button.append(sup, group);
+            button.append(hint, sup, group);
             button.addEventListener('click', () =>
                 this.call(() => Native.key(digit, this.token)));
             this.bindTouch(button);
@@ -2002,7 +2064,16 @@
                 this.pressedKeys.delete(button);
                 button.classList.remove('active-touch');
                 clear();
-                if (this.popup) this.closePopup(false);
+                if (this.popup) {
+                    // 快速甩出时最终位置只出现在 changedTouches：grid3 相对
+                    // 跟手收尾先刷新一次选中再提交，否则按旧高亮落错格
+                    // （codex P2）。split/qwerty 弹层保持既有语义不动。
+                    if (this.popup.grid3) {
+                        const last = event.changedTouches && event.changedTouches[0];
+                        if (last) this.movePopup(last);
+                    }
+                    this.closePopup(false);
+                }
                 else if (!longFired && !this.swiping && !options.skipClick) button.click();
             }, { passive: false });
             button.addEventListener('touchcancel', () => {
@@ -2267,29 +2338,63 @@
         }
 
         /** 长按全后选：数字 + 字母组逐个（4 → [4 g h i]）。 */
+        /** T9 长按（issue #9）：三行弹层——上行=字母组小写、中行=左符号
+         * ·数字·右符号、下行=大写。符号直上屏（literal → commitText），
+         * 字母/数字进引擎（字母确认拼写，数字=通配）。 */
         openT9HoldPopup(button) {
             const key = button.dataset.key;
             const letters = (LAYOUTS.t9.alts[key] || '').split('');
-            this.openT9Popup(button, [key, ...letters]);
+            const syms = LAYOUTS.t9.keySymbols[key] || [];
+            const cells = [
+                ...letters.map(ch => ({ char: ch })),
+                { char: syms[0], literal: true },
+                { char: key },
+                { char: syms[1], literal: true },
+                ...letters.map(ch => ({ char: ch.toUpperCase() })),
+            ].filter(cell => cell.char);
+            this.openT9Popup(button, cells, { grid: true });
         }
 
-        /** T9 浮层：长按=数字+字母全后选（4 → [4 g h i]，数字格与点按
-         * 同义）；7/9 下滑=拆分字母（opts.split：按触点 x 半边判定下左/
-         * 下右，不按格子距离——拖动方向与浮层位置相反，距离命中会立刻
-         * 取消）。格子全部走引擎通道（enginePath → sendText），字母确认
-         * 拼写、数字=通配。 */
+        /** T9 浮层：长按=三行大小写+符号弹层（opts.grid）；7/9 下滑=拆分
+         * 字母（opts.split：按触点 x 半边判定下左/下右，不按格子距离——
+         * 拖动方向与浮层位置相反，距离命中会立刻取消）。格子默认走引擎
+         * 通道（enginePath → sendText），literal 格直上屏（commitText）。
+         */
         openT9Popup(button, cells, opts = {}) {
             const popup = document.getElementById('keyPopup');
             const inner = document.getElementById('keyPopupInner');
-            inner.classList.add('t9-row');
+            inner.classList.add(opts.grid ? 't9-grid3' : 't9-row');
             inner.replaceChildren();
-            const items = cells.map(char => {
+            const defs = cells.map(cell => (typeof cell === 'object' ? cell : { char: cell }));
+            const makeItem = def => {
                 const item = document.createElement('div');
                 item.className = 'kp-item';
-                item.textContent = char;
-                inner.append(item);
-                return { item, char, cx: 0, cy: 0 };
-            });
+                item.textContent = def.char;
+                return { item, char: def.char, literal: !!def.literal, cx: 0, cy: 0 };
+            };
+            const items = [];
+            if (opts.grid) {
+                // 三行各占一行容器：行内居中（符号行 3 格窄于字母行也能
+                // 对齐中轴），最近中心选格只认 cx/cy，DOM 层级无关。
+                const per = (defs.length - 3) / 2;
+                [defs.slice(0, per), defs.slice(per, per + 3), defs.slice(per + 3)]
+                    .forEach(group => {
+                        const row = document.createElement('div');
+                        row.className = 'kp-row';
+                        group.forEach(def => {
+                            const cell = makeItem(def);
+                            row.append(cell.item);
+                            items.push(cell);
+                        });
+                        inner.append(row);
+                    });
+            } else {
+                defs.forEach(def => {
+                    const cell = makeItem(def);
+                    inner.append(cell.item);
+                    items.push(cell);
+                });
+            }
             popup.classList.add('open');
             const rect = button.getBoundingClientRect();
             const left = Math.max(4, Math.min(innerWidth - popup.offsetWidth - 4,
@@ -2301,18 +2406,37 @@
                 cell.cx = r.left + r.width / 2;
                 cell.cy = r.top + r.height / 2;
             });
-            // 预选=数字格（与点按同义）：不拖直接松手不改变输入。
-            // 拆分浮层按 initialX 半边判定初始选中（松手不再产生 move
-            // 也选对格，codex round-3 P2）。
-            let selected = items[0];
+            // 预选=数字格（与点按同义）：不拖直接松手不改变输入。三行
+            // 弹层中点恰是数字格；单行/拆分浮层保持首格预选，拆分按
+            // initialX 半边判定（松手不再产生 move 也选对格，codex round-3 P2）。
+            let selected;
             if (opts.split && typeof opts.initialX === 'number') {
                 const mid = (items[0].cx + items[1].cx) / 2;
                 selected = opts.initialX < mid ? items[0] : items[1];
+            } else if (opts.grid) {
+                selected = items[Math.floor(items.length / 2)];
+            } else {
+                selected = items[0];
             }
             selected.item.classList.add('sel');
             this.popup = { key: button.dataset.key, cells: items,
                 selected, cancelled: false, enginePath: true };
             if (opts.split) this.popup.split = true;
+            if (opts.grid) {
+                // 三行弹层（issue #9）：相对跟手的锚点 = 预选的数字格；
+                // cardRect 是虚拟光标的取消边界（滑出即「松手撤销」）。
+                // origin 拷贝自按下点：capture 收尾会清 touchOrigin，弹层
+                // 必须自带位移基准。
+                this.popup.grid3 = true;
+                this.popup.anchor = selected;
+                this.popup.origin = this.touchOrigin
+                    ? { x: this.touchOrigin.x, y: this.touchOrigin.y } : null;
+                const card = popup.getBoundingClientRect();
+                this.popup.cardRect = {
+                    left: card.left, top: card.top,
+                    right: card.right, bottom: card.bottom,
+                };
+            }
         }
 
         openPopup(button) {
@@ -2366,8 +2490,74 @@
             return Math.round(POPUP_CELL_REACH * scale);
         }
 
+        /** 「松手撤销」提示（issue #9）：三行弹层滑出卡片边界时浮层淡出，
+         *  这条 toast 把状态说破——固定挂在浮层上方中线，不跟手；
+         *  拖回卡片内自动恢复。 */
+        showPopupCancelTip(show) {
+            const tip = document.getElementById('keyPopupCancelTip');
+            const popup = document.getElementById('keyPopup');
+            if (!tip || !popup) return;
+            if (!show) { tip.classList.remove('show'); return; }
+            tip.textContent = t("松手撤销");
+            // 卡片矩形取一次即可：toast 固定在浮层上方中线，不跟手。
+            const card = popup.getBoundingClientRect();
+            tip.style.left = (card.left + card.width / 2) + 'px';
+            tip.style.top = Math.max(2, card.top - 30) + 'px';
+            tip.classList.add('show');
+        }
+
         movePopup(touch) {
             if (!this.popup) return;
+            // 三行弹层（issue #9 定稿）：相对跟手。高亮锚在数字格上，跟随
+            // 手指位移同步移动——手往左滑高亮往左（到左符号）、往下滑高亮
+            // 往下滑，和手指位置是相对关系，手指全程不必碰到浮层。虚拟
+            // 光标（锚点+位移）滑出卡片 → 淡出 + 「松手撤销」，拖回恢复。
+            if (this.popup.grid3) {
+                const inner = document.getElementById('keyPopupInner');
+                const anchor = this.popup.anchor;
+                const r = this.popup.cardRect;
+                const origin = this.popup.origin || this.touchOrigin ||
+                    { x: anchor.cx, y: anchor.cy };
+                const dx = touch.clientX - origin.x;
+                const dy = touch.clientY - origin.y;
+                // 按点 12px 内的微动不动高亮（吃手指抖动，松手仍落数字格）。
+                if (!this.popup.tracking) {
+                    if (Math.hypot(dx, dy) <= 12) return;
+                    this.popup.tracking = true;
+                }
+                const vx = anchor.cx + dx;
+                const vy = anchor.cy + dy;
+                const SLOP = 6;
+                const inside = vx >= r.left - SLOP && vx <= r.right + SLOP &&
+                    vy >= r.top - SLOP && vy <= r.bottom + SLOP;
+                if (!inside) {
+                    if (!this.popup.cancelled) {
+                        this.popup.cancelled = true;
+                        this.popup.selected = null;
+                        this.popup.cells.forEach(cell => cell.item.classList.remove('sel'));
+                        inner.style.transform = 'scale(0.92)';
+                        inner.style.opacity = '0.5';
+                        this.showPopupCancelTip(true);
+                    }
+                    return;
+                }
+                if (this.popup.cancelled) {
+                    this.popup.cancelled = false;
+                    inner.style.transform = '';
+                    inner.style.opacity = '';
+                    this.showPopupCancelTip(false);
+                }
+                let selected = this.popup.cells[0];
+                let best = Infinity;
+                this.popup.cells.forEach(cell => {
+                    const d = Math.hypot(vx - cell.cx, vy - cell.cy);
+                    if (d < best) { best = d; selected = cell; }
+                });
+                this.popup.cells.forEach(cell =>
+                    cell.item.classList.toggle('sel', cell === selected));
+                this.popup.selected = selected;
+                return;
+            }
             // 拆分浮层（T9 7/9 下滑）：下左/下右按两格中点判定，
             // 不做距离取消——下滑开层后继续向左下/右下即选中。
             if (this.popup.split) {
@@ -2376,6 +2566,7 @@
                     ? this.popup.cells[0] : this.popup.cells[1];
                 this.popup.cancelled = false;
                 this.popup.selected = sel;
+                this.showPopupCancelTip(false);
                 this.popup.cells.forEach(cell =>
                     cell.item.classList.toggle('sel', cell === sel));
                 return;
@@ -2403,10 +2594,12 @@
                     this.popup.cancelled = true;
                     this.popup.selected = null;
                     this.popup.cells.forEach(cell => cell.item.classList.remove('sel'));
+                    this.showPopupCancelTip(true);
                 }
                 return;
             }
             this.popup.cancelled = false;
+            this.showPopupCancelTip(false);
             this.popup.cells.forEach(cell => cell.item.classList.toggle('sel', cell === selected));
             this.popup.selected = selected;
         }
@@ -2417,13 +2610,17 @@
             const inner = document.getElementById('keyPopupInner');
             inner.style.transform = '';
             inner.style.opacity = '';
-            inner.classList.remove('t9-row');
+            inner.classList.remove('t9-row', 't9-grid3');
             document.getElementById('keyPopup').classList.remove('open');
+            this.showPopupCancelTip(false);
             if (cancel || popup?.cancelled) return;
             // T9 弹层：选格进引擎（字母=确认拼写，数字=通配）——
-            // sendSymbol 会把字母当文本直上屏，拼音组合就断了。
+            // sendSymbol 会把字母当文本直上屏，拼音组合就断了。literal
+            // 格（中行符号）反过来：直上屏，进引擎会被拼音吃掉。
             if (popup?.enginePath) {
-                if (popup.selected) this.sendText(popup.selected.char);
+                if (!popup.selected) return;
+                if (popup.selected.literal) this.sendSymbol(popup.selected.char);
+                else this.sendText(popup.selected.char);
                 return;
             }
             // the reference parity (soft_keyboard.js closePopup): the pre-selected
@@ -3896,6 +4093,8 @@
             // The panel reopens on its home page (or the requested
             // sub-page - the custom-row editor returns to 定制键盘).
             this.settingsPage = page;
+            // 全新打开回第一屏；打开后的 tile 重渲染由 qsPage 保持在当前页。
+            this.qsPage = 0;
             this.renderSettingsPanel();
             panel.classList.add('open');
             panel.hidden = false;
@@ -3987,82 +4186,272 @@
             document.body.classList.remove('settings-page');
         }
 
+        /** 快捷设置首页：微信式 2×4 方块网格，横向滑动翻页（native
+         *  scroll-snap，无手势代码）。工具栏保持现状（齿轮=完整设置），
+         *  网格末尾再放一块大的「完整设置」。与主键盘重复的能力（语音、
+         *  剪贴板）不进面板；tile 即状态——点按直接生效并重渲染回读。 */
         renderSettingsHome(panel) {
-            const addRow = label => {
-                const row = document.createElement('div');
-                row.className = 'set-row';
-                const name = document.createElement('span');
-                name.className = 'set-label';
-                name.textContent = label;
-                row.append(name);
-                panel.append(row);
-                return row;
-            };
-            const addOptions = (row, entries, current, onPick) => {
-                const opts = document.createElement('div');
-                opts.className = 'set-opts';
-                entries.forEach(([value, text]) => {
-                    const opt = document.createElement('button');
-                    opt.className = 'set-opt' + (value === current ? ' active' : '');
-                    opt.textContent = text;
-                    if (onPick) {
-                        opt.addEventListener('click', () => {
-                            onPick(value);
-                            this.renderSettingsPanel();
-                        });
-                    } else {
-                        opt.disabled = true;
-                    }
-                    opts.append(opt);
-                });
-                row.append(opts);
-            };
-            const addNav = (label, value, page) => {
-                const row = addRow(label);
-                const nav = document.createElement('button');
-                nav.className = 'set-opt set-nav';
-                nav.textContent = `${value} ›`;
-                nav.addEventListener('click', () => {
-                    this.settingsPage = page;
-                    this.renderSettingsPanel();
-                });
-                row.append(nav);
-            };
-
-            const themeRow = addRow(t("色彩模式"));
-            const theme = (() => {
-                try { return localStorage.getItem('feelime_theme') || 'auto'; } catch (_) { return 'auto'; }
-            })();
-            addOptions(themeRow, [
-                ['auto', t("跟随系统")], ['light', t("浅色")], ['dark', t("深色")],
-            ], theme, value => {
-                try { localStorage.setItem('feelime_theme', value); } catch (_) {}
-                applyTheme();
-                pushStores();
+            const wrap = document.createElement('div');
+            wrap.className = 'qs-wrap';
+            const pages = document.createElement('div');
+            pages.className = 'qs-pages';
+            this.quickTileDefs().forEach(tiles => {
+                const page = document.createElement('div');
+                page.className = 'qs-page';
+                tiles.forEach(def => page.append(this.qsTile(def)));
+                pages.append(page);
             });
+            pages.addEventListener('scroll', () => this.qsSyncDots(pages), { passive: true });
+            const dots = document.createElement('div');
+            dots.className = 'qs-dots';
+            pages.querySelectorAll('.qs-page').forEach(() => dots.append(document.createElement('span')));
+            wrap.append(pages, dots);
+            panel.append(wrap);
+            // 点按 tile 会整页重渲染：留在当前页，不许跳回第一屏
+            // （this.qsPage 由 qsSyncDots 维护；首次打开时为 0）。
+            this.qsPages = pages;
+            const restore = () => {
+                // 面板收起/整页重渲染会换掉本节点：width 恒 0，无守卫会
+                // 变成每帧重排的无终止 rAF（codex P2）。
+                if (!pages.isConnected || this.qsPages !== pages) return;
+                const pageW = pages.firstElementChild ? pages.firstElementChild.offsetWidth : 0;
+                if (!pageW) { requestAnimationFrame(restore); return; }
+                pages.scrollLeft = pageW * (this.qsPage || 0);
+                this.qsSyncDots(pages);
+            };
+            restore();
+        }
 
-            // 光标移动速度 moved to the full settings app's 手感微调 group
-            // (mode-fallback §4): the quick panel keeps theme/quick-switch
-            // only, and the value now syncs through hello (native pref).
+        qsTile(def) {
+            const tile = document.createElement('button');
+            tile.className = 'qs-tile' + (def.on && def.on() ? ' on' : '') +
+                (def.big ? ' qs-big' : '');
+            if (def.icon) tile.append(def.icon.cloneNode(true));
+            const name = document.createElement('span');
+            name.className = 'qs-name';
+            name.textContent = def.label;
+            tile.append(name);
+            if (def.state) {
+                const state = document.createElement('span');
+                state.className = 'qs-state';
+                state.textContent = def.state();
+                tile.append(state);
+            }
+            tile.addEventListener('click', () => def.tap());
+            return tile;
+        }
 
-            // The double-pinyin key map moved to the full settings app
-            // (低频展示需求, plus sogou/flypy now exist - one chart each).
-            // Quick switch supports ANY two keyboards.
-            // the long-press menu list is a SEPARATE setting - not everyone
-            // wants fr/ru/ja and both Chinese modes listed there.
-            addNav(t("快捷切换"), this.quickPair.map(m => modeLabel(m)).join(' / '), 'pair');
-            addNav(t("长按菜单"), t("{0} 个键盘", this.menuModes().length), 'menu');
-            // The custom table is pasted JSON now.
-            // Drag the keyboard's top edge to resize; the
-            // height saves per orientation (a nav to an editor, not a page).
-            const heightRow = addRow(t("键盘高度"));
-            const heightNav = document.createElement('button');
-            heightNav.className = 'set-opt set-nav';
-            heightNav.textContent = t("调节 ›");
-            heightNav.addEventListener('click', () => this.enterHeightEdit());
-            heightRow.append(heightNav);
-            // Every tool lives on the TOOLBAR; the panel
-            // carries settings rows only.
+        /** 翻页圆点跟随横向滚动位置（scroll 事件驱动，无触摸仲裁）；
+         *  当前页码记到 this.qsPage，重渲染后由 renderSettingsHome 恢复。 */
+        qsSyncDots(pages) {
+            const strip = pages || this.qsPages;
+            if (!strip || !strip.parentNode) return;
+            const dots = strip.parentNode.querySelector('.qs-dots');
+            if (!dots || !dots.children.length || !strip.firstElementChild) return;
+            const pageW = strip.firstElementChild.offsetWidth || 1;
+            const idx = Math.max(0, Math.min(dots.children.length - 1,
+                Math.round(strip.scrollLeft / pageW)));
+            this.qsPage = idx;
+            [...dots.children].forEach((dot, i) => dot.classList.toggle('cur', i === idx));
+        }
+
+        /** 快捷偏好的未决意图层：tap 把「下一个值」写进 quickPending 并
+         *  发送；hello 快照只有等于意图才撤签。渲染读 qRead（意图优先），
+         *  连点永远基于上一次意图翻转/步进，不会丢操作（codex P2）。 */
+        qRead(key, actual) {
+            const pending = this.quickPending[key];
+            return pending === undefined ? actual : pending;
+        }
+        qFlip(key, current) {
+            const pending = this.quickPending[key];
+            const next = pending === undefined ? !current : !pending;
+            this.quickPending[key] = next;
+            return next;
+        }
+        qStep(key, list, current) {
+            const pending = this.quickPending[key];
+            const cur = pending === undefined ? current : pending;
+            const next = list[(list.indexOf(cur) + 1) % list.length];
+            this.quickPending[key] = next;
+            return next;
+        }
+        qConfirm(key, actual) {
+            const pending = this.quickPending[key];
+            if (pending !== undefined && String(pending) === String(actual)) {
+                delete this.quickPending[key];
+            }
+        }
+
+        /** 方块定义：{icon, label, state?, on?, big?, tap}。state() 返回
+         *  状态行文本，on() 高亮开关/当前档；写偏好走 ImeBridge.setQuickPref
+         *  （旧 APK 没有该方法：typeof 守卫，点了不动，不产生假状态）。 */
+        quickTileDefs() {
+            const quickPref = (key, value) => {
+                if (typeof Native.setQuickPref === 'function') {
+                    this.call(() => Native.setQuickPref(key, String(value), this.token));
+                }
+            };
+            const cycle = (list, cur) => list[(list.indexOf(cur) + 1) % list.length];
+            const themeText = { auto: t("跟随系统"), light: t("浅色"), dark: t("深色") };
+            const localeText = { auto: t("跟随系统"), zh: t("中文"), en: t("English") };
+            const snapText = { 0: t("松"), 1: t("标准"), 2: t("紧") };
+            const fontText = { 0: t("标准"), 1: t("大"), 2: t("更大") };
+            const dpText = { ziranma: t("自然码"), flypy: t("小鹤双拼"), sogou: t("搜狗双拼") };
+            const themeTheme = () => {
+                try { return localStorage.getItem('feelime_theme') || 'auto'; } catch (_) { return 'auto'; }
+            };
+            const rehome = () => {
+                if (this.settingsPage === null) this.renderSettingsPanel();
+            };
+            const customRows = this.customKeys();
+            return [
+                [
+                    {
+                        icon: ICONS.theme, label: t("色彩模式"),
+                        state: () => themeText[themeTheme()] || themeText.auto,
+                        tap: () => {
+                            let next;
+                            try {
+                                next = cycle(['auto', 'light', 'dark'], themeTheme());
+                                localStorage.setItem('feelime_theme', next);
+                            } catch (_) { return; }
+                            applyTheme();
+                            pushStores();
+                            rehome();
+                        },
+                    },
+                    {
+                        icon: ICONS.assoc, label: t("中文联想"),
+                        on: () => this.qRead('association', this.associationOn),
+                        state: () => (this.qRead('association', this.associationOn) ? t("开") : t("关")),
+                        tap: () => {
+                            if (typeof Native.setQuickPref !== 'function') return;
+                            this.associationOn = this.qFlip('association', this.associationOn);
+                            if (!this.associationOn) this.assocWords = [];
+                            quickPref('association', this.associationOn ? '1' : '0');
+                            rehome();
+                        },
+                    },
+                    {
+                        icon: ICONS.sound, label: t("按键声音"),
+                        on: () => this.qRead('keySound', this.keySound),
+                        state: () => (this.qRead('keySound', this.keySound) ? t("开") : t("关")),
+                        tap: () => {
+                            if (typeof Native.setQuickPref !== 'function') return;
+                            this.keySound = this.qFlip('keySound', this.keySound);
+                            quickPref('keySound', this.keySound ? '1' : '0');
+                            rehome();
+                        },
+                    },
+                    {
+                        icon: ICONS.vibrate, label: t("按键振动"),
+                        on: () => this.qRead('keyHaptic', this.keyHaptic),
+                        state: () => (this.qRead('keyHaptic', this.keyHaptic) ? t("开") : t("关")),
+                        tap: () => {
+                            if (typeof Native.setQuickPref !== 'function') return;
+                            this.keyHaptic = this.qFlip('keyHaptic', this.keyHaptic);
+                            quickPref('keyHaptic', this.keyHaptic ? '1' : '0');
+                            rehome();
+                        },
+                    },
+                    {
+                        icon: ICONS.height, label: t("键盘高度"), state: () => t("调节"),
+                        tap: () => this.enterHeightEdit(),
+                    },
+                    {
+                        icon: ICONS.swap, label: t("快捷切换"),
+                        state: () => this.quickPair.map(m => modeLabel(m)).join(' · '),
+                        tap: () => { this.settingsPage = 'pair'; this.renderSettingsPanel(); },
+                    },
+                    {
+                        icon: ICONS.font, label: t("候选字号"),
+                        state: () => fontText[this.qRead('candidateFont', this.candidateFont)] || fontText[0],
+                        tap: () => {
+                            if (typeof Native.setQuickPref !== 'function') return;
+                            this.candidateFont = this.qStep('candidateFont', [0, 1, 2], this.candidateFont);
+                            this.applyCandidateFont();
+                            quickPref('candidateFont', this.candidateFont);
+                            rehome();
+                        },
+                    },
+                    {
+                        icon: ICONS.lang, label: t("界面语言"),
+                        // 选择值（auto/zh/en）驱动循环与显示；uiLocale 是
+                        // 解析后的显示语言，英文系统上用它永远回不到中文。
+                        state: () => localeText[this.qRead('uiLocale', this.uiLanguageChoice)] || localeText.auto,
+                        tap: () => {
+                            if (typeof Native.setQuickPref !== 'function') return;
+                            const next = this.qStep('uiLocale', ['auto', 'zh', 'en'], this.uiLanguageChoice || 'auto');
+                            quickPref('uiLocale', next);
+                            rehome();
+                        },
+                    },
+                ],
+                [
+                    {
+                        icon: ICONS.pad, label: t("底部留白"),
+                        state: () => {
+                            const pad = this.qRead('bottomPad', this.bottomPad);
+                            return pad ? pad + 'dp' : t("关");
+                        },
+                        tap: () => {
+                            if (typeof Native.setQuickPref !== 'function') return;
+                            this.bottomPad = this.qStep('bottomPad', [0, 12, 24, 36, 48], Number(this.bottomPad) || 0);
+                            this.applyHeight();
+                            quickPref('bottomPad', this.bottomPad);
+                            rehome();
+                        },
+                    },
+                    {
+                        icon: ICONS.timer, label: t("长按时长"),
+                        state: () => (Number(this.qRead('holdMs', this.holdMs)) || 350) + 'ms',
+                        tap: () => {
+                            if (typeof Native.setQuickPref !== 'function') return;
+                            this.holdMs = this.qStep('holdMs', [200, 300, 350, 450, 600], Number(this.holdMs) || 350);
+                            quickPref('holdMs', this.holdMs);
+                            rehome();
+                        },
+                    },
+                    {
+                        icon: ICONS.snap, label: t("滑动选字"),
+                        state: () => snapText[this.qRead('popupSnap', this.popupSnap)] || snapText[1],
+                        tap: () => {
+                            if (typeof Native.setQuickPref !== 'function') return;
+                            this.popupSnap = this.qStep('popupSnap', [0, 1, 2], this.popupSnap);
+                            quickPref('popupSnap', this.popupSnap);
+                            rehome();
+                        },
+                    },
+                    {
+                        icon: ICONS.menu, label: t("长按菜单"),
+                        state: () => t("{0} 个键盘", this.menuModes().length),
+                        tap: () => { this.settingsPage = 'menu'; this.renderSettingsPanel(); },
+                    },
+                    {
+                        icon: ICONS.keyboard, label: t("定制键盘"),
+                        state: () => (customRows
+                            ? t("已定制 {0} 个键", customRows.reduce((sum, row) => sum + (row || []).length, 0))
+                            : t("未定制")),
+                        tap: () => { this.settingsPage = 'custom'; this.renderSettingsPanel(); },
+                    },
+                    {
+                        icon: ICONS.dp, label: t("双拼方案"),
+                        state: () => dpText[this.qRead('dpScheme', dpScheme)] || dpText.ziranma,
+                        tap: () => {
+                            if (typeof Native.setQuickPref !== 'function') return;
+                            quickPref('dpScheme', this.qStep('dpScheme', ['ziranma', 'flypy', 'sogou'], dpScheme));
+                            rehome();
+                        },
+                    },
+                    {
+                        icon: ICONS.gear, label: t("完整设置"), big: true,
+                        tap: () => {
+                            this.closeSettingsPanel();
+                            this.call(() => Native.openSetup(this.token));
+                        },
+                    },
+                ],
+            ];
         }
 
         /** 自然码键位图（，重排，再调）：说明统一
@@ -5680,6 +6069,22 @@
             this.applyCandidateFont();
             this.associationOn = !!payload.associationOn;
             if (!this.associationOn) this.assocWords = [];
+            if (payload.uiLanguage === 'auto' || payload.uiLanguage === 'zh' || payload.uiLanguage === 'en') {
+                this.uiLanguageChoice = payload.uiLanguage;
+            }
+            // 按键反馈开关（快捷设置方块回读；旧 APK 不带字段=不覆盖）。
+            if (typeof payload.keySound === 'boolean') this.keySound = payload.keySound;
+            if (typeof payload.keyHaptic === 'boolean') this.keyHaptic = payload.keyHaptic;
+            // hello 快照是确认：只有等于未决意图才清除（否则连点中的
+            // 旧快照不得覆盖本地意图，见 quickTileDefs）。
+            this.qConfirm('association', this.associationOn);
+            this.qConfirm('keySound', this.keySound);
+            this.qConfirm('keyHaptic', this.keyHaptic);
+            this.qConfirm('uiLocale', this.uiLanguageChoice);
+            this.qConfirm('candidateFont', this.candidateFont);
+            this.qConfirm('bottomPad', this.bottomPad);
+            this.qConfirm('holdMs', this.holdMs);
+            this.qConfirm('popupSnap', this.popupSnap);
             if (Number(payload.holdMs) in { 200: 1, 300: 1, 350: 1, 450: 1, 600: 1 }) {
                 this.holdMs = Number(payload.holdMs);
             }
@@ -5777,6 +6182,7 @@
                 ? payload.dpScheme : 'ziranma';
             const schemeChanged = nextScheme !== dpScheme;
             dpScheme = nextScheme;
+            this.qConfirm('dpScheme', dpScheme);
             if (modeChanged) this.renderMode();
             // Degraded/warming state arrives with every hello (mode-fallback
             // §2.1): a rebuilt WebView restores its badge/notice silently.
@@ -5865,6 +6271,15 @@
                 this.renderDegradeBadge();
             }
             this.updateEngineStatus();
+            // 快捷设置首页的方块状态跟 hello 走（广播落盘 → 重推 hello）：
+            // 面板开着就重渲染首页，开关/档位立即反映新值。子页有自己的
+            // 渲染节奏，不动。
+            {
+                const panel = document.getElementById('settingsPanel');
+                if (panel && panel.classList.contains('open') && !this.settingsPage) {
+                    this.renderSettingsPanel();
+                }
+            }
         }
 
         renderDegradeBadge() {

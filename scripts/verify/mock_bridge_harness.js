@@ -90,7 +90,14 @@ class FakeElement {
         this._scrollLeft = 0;
     }
     get clientWidth() {
-        return this._scrollable ? 360 : 0;
+        if (!this._scrollable) return 0;
+        // 翻页条（.qs-pages，tile 网格）：视口宽 = 一页宽，scrollLeft
+        // 以「页」为单位（2 页内容 → max 只有一页的余量）。
+        if (this._pageStrip) {
+            const first = this.firstElementChild;
+            return first ? first.offsetWidth : 360;
+        }
+        return 360;
     }
     get scrollWidth() {
         if (!this._scrollable) return 0;
@@ -107,12 +114,19 @@ class FakeElement {
         const max = Math.max(0, this.scrollWidth - this.clientWidth);
         this._scrollLeft = Math.max(0, Math.min(Number(value) || 0, max));
     }
+
+    markPageStrip() {
+        this._pageStrip = true;
+        this._scrollable = true;
+    }
     get className() {
         return this.attributes.class || '';
     }
     set className(value) {
         this.attributes.class = value;
         this.classList.set = new Set(value.split(/\s+/).filter(Boolean));
+        // 翻页条自标记（重建后的新 strip 也会走到这里）。
+        if (this.classList.set.has('qs-pages')) this.markPageStrip();
     }
     get innerHTML() {
         return this._innerHTML;
@@ -130,6 +144,15 @@ class FakeElement {
         this._textContent = String(value);
         this.children = [];
         this._innerHTML = '';
+    }
+    get isConnected() {
+        // rAF 兜底守卫（快捷设置页码恢复）依赖真实 DOM 的 isConnected。
+        let node = this;
+        while (node) {
+            if (node.nodeType === 9) return true;
+            node = node.parentNode;
+        }
+        return false;
     }
     get firstElementChild() {
         return (this.children || []).find(child => child.nodeType === 1) || null;
@@ -263,11 +286,20 @@ class FakeElement {
         // siblings (popup cells, keys in a row) therefore sit side by side
         // like the real WebView, keeping drag distances realistic for popup
         // picks and drag-away cancels. Ancestor offsets are deliberately
-        // ignored so fixed-position layers stay near the touch origin.
+        // ignored so fixed-position layers stay near the touch origin —
+        // EXCEPT the popup's row containers (.kp-row, T9 三行弹层): rows
+        // stack vertically in the real WebView, and without a per-row top
+        // offset same-column cells of different rows collapse onto one rect
+        // and nearest-center always picks the first row.
         const parent = this.parentNode;
         const index = parent ? Math.max(0, parent.children.indexOf(this)) : 0;
         const left = 6 + (index % 10) * 34;
-        const top = 2 + Math.floor(index / 10) * 46;
+        let top = 2 + Math.floor(index / 10) * 46;
+        if (parent && parent.classList && parent.classList.contains('kp-row')) {
+            const grand = parent.parentNode;
+            const rowIdx = grand ? Math.max(0, grand.children.indexOf(parent)) : 0;
+            top += rowIdx * 46;
+        }
         return {
             left,
             top,
@@ -414,6 +446,7 @@ function parseSimpleHtml(html, parent) {
 class FakeDocument extends FakeElement {
     constructor() {
         super('#document');
+        this.nodeType = 9;
         this.body = new FakeElement('body');
         this.documentElement = new FakeElement('html');
         // CSS custom properties (keyboard.js writes --kb-row-h etc. through
@@ -585,6 +618,10 @@ class MockNative {
     }
     setCustomKeys(json, token) {
         this._record('setCustomKeys', [json, token]);
+    }
+    // 快捷设置方块（tile 网格）的偏好写通道。
+    setQuickPref(key, value, token) {
+        this._record('setQuickPref', [key, value, token]);
     }
     key(char, token) {
         this._record('key', [char, token]);
@@ -840,6 +877,8 @@ class KeyboardWorld {
                 ],
                 pageGenerationToken: this.tokenValue,
                 mode: 'direct',
+                // 界面语言「选择值」（auto/zh/en）；uiLocale 是解析结果。
+                uiLanguage: 'zh',
                 theme: 'light',
                 orientation: 'portrait',
                 engineDataReady: { pinyin: true, 'double-pinyin': true, japanese: true, french: true, russian: true },
@@ -881,6 +920,16 @@ class KeyboardWorld {
 
     key(char) {
         return this.document.querySelectorAll(`[data-key="${char}"]`)[0];
+    }
+
+    /** 快捷设置方块（tile 网格渲染后的首页）：按名称行取块。 */
+    tile(label) {
+        return [...this.document.querySelectorAll('.qs-tile')]
+            .find(el => (el.querySelector('.qs-name') || { textContent: '' }).textContent === label);
+    }
+
+    tileNames() {
+        return [...this.document.querySelectorAll('.qs-tile .qs-name')].map(el => el.textContent);
     }
 
     // ---- touch helpers

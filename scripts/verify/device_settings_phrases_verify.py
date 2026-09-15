@@ -45,11 +45,11 @@ def open_panel(kb):
 
 
 def nav_to(kb, label):
-    """From the panel home, tap the sub-page nav row for `label`."""
+    """From the panel home, tap the sub-page nav tile for `label`."""
     labels = json.dumps(LABEL_ALIASES.get(label, (label,)), ensure_ascii=False)
-    ev(f"(() => {{ const row = [...document.querySelectorAll('#settingsPanel .set-row')]"
-       f".find(r => {labels}.includes(r.querySelector('.set-label')?.textContent.trim()));"
-       f" row?.querySelector('.set-nav')?.click(); return 1; }})()")
+    ev(f"(() => {{ const tile = [...document.querySelectorAll('#settingsPanel .qs-tile')]"
+       f".find(t => {labels}.includes(t.querySelector('.qs-name')?.textContent.trim()));"
+       f" tile?.click(); return 1; }})()")
     time.sleep(0.4)
 
 
@@ -147,15 +147,19 @@ def main():
 
     # ---- #1/#6 settings sub-pages ----
     open_panel(kb)
-    labels = ev("[...document.querySelectorAll('#settingsPanel .set-label')]"
+    labels = ev("[...document.querySelectorAll('#settingsPanel .qs-name')]"
                 ".map(el => el.textContent)") or []
-    record("home page rows (tools live on the toolbar; key map moved to the settings app)",
-           # UI-19: the cursor-speed row moved into the settings app's feel
-           # card, so the panel home page keeps four rows.
-           labels in (
-               ['色彩模式', '快捷切换', '长按菜单', '键盘高度'],
-               ['Appearance', 'Quick switch', 'Keyboard menu', 'Keyboard height'],
-           ),
+    record("home page tiles (3.38.0 tile grid; voice/clipboard stay on the main keyboard)",
+           # 3.38.0: the row list became a 2x4 tile grid across two pages;
+           # both pages render into the DOM, so all 15 names are queryable.
+           labels == ['色彩模式', '中文联想', '按键声音', '按键振动',
+                      '键盘高度', '快捷切换', '候选字号', '界面语言',
+                      '底部留白', '长按时长', '滑动选字', '长按菜单',
+                      '定制键盘', '双拼方案', '完整设置']
+           or labels == ['Appearance', 'Associations', 'Key sound', 'Key vibration',
+                         'Keyboard height', 'Quick switch', 'Candidate size', 'Language',
+                         'Bottom padding', 'Long-press delay', 'Swipe reach', 'Keyboard menu',
+                         'Custom keys', 'Double-pinyin', 'All settings'],
            repr(labels))
 
     nav_to(kb, '快捷切换')

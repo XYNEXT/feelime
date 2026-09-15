@@ -112,7 +112,28 @@
   丢弃并回 Rejected(ENGINE_BUSY)（键盘按既有拒绝路径静默）。
 - 超时 5s→15s：自 warmup 安排时起算、含后台排队（期限是参数不是修复）。
 
-### 2.6 不做
+**1.0.12 修复**：`endVoiceSession` / `recreateEngineSession` 的
+beginSession 此前用 `mode`（降级后已是 DIRECT）重启引擎——静默续跑英文
+直出且清掉角标（§2.2 表早已写明应「与重绑同规则」，实现偏离了表）。
+修复后两者在降级态下改用 `degraded?.failedMode` 重试：重试中保留角标，
+真引擎 READY 落地清除并发恢复通知，再失败按新 seq 再通知（自愈闭环；
+JVM `degradedVoiceEndRetriesTheFailedModeInsteadOfSilentDirect` 钉住）。
+
+### 2.6 诊断采集（设置 → 关于 → 诊断记录）
+
+用户报告「双拼按键字母直接上屏」且用户侧无法取证（issue 链：1.0.6 声称
+修复实际没修好）。诊断开关打开后，IME 把降级链路事件收进内存环形缓冲
+（`Diagnostics.kt`，400 条、单条 ≤220 字符、只进内存不落盘不进备份），
+设置页「复制诊断信息」一键导出（剪贴板标记敏感）。采集点全部不含文本
+内容：editorStart/editor（包名、inputType hex、imeOptions hex）、
+startEngine（目标 + degradedBefore）、engineReady（warmupMs）、degrade
+（failedMode/reason/seq/queue）、replayQueue（降级直出重放计数）、
+clearDegrade（reason）、endVoiceSession、recreateBegin、selectMode。
+其中 `startEngine target=direct degradedBefore=…` 一行即「隐式恢复静默
+清徽标」的直接证据（§1 根因 B）。coordinator 保持 JVM 无 android 依赖，
+经构造参数 `diagnosticSink` 注入。
+
+### 2.7 不做
 
 rime 预热（round-2 B2.6 风险清单）→ backlog；自动循环重试 → 不做。
 
@@ -163,7 +184,8 @@ rime 预热（round-2 B2.6 风险清单）→ backlog；自动循环重试 → �
 三个参数走**专用原生 pref（feelime_keyboard 新 int 键）+ 广播重推
 hello**，不用 merged-store 整镜像替换（round-2 C7.1：会删其他键）：
 
-- `feel_scrub_speed`（1-5）：设置页新增；快捷设置面板删除该行；键盘启动
+- `feel_scrub_speed`（1-5）：设置页新增；快捷设置不收录该项（行列表时代
+  删除该行，3.38.0 方块网格延续不收录）；键盘启动
   采用顺序：hello 值 → 旧 localStorage `feelime_scrub_speed`（迁移兼容，
   不删除旧键，round-2 C7 建议最省改动）→ 默认 3。
 - `feel_hold_ms`（200/300/350/450/600，默认 350）：替换 bindTouch 四处

@@ -1238,12 +1238,9 @@ test('Chinese-mode popup pick lands literally (requirement 7)', () => {
 test('settings sub-pages: nav, key map, back (requirements 1+6)', {since: '3.33.0'}, () => {
     const world = fresh();
     world.tap(world.$('setupButton'));
-    const nav = label => [...world.$('settingsPanel').querySelectorAll('.set-row')]
-        .find(row => row.querySelector('.set-label').textContent === label)
-        .querySelector('.set-nav');
     // Sub-page chrome rides the toolbar - title on the
     // left, close on the right; back returns home.
-    world.tap(nav('快捷切换'));
+    world.tap(world.tile('快捷切换'));
     assert(world.document.body.classList.contains('settings-page'),
         'settings-page hides the regular tools');
     // pair sub-page: still six keyboards, tick BEFORE the name .
@@ -1256,7 +1253,7 @@ test('settings sub-pages: nav, key map, back (requirements 1+6)', {since: '3.33.
     world.tap(world.$('settingsPageBar').children[0]);
     equal(world.document.querySelectorAll('#pairEditor').length, 0, 'back returns home');
     // menu sub-page: tick + name + drag handle LAST.
-    world.tap(nav('长按菜单'));
+    world.tap(world.tile('长按菜单'));
     equal(world.document.querySelectorAll('#menuEditor .pair-row').length, 7, 'menu page rows (t9 joined)');
     const menuRow = world.document.querySelector('#menuEditor .pair-row');
     assert(menuRow.children[0].classList.contains('pair-tick'), 'menu tick first');
@@ -1265,9 +1262,7 @@ test('settings sub-pages: nav, key map, back (requirements 1+6)', {since: '3.33.
     world.tap(world.$('settingsPageBar').children[2]);
     assert(!world.$('settingsPanel').classList.contains('open'), 'close icon closes the panel');
     // No favorites entry in quick settings any more.
-    const labels = [...world.$('settingsPanel').querySelectorAll('.set-label')]
-        .map(el => el.textContent);
-    assert(!labels.includes('常用语'), 'favorites entry removed from quick settings');
+    assert(!world.tileNames().includes('常用语'), 'favorites entry removed from quick settings');
 });
 
 test('custom keys: tab hidden until saved; saveCustomJson persists (§15 editor lives in settings)', {since: '3.21.0'}, () => {
@@ -2048,9 +2043,7 @@ test('leaving the editor via a panel tab clears the editing key height', {since:
 test('double-pinyin key map lives in the settings app now', {since: '3.29.0'}, () => {
     const world = fresh();
     world.tap(world.$('setupButton'));
-    const labels = [...world.$('settingsPanel').querySelectorAll('.set-label')]
-        .map(el => el.textContent);
-    assert(!labels.includes('双拼键位'), 'schema nav removed from the quick panel');
+    assert(!world.tileNames().includes('双拼键位'), 'schema nav removed from the quick panel');
     world.tap(world.$('setupButton'));
 });
 
@@ -2172,16 +2165,16 @@ test('setup button opens the quick settings panel; full settings entry calls ope
     world.tap(setup);
     const panel = world.$('settingsPanel');
     assert(panel.classList.contains('open'), 'settings panel open');
-    // Home page rows; complex features are sub-page nav entries. The
-        // tools live on the toolbar; 定制键盘 moved to the app settings page.
-    const rows = [...panel.querySelectorAll('.set-label')].map(el => el.textContent);
-    // 光标移动速度 moved to the full settings app at 3.30.0 (mode-fallback §4).
-    const speedRow = verAtLeast(KEYBOARD_VERSION, '3.30.0') ? []
-        : verAtLeast(KEYBOARD_VERSION, '3.22.0') ? ['光标移动速度'] : ['滑动跟手'];
-    equal(JSON.stringify(rows),
-        JSON.stringify(['色彩模式', ...speedRow,
-            ...(verAtLeast(KEYBOARD_VERSION, '3.29.0') ? [] : ['双拼键位']), '快捷切换', '长按菜单', '键盘高度']),
-        'settings rows present (tools on the toolbar)');
+    // 3.38.0 tile grid (wechat-style): both pages render into the DOM.
+    // Complex features are sub-page nav tiles; tools stay on the toolbar.
+    equal(JSON.stringify(world.tileNames()),
+        JSON.stringify([
+            '色彩模式', '中文联想', '按键声音', '按键振动',
+            '键盘高度', '快捷切换', '候选字号', '界面语言',
+            '底部留白', '长按时长', '滑动选字', '长按菜单',
+            '定制键盘', '双拼方案', '完整设置',
+        ]),
+        'quick-settings tiles present (2 pages, voice/clipboard stay on the main keyboard)');
     equal(world.native.of('openSetup').length, 0, 'no openSetup until the full-settings entry');
     // The full-settings entry is a toolbar button next to the
     // gear, visible only while the panel is open.
@@ -2376,9 +2369,13 @@ test('candidate font scale rides hello into the body dataset', {since: '3.30.0'}
 test('quick-pair editor: tick 双拼 relabels the toggle and flips the pair', () => {
     const world = fresh();
     world.tap(world.$('setupButton'));
-    const pairRow = [...world.$('settingsPanel').querySelectorAll('.set-row')]
-        .find(row => row.querySelector('.set-label').textContent === '快捷切换');
-    world.tap(pairRow.querySelector('.set-opt')); // opens the pair editor
+    if (verAtLeast(KEYBOARD_VERSION, '3.38.0')) {
+        world.tap(world.tile('快捷切换')); // opens the pair editor
+    } else {
+        const pairRow = [...world.$('settingsPanel').querySelectorAll('.set-row')]
+            .find(row => row.querySelector('.set-label').textContent === '快捷切换');
+        world.tap(pairRow.querySelector('.set-opt')); // opens the pair editor
+    }
     const editor = world.$('pairEditor');
     assert(editor, 'pair editor opens');
     const shuangRow = [...editor.querySelectorAll('.pair-row')]
@@ -2610,17 +2607,128 @@ test('theme switches auto/light/dark from the settings panel', () => {
     const doc = world.document;
     equal(doc.documentElement.className, 'theme-light', 'auto follows default system light');
     world.tap(world.$('setupButton'));
-    const themeRow = [...world.$('settingsPanel').querySelectorAll('.set-row')]
-        .find(row => row.querySelector('.set-label').textContent === '色彩模式');
-    assert(themeRow, 'theme row exists');
-    const pick = text => [...themeRow.querySelectorAll('.set-opt')]
-        .find(b => b.textContent === text);
-    world.tap(pick('浅色'));
-    equal(doc.documentElement.className, 'theme-light', 'light selected');
-    world.tap(pick('深色'));
-    equal(doc.documentElement.className, 'theme-dark', 'dark selected');
-    world.tap(pick('跟随系统'));
-    equal(doc.documentElement.className, 'theme-light', 'auto back (system light)');
+    if (verAtLeast(KEYBOARD_VERSION, '3.38.0')) {
+        // 3.38.0: the theme tile CYCLES auto → light → dark → auto;
+        // the state line names the current pick (tile is the state).
+        const state = () => {
+            // a tap re-renders the home page - always re-query the fresh node
+            const tile = world.tile('色彩模式');
+            assert(tile, 'theme tile exists');
+            return tile.querySelector('.qs-state').textContent;
+        };
+        equal(state(), '跟随系统', 'state line shows auto');
+        world.tap(world.tile('色彩模式'));
+        equal(doc.documentElement.className, 'theme-light', 'light selected');
+        equal(state(), '浅色', 'state line follows light');
+        world.tap(world.tile('色彩模式'));
+        equal(doc.documentElement.className, 'theme-dark', 'dark selected');
+        equal(state(), '深色', 'state line follows dark');
+        world.tap(world.tile('色彩模式'));
+        equal(doc.documentElement.className, 'theme-light', 'auto back (system light)');
+        equal(state(), '跟随系统', 'state line back to auto');
+    } else {
+        const themeRow = [...world.$('settingsPanel').querySelectorAll('.set-row')]
+            .find(row => row.querySelector('.set-label').textContent === '色彩模式');
+        assert(themeRow, 'theme row exists');
+        const pick = text => [...themeRow.querySelectorAll('.set-opt')]
+            .find(b => b.textContent === text);
+        world.tap(pick('浅色'));
+        equal(doc.documentElement.className, 'theme-light', 'light selected');
+        world.tap(pick('深色'));
+        equal(doc.documentElement.className, 'theme-dark', 'dark selected');
+        world.tap(pick('跟随系统'));
+        equal(doc.documentElement.className, 'theme-light', 'auto back (system light)');
+    }
+});
+test('quick tiles: toggles write setQuickPref, hello echo re-reads state', {since: '3.38.0'}, () => {
+    const world = fresh();
+    world.hello({ associationOn: true, keySound: false, keyHaptic: false });
+    world.tap(world.$('setupButton'));
+    const state = label => world.tile(label).querySelector('.qs-state').textContent;
+    equal(state('中文联想'), '开', 'association reflects hello');
+    world.tap(world.tile('中文联想'));
+    const assoc = world.native.of('setQuickPref').slice(-1)[0];
+    equal(`${assoc.args[0]}=${assoc.args[1]}`, 'association=0', 'tap writes the pref');
+    equal(state('中文联想'), '关', 'optimistic re-render flips the state line');
+    world.tap(world.tile('按键声音'));
+    const sound = world.native.of('setQuickPref').slice(-1)[0];
+    equal(`${sound.args[0]}=${sound.args[1]}`, 'keySound=1', 'sound toggle writes the pref');
+    equal(state('按键声音'), '开', 'sound state line follows');
+    // Native echo (broadcast → hello re-push) is authoritative: a value
+    // changed elsewhere lands in the open panel too.
+    world.hello({ associationOn: false, keySound: true });
+    equal(state('中文联想'), '关', 'hello echo wins for association');
+    equal(state('按键声音'), '开', 'hello echo keeps key sound');
+    const calls = world.native.of('setQuickPref').map(c => c.args[2]);
+    assert(calls.every(tok => tok === world.tokenValue), 'every write carries the page token');
+});
+
+test('quick tiles: cycle tiles rotate steps and apply locally', {since: '3.38.0'}, () => {
+    const world = fresh();
+    world.hello({ candidateFont: 0, holdMs: 350, popupSnap: 1, bottomPad: 0, dpScheme: 'ziranma' });
+    world.tap(world.$('setupButton'));
+    const state = label => world.tile(label).querySelector('.qs-state').textContent;
+    const lastPref = () => {
+        const call = world.native.of('setQuickPref').slice(-1)[0];
+        return `${call.args[0]}=${call.args[1]}`;
+    };
+    world.tap(world.tile('候选字号'));
+    equal(lastPref(), 'candidateFont=1', 'font cycles to large');
+    equal(world.document.body.dataset.candFont, 'large', 'candidate scale applied');
+    world.tap(world.tile('长按时长'));
+    equal(lastPref(), 'holdMs=450', 'hold steps 350 → 450');
+    equal(state('长按时长'), '450ms', 'hold state line follows');
+    world.tap(world.tile('滑动选字'));
+    equal(lastPref(), 'popupSnap=2', 'snap 标准 → 紧');
+    world.tap(world.tile('底部留白'));
+    equal(lastPref(), 'bottomPad=12', 'pad steps 0 → 12');
+    equal(world.document.documentElement.style.getPropertyValue('--kb-bottom-pad').trim(), '12px',
+        'pad applied to the view budget');
+    world.tap(world.tile('双拼方案'));
+    equal(lastPref(), 'dpScheme=flypy', 'dp scheme cycles 自然码 → 小鹤');
+    world.tap(world.tile('界面语言'));
+    equal(lastPref(), 'uiLocale=en', 'locale cycles zh → en');
+    // hello re-push with the new locale translates the whole grid.
+    world.hello({ uiLocale: 'en' });
+    assert(world.tileNames().includes('Associations'), 'tile names translate on the echo');
+});
+
+test('quick tiles: re-render keeps the current page (no jump to page 1)', {since: '3.38.0'}, () => {
+    const world = fresh();
+    world.hello();
+    world.tap(world.$('setupButton'));
+    // 翻到第二页（真实设备是手指横滑；harness 直接拨 scrollLeft）。
+    const strip = world.document.querySelector('.qs-pages');
+    strip.scrollLeft = strip.firstElementChild.offsetWidth;
+    strip.listeners.filter(l => l.type === 'scroll').forEach(l => l.handler({ target: strip }));
+    assert(world.tileNames().indexOf('长按菜单') >= 0, 'page-2 tiles stay in the DOM');
+    // 点第二页的子页导航 → 返回首页：必须还在第二页。
+    world.tap(world.tile('长按菜单'));
+    assert(world.document.body.classList.contains('settings-page'), 'sub-page opened');
+    world.tap(world.$('settingsPageBar').children[0]); // back
+    const strip2 = world.document.querySelector('.qs-pages');
+    equal(strip2.scrollLeft, strip2.firstElementChild.offsetWidth,
+        'home re-render restores page 2');
+    const dots = [...world.document.querySelectorAll('.qs-dots span')];
+    assert(dots[1] && dots[1].classList.contains('cur'), 'second dot active');
+});
+
+test('quick tiles: gear tile opens full settings; old APKs never fake state', {since: '3.38.0'}, () => {
+    const world = fresh();
+    world.hello({ keySound: false });
+    world.tap(world.$('setupButton'));
+    world.tap(world.tile('完整设置'));
+    equal(world.native.of('openSetup').length, 1, 'gear tile opens the settings app');
+    assert(!world.$('settingsPanel').classList.contains('open'), 'panel closed first');
+    // Hot-updated JS on an older APK: no setQuickPref on the bridge - the
+    // tile must no-op, not paint a state that native never adopted.
+    const stale = fresh();
+    stale.hello({ keySound: false });
+    stale.context.window.FeelimeNative.setQuickPref = undefined;
+    stale.tap(stale.$('setupButton'));
+    stale.tap(stale.tile('按键振动'));
+    equal(stale.tile('按键振动').querySelector('.qs-state').textContent, '关',
+        'state stays off without the native channel');
 });
 
 test('first paint: never guess a system theme before the bridge speaks', () => {
@@ -3527,9 +3635,7 @@ test('short landscape keeps all four rows above the system area', {since: '3.22.
 test('height drag PREVIEWS only; the release applies once', {since: '3.21.0'}, () => {
     const world = fresh();
     world.tap(world.$('setupButton'));
-    const heightNav = [...world.document.querySelectorAll('.set-nav')]
-        .find(el => el.textContent === '调节 ›');
-    world.tap(heightNav);
+    world.tap(world.tile('键盘高度'));
     const card = world.$('heightCard');
     assert(!card.hidden && card.classList.contains('open'), 'height card shown');
     const applied = () => world.native.of('setKeyboardHeight').length;
@@ -3568,9 +3674,7 @@ test('height-card range follows the hello-pushed screen ceiling', {since: '3.21.
     const world = fresh();
     world.hello({ heightCeil: 300, heightFloor: 210, floatBand: 200 });
     world.tap(world.$('setupButton'));
-    const heightNav = [...world.document.querySelectorAll('.set-nav')]
-        .find(el => el.textContent === '调节 ›');
-    world.tap(heightNav);
+    world.tap(world.tile('键盘高度'));
     equal(world.document.getElementById('heightValue').textContent, '272px',
         'preview opens at the current height');
     const left = parseInt(world.document.getElementById('heightThumb').style.left, 10);
@@ -3582,9 +3686,7 @@ test('height-card range follows the hello-pushed screen ceiling', {since: '3.21.
     world.tap(world.document.getElementById('heightCardCancel'));
     world.hello({ orientation: 'landscape', heightCeil: 206, heightFloor: 170, floatBand: 120 });
     world.tap(world.$('setupButton'));
-    const nav2 = [...world.document.querySelectorAll('.set-nav')]
-        .find(el => el.textContent === '调节 ›');
-    world.tap(nav2);
+    world.tap(world.tile('键盘高度'));
     equal(world.document.getElementById('heightHint').textContent, '横屏已达屏幕上限',
         'capped hint replaces the drag hint');
     assert(world.document.getElementById('heightPlus').disabled === true,
@@ -3599,9 +3701,7 @@ test('unchanged height saves send stable content height', {since: '3.22.1'}, () 
     world.hello({ orientation: 'portrait', safeBottom: 32, heightFloor: 210, heightCeil: 320 });
     const openCard = () => {
         world.tap(world.$('setupButton'));
-        const nav = [...world.document.querySelectorAll('.set-nav')]
-            .find(el => el.textContent === '调节 ›');
-        world.tap(nav);
+        world.tap(world.tile('键盘高度'));
     };
     for (let i = 0; i < 3; i++) {
         openCard();
@@ -3619,9 +3719,7 @@ test('landscape +/- and cancel keep safe area out of bridge height', {since: '3.
     world.$('softKeyboard').clientHeight = 248;
     world.hello({ orientation: 'landscape', safeBottom: 32, heightFloor: 170, heightCeil: 240 });
     world.tap(world.$('setupButton'));
-    const nav = [...world.document.querySelectorAll('.set-nav')]
-        .find(el => el.textContent === '调节 ›');
-    world.tap(nav);
+    world.tap(world.tile('键盘高度'));
     equal(world.$('heightValue').textContent, '216px', 'landscape card reads content height');
     world.tap(world.$('heightPlus'));
     world.tap(world.$('heightCardCancel'));
@@ -3688,10 +3786,8 @@ test('resize trusts the hello orientation (no portrait-drag flip)', () => {
 test('quick settings height row opens the drag handle', {since: '3.21.0'}, () => {
     const world = fresh();
     world.tap(world.$('setupButton'));
-    const heightNav = [...world.document.querySelectorAll('.set-nav')]
-        .find(el => el.textContent === '调节 ›');
-    assert(heightNav, 'height row present');
-    world.tap(heightNav);
+    assert(world.tile('键盘高度'), 'height tile present');
+    world.tap(world.tile('键盘高度'));
     assert(!world.$('heightCard').hidden, 'height card shown');
     // Cancel restores the pre-edit height and hides the card.
     world.tap(world.document.getElementById('heightCardCancel'));
@@ -3771,9 +3867,7 @@ test('panels borrow the bar from the ctrl view and hand it back', () => {
 test('height card owns the top edge: no overlay on keys, ctrl view waits', {since: '3.21.0'}, () => {
     const world = fresh();
     world.tap(world.$('setupButton'));
-    const heightNav = [...world.document.querySelectorAll('.set-nav')]
-        .find(el => el.textContent === '调节 ›');
-    world.tap(heightNav);
+    world.tap(world.tile('键盘高度'));
     assert(!world.$('heightCard').hidden, 'card shown');
     // Cancel: card hidden.
     world.tap(world.document.getElementById('heightCardCancel'));
@@ -3787,9 +3881,7 @@ test('height card owns the top edge: no overlay on keys, ctrl view waits', {sinc
     assert(world.document.body.classList.contains('ctrl-view'), 'ctrl view on');
     world.tap(world.$('setupButton'));
     assert(world.$('ctrlLayer').hidden, 'rows suspended under quick settings');
-    const nav2 = [...world.document.querySelectorAll('.set-nav')]
-        .find(el => el.textContent === '调节 ›');
-    world.tap(nav2);
+    world.tap(world.tile('键盘高度'));
     assert(!world.$('heightCard').hidden, 'card shown over ctrl view');
     // The card floats in the band - it does not borrow the key
     // area, so the ctrl rows simply stay where they are.
@@ -4132,10 +4224,10 @@ test('English UI preserves Chinese composition and switches back', {since: '3.22
     assert(world.$('candidates').textContent.includes('你好'), 'candidate text unchanged');
     equal(world.native.of('clearComposing').length, 0, 'no composition reset');
     world.tap(world.$('setupButton'));
-    assert([...world.$('settingsPanel').querySelectorAll('.set-label')].some(e => e.textContent === 'Quick switch'), 'dynamic UI translated');
+    assert(world.tileNames().includes('Quick switch'), 'dynamic UI translated');
     world.hello({mode: 'pinyin', uiLocale: 'zh'});
     equal(world.$('heightCardSave').textContent, '保存', 'switch back');
-    assert([...world.$('settingsPanel').querySelectorAll('.set-label')].some(e => e.textContent === '快捷切换'), 'open subview stays translated');
+    assert(world.tileNames().includes('快捷切换'), 'open subview stays translated');
 });
 
 test('panel composition replaces spans and saves only after native flush', {since: '3.22.0'}, () => {
@@ -4260,7 +4352,7 @@ test('restore default stays pending until Save and Cancel preserves the height',
     const world = fresh({heightDefault: 272});
     const open = () => {
         world.tap(world.$('setupButton'));
-        world.tap([...world.document.querySelectorAll('.set-nav')].find(el => el.textContent === '调节 ›'));
+        world.tap(world.tile('键盘高度'));
     };
     open();
     world.native.reset();
@@ -4431,20 +4523,123 @@ test('t9 long-press popup routes digit + letters through the engine', {since: '3
         candidates: [], hasNextPage: false });
     equal(world.key('2').querySelector('.t9-group').textContent, 'ABC',
         'keycap shows the letter group');
-    // 长按弹层：数字 + 逐个字母；组标签绝不成为可提交格子（P2-3 教训）。
+    equal(world.key('2').querySelector('.t9-hint').textContent, '—&',
+        'keycap hints the two long-press symbols (issue #9)');
+    // 三行弹层的取消判定看「滑出浮层卡片边界」：fake DOM 没有真实布局，
+    // 把卡片矩形钉到覆盖所有格子假矩形的位置再开层。
+    const pinCard = w => {
+        w.document.getElementById('keyPopup').getBoundingClientRect =
+            () => ({ left: 0, top: 0, right: 500, bottom: 400, width: 500, height: 400 });
+    };
+    pinCard(world);
+    // 长按三行弹层（issue #9）：小写 / 左符号·数字·右符号 / 大写。
     const two = world.key('2');
     world.touchDown(two);
     world.clock.advance(360);
     const items = [...world.document.querySelectorAll('.kp-item')];
-    equal(items.map(i => i.textContent).join(','), '2,a,b,c',
-        'popup offers the digit then each letter');
-    // 选字母格 → 引擎通道（Native.key），不是 commitText。
-    const bRect = items[2].getBoundingClientRect();
-    world.move(two, bRect.left + bRect.width / 2, 10);
-    world.touchUp(two);
+    equal(items.map(i => i.textContent).join(','), 'a,b,c,—,2,&,A,B,C',
+        'popup offers lowercase / symbol-digit-symbol / uppercase');
+    const rows = [...world.document.querySelectorAll('#keyPopupInner .kp-row')];
+    equal(rows.length, 3, 'three rows in the grid popup');
+    // 相对跟手：高亮 = 数字格锚点 + 手指位移。手往下滑 → 高亮往下滑
+    // （到下一行），往左下滑 34/46px（一格）正好落在 A。
+    world.move(two, 20 - 34, 20 + 46);
+    assert(items[6].classList.contains('sel'), 'highlight moves with the finger delta');
+    // 收尾坐标 = 最后移动位置（真实触摸的 changedTouches 语义）。
+    world.touchUp(two, 20 - 34, 20 + 46);
     const keys = world.native.of('key');
     assert(keys.length >= 1, 'popup pick reaches the engine');
-    equal(keys[keys.length - 1].args[0], 'b', 'letter goes to the engine channel');
+    equal(keys[keys.length - 1].args[0], 'A', 'uppercase letter confirms the spelling');
+    // 选符号格 → commitText 直上屏（进引擎会被拼音组合吃掉）。
+    const worldSym = fresh({ mode: 't9' });
+    worldSym.engineState({ phase: 'READY', mode: 't9', revision: 1, composing: '', rawInput: '',
+        candidates: [], hasNextPage: false });
+    pinCard(worldSym);
+    const five = worldSym.key('5');
+    worldSym.touchDown(five);
+    worldSym.clock.advance(360);
+    const symItems = [...worldSym.document.querySelectorAll('.kp-item')];
+    equal(symItems.map(i => i.textContent).join(','), 'j,k,l,、,5,：,J,K,L',
+        '5-key popup carries 、 and ： around the digit');
+    // 手往左滑 → 高亮滑到数字左边的符号（用户定稿的方向语义）。
+    worldSym.move(five, 20 - 40, 20);
+    assert(symItems[3].classList.contains('sel'), 'left slide picks the left symbol');
+    worldSym.touchUp(five, 20 - 40, 20);
+    const commits = worldSym.native.of('commitText').map(c => c.args[0]);
+    equal(commits[commits.length - 1], '、', 'symbol cell lands literally');
+    equal(worldSym.native.of('key').filter(c => c.args[0] === '、').length, 0,
+        'symbol never enters the engine');
+    // 拖出取消圈：浮层缩小变淡 + 「松手取消」提示，松手不落字。
+    const worldOut = fresh({ mode: 't9' });
+    worldOut.engineState({ phase: 'READY', mode: 't9', revision: 1, composing: '', rawInput: '',
+        candidates: [], hasNextPage: false });
+    pinCard(worldOut);
+    const nine = worldOut.key('9');
+    worldOut.touchDown(nine);
+    worldOut.clock.advance(360);
+    const outItems = [...worldOut.document.querySelectorAll('.kp-item')];
+    // 下滑一格半（虚拟光标到 W）→ 高亮往下走。
+    worldOut.move(nine, 20 - 34, 20 + 92);
+    assert(outItems[7].classList.contains('sel'), 'down slide walks the highlight down');
+    // 继续同方向滑，虚拟光标越过卡片底边（400）才取消：
+    // 浮层淡出 + 「松手撤销」toast 固定在浮层上方（不跟手）。
+    worldOut.move(nine, 20 - 34, 20 + 352);
+    const tip = worldOut.$('keyPopupCancelTip');
+    assert(tip.classList.contains('show'), 'cancel tip shows once the cursor leaves the card');
+    const inner = worldOut.document.getElementById('keyPopupInner');
+    equal(inner.style.opacity, '0.5', 'popup fades while cancelled');
+    const tipLeft = parseInt(tip.style.left, 10);
+    worldOut.move(nine, 20 - 34, 20 + 400);
+    equal(parseInt(tip.style.left, 10), tipLeft, 'cancel tip stays put (does not follow the finger)');
+    // 往回滑（虚拟光标回卡片内）自动恢复。
+    worldOut.move(nine, 20 - 34, 20);
+    assert(!tip.classList.contains('show'), 'sliding back restores selection');
+    equal(inner.style.opacity, '', 'popup solid again');
+    assert(outItems[4].classList.contains('sel'), 'middle row re-highlighted on the way back');
+    worldOut.move(nine, 20 - 34, 20 + 352);
+    assert(tip.classList.contains('show'), 'exiting again re-arms the cancel state');
+    // 收尾在卡片外：松手仍是撤销态，不落字（codex P2 的回归断言）。
+    worldOut.touchUp(nine, 20 - 34, 20 + 352);
+    equal(worldOut.native.of('key').length, 0, 'cancelled release lands nothing');
+    equal(worldOut.native.of('commitText').length, 0, 'cancelled release commits nothing');
+    assert(!worldOut.$('keyPopupCancelTip').classList.contains('show'),
+        'cancel tip hides on close');
+    // 手指没进过卡片、只在小范围内蹭（触发键附近）：不取消，松手落预选数字。
+    const worldNear = fresh({ mode: 't9' });
+    worldNear.engineState({ phase: 'READY', mode: 't9', revision: 1, composing: '', rawInput: '',
+        candidates: [], hasNextPage: false });
+    pinCard(worldNear);
+    const three = worldNear.key('3');
+    worldNear.touchDown(three, 20, 450);
+    worldNear.clock.advance(360);
+    const nearItems = [...worldNear.document.querySelectorAll('.kp-item')];
+    // 按点 12px 内的微动：高亮保持数字格（吃手指抖动）。
+    worldNear.move(three, 30, 450);
+    assert(nearItems[4].classList.contains('sel'), 'micro-drift keeps the digit highlighted');
+    assert(!worldNear.$('keyPopupCancelTip').classList.contains('show'),
+        'micro-drift does not cancel');
+    // 相对跟手：手指全程不碰浮层，高亮也跟着位移走——往左滑一格就是
+    // 数字左边的符号（用户定稿）。
+    worldNear.move(three, 20 - 34, 450);
+    assert(nearItems[3].classList.contains('sel'), 'left slide lands on the left symbol');
+    worldNear.touchUp(three, 20 - 34, 450);
+    const commits3 = worldNear.native.of('commitText').map(c => c.args[0]);
+    equal(commits3[commits3.length - 1], '（', 'tracked symbol cell lands literally');
+    // 快速甩出：最后一次 move 在卡内，收尾坐标已远处 → 撤销，不落字。
+    const worldFling = fresh({ mode: 't9' });
+    worldFling.engineState({ phase: 'READY', mode: 't9', revision: 1, composing: '', rawInput: '',
+        candidates: [], hasNextPage: false });
+    pinCard(worldFling);
+    const four = worldFling.key('4');
+    worldFling.touchDown(four, 20, 20);
+    worldFling.clock.advance(360);
+    const flingItems = [...worldFling.document.querySelectorAll('.kp-item')];
+    // 相对模型：向上位移一格（46px）→ 高亮到 e（虚拟光标落在 e 上）。
+    worldFling.move(four, 20, 20 - 46);
+    assert(flingItems[1].classList.contains('sel'), 'in-card pick before the fling');
+    worldFling.touchUp(four, 460, 700);
+    equal(worldFling.native.of('key').length, 0, 'fling-out release lands nothing');
+    equal(worldFling.native.of('commitText').length, 0, 'fling-out release commits nothing');
     // 不拖直接松手 = 预选数字格，与点按同义（通配数字进引擎）。
     const world2 = fresh({ mode: 't9' });
     world2.engineState({ phase: 'READY', mode: 't9', revision: 1, composing: '', rawInput: '',

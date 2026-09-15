@@ -425,6 +425,18 @@
       <p class="hint" data-i18n="about.offlineHint">全程离线：语音识别与文字候选都不联网。</p>
     </section>
 
+    <section class="card" id="sec-diagnostics" aria-labelledby="diagTitle">
+      <div class="section-heading"><h2 id="diagTitle" data-i18n="diag.title">诊断记录</h2><span class="eyebrow" data-i18n="diag.badge">调试</span></div>
+      <label class="row switch-row" for="diagnosticsOn">
+        <span class="row-label"><span data-i18n="diag.toggle">记录引擎诊断事件</span><small data-i18n="diag.toggleHint">复现「按键字母直接上屏」这类故障前打开。只记录引擎与编辑器事件（包名、inputType、降级原因），不含任何输入内容。</small></span>
+        <input type="checkbox" id="diagnosticsOn" class="toggle">
+      </label>
+      <div class="actions">
+        <button class="btn" id="btnCopyDiagnostics" type="button" data-i18n="diag.copy">复制诊断信息</button>
+        <span class="save-note" id="diagNote" role="status" aria-live="polite"></span>
+      </div>
+    </section>
+
     <section class="card" id="sec-notices" aria-labelledby="noticesTitle">
       <div class="section-heading"><h2 id="noticesTitle" data-i18n="about.noticesTitle">第三方许可与组件说明</h2><span class="eyebrow" data-i18n="about.legalBadge">许可</span></div>
       <details>

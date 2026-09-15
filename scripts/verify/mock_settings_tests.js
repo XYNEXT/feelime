@@ -84,6 +84,8 @@ class MockSettingsNative {
     setCandidateFont(...a) { this._rec('setCandidateFont', a); }
     setFuzzyPinyinMask(...a) { this._rec('setFuzzyPinyinMask', a); }
     setAssociation(...a) { this._rec('setAssociation', a); }
+    setDiagnostics(...a) { this._rec('setDiagnostics', a); }
+    copyDiagnostics(...a) { this._rec('copyDiagnostics', a); }
     setKeySound(...a) { this._rec('setKeySound', a); }
     setKeyHaptic(...a) { this._rec('setKeyHaptic', a); }
     // /R8: page reporting (BACK returns home first) + about-page
@@ -525,6 +527,27 @@ test('update source status and daily auto-check toggle use the native bridge', (
     assert(change, 'auto-check toggle listener');
     change.handler({ target: world.$('autoUpdateCheck') });
     equal(world.lastCall('setAutoUpdateCheck').args, [true, world.token], 'auto-check toggle');
+});
+
+test('diagnostics toggle records via bridge; copy button exports', () => {
+    const world = new SettingsWorld();
+    world.push({ ...BASE_STATE, diagnosticsOn: false });
+    equal(world.$('diagnosticsOn').checked, false, 'diagnostics off from state');
+    const box = world.$('diagnosticsOn');
+    const change = box.listeners.find(listener => listener.type === 'change');
+    assert(change, '#diagnosticsOn has a change listener');
+    box.checked = true;
+    change.handler({ target: box });
+    equal(world.lastCall('setDiagnostics').args, [true, world.token], 'setDiagnostics + token');
+    assert(world.$('diagNote').textContent.length > 0, 'note tells the user recording started');
+    // 复制按钮：开关打开 → copyDiagnostics；未打开 → 只提示不导出。
+    world.push({ ...BASE_STATE, diagnosticsOn: true });
+    world.$('btnCopyDiagnostics').click();
+    equal(world.lastCall('copyDiagnostics').args, [world.token], 'copy button exports');
+    world.push({ ...BASE_STATE, diagnosticsOn: false });
+    world.$('btnCopyDiagnostics').click();
+    equal(world.native.of('copyDiagnostics').length, 1,
+        'copy is gated on the toggle (no second export)');
 });
 
 test('navigation: home starts as the only visible page; showPage swaps and reports', () => {

@@ -576,7 +576,9 @@ body[data-cand-font="xlarge"] { --cand-font-scale: 1.35; }
 .t9-strip::-webkit-scrollbar { display: none; }
 .t9-side-cell {
     flex: none;
-    height: calc(var(--kb-row-h, 44px) * 0.78);
+    /* 0.74：符号键加高到整行后，音节条竖屏仍刚好放下 4 格（用户要求
+     * 「符号键 = 最后一行高，压缩上面 4 格」）。 */
+    height: calc(var(--kb-row-h, 44px) * 0.74);
     border: 0;
     border-radius: var(--radius-key);
     background: var(--special);
@@ -589,8 +591,9 @@ body[data-cand-font="xlarge"] { --cand-font-scale: 1.35; }
 }
 .t9-side-cell:active { background: var(--pressed); }
 .t9-syl-pre { color: var(--key-subtext); }
-/* flex:none 压住 .kb-key 的默认 flex:1——否则符号键与滚动条平分列高 */
-.t9-sym-btn { flex: none; height: calc(var(--kb-row-h, 44px) * 0.78); }
+/* flex:none 压住 .kb-key 的默认 flex:1——否则符号键与滚动条平分列高。
+ * 高度 = 最后一行（r4）整行高，底边与 123/mic/中英/换行对齐。 */
+.t9-sym-btn { flex: none; height: var(--kb-row-h, 44px); }
 /* 字母组键：主字形=字母组，右上角标=数字（与空格的 0 角标同款）。 */
 .t9-key { position: relative; }
 .t9-sup {
@@ -602,6 +605,15 @@ body[data-cand-font="xlarge"] { --cand-font-scale: 1.35; }
 }
 /* 字母组主字形不加重——kb-key 的 550 在大号字母组上显得过粗（用户反馈） */
 .t9-group { font-size: min(20px, calc(var(--kb-row-h, 44px) * 0.46)); font-weight: 400; }
+/* 长按符号角标：左上角小字（issue #9；右上角留给数字角标）。 */
+.t9-hint {
+    position: absolute;
+    top: 2px;
+    left: 5px;
+    font-size: 10px;
+    color: var(--key-subtext);
+    letter-spacing: 1px;
+}
 /* 底行：123 与中英各 2/3 键宽，省出的空间全给 mic/空格（5/3 键宽）。 */
 .t9-r4 { display: flex; gap: 5px; min-width: 0; }
 .t9-r4 .kb-key { flex: 3; min-width: 0; }
@@ -609,6 +621,42 @@ body[data-cand-font="xlarge"] { --cand-font-scale: 1.35; }
 .t9-r4 .t9-wide { flex: 5; }
 /* T9 长按浮层：单行排布（5 格，qwerty 长按的 3 格换行排不适用）。 */
 #keyPopupInner.t9-row { max-width: none; flex-wrap: nowrap; }
+/* T9 三行长按弹层（issue #9）：小写 / 左符号·数字·右符号 / 大写，
+ * 每行一个容器行内居中——符号行 3 格窄于字母行也对齐中轴。整体
+ * 一张卡片（格子换 --key 底色做对比），中行压在工具栏上也不混淆。 */
+#keyPopupInner.t9-grid3 {
+    max-width: none;
+    flex-wrap: nowrap;
+    flex-direction: column;
+    gap: 5px;
+    padding: 6px;
+    border-radius: 12px;
+    background: var(--panel);
+    box-shadow: 0 6px 24px #000c;
+}
+#keyPopupInner.t9-grid3 .kp-row { display: flex; gap: 5px; justify-content: center; }
+#keyPopupInner.t9-grid3 .kp-item { background: var(--key); box-shadow: none; }
+/* 选中格必须压回上面的 ID 优先级覆盖，否则高亮只剩深色文字看不见。 */
+#keyPopupInner.t9-grid3 .kp-item.sel { background: var(--accent); }
+/* 滑出浮层卡片边界时的「松手撤销」提示（showPopupCancelTip 挂在浮层
+ * 上方中线，不跟手）。卡片底色 + 描边：黑底白字在暗色键盘上看不清。 */
+#keyPopupCancelTip {
+    display: none;
+    position: fixed;
+    z-index: 31;
+    transform: translateX(-50%);
+    padding: 5px 14px;
+    border-radius: 999px;
+    background: var(--card-bg);
+    border: 1px solid var(--line);
+    color: var(--text);
+    font-size: 13px;
+    font-weight: 600;
+    box-shadow: 0 4px 16px #000a;
+    pointer-events: none;
+    white-space: nowrap;
+}
+#keyPopupCancelTip.show { display: block; }
 /* 横屏高度预算按 qwerty 的 4px gap 计算——T9 保持 5px 会侵入底部
  * 预留（codex round-2 P2-7 实测 3px）。 */
 body.landscape .t9-grid { gap: 4px 5px; }
@@ -2011,6 +2059,70 @@ body.expanded #preeditLine { display: none; }
     font-weight: 600;
 }
 #settingsPanel .set-opt[disabled] { opacity: .45; }
+
+/* ===== 快捷设置方块网格（微信式 2×4，横向滑动翻页） =====
+ * 页容器 native scroll-snap（无手势代码，t9-side 教训）；tile 即状态：
+ * 点按直接生效并重渲染，开关块的图标/状态行着色跟随。 */
+.qs-wrap { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 4px 0 0; }
+.qs-pages {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scroll-snap-type: x mandatory;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+}
+.qs-pages::-webkit-scrollbar { display: none; }
+.qs-page {
+    flex: 0 0 100%;
+    min-width: 100%;
+    scroll-snap-align: center;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    grid-template-rows: repeat(2, 1fr);
+    gap: 7px;
+    min-height: 0;
+    padding: 2px 2px 4px;
+}
+.qs-tile {
+    min-width: 0;
+    min-height: 0;
+    border: 0;
+    border-radius: 12px;
+    background: var(--special);
+    color: var(--text);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    padding: 4px 2px;
+}
+/* 亮色下 --special 是灰块，观感不佳（用户反馈）：亮色统一白底，
+ * 「完整设置」大方块改用更亮的 --key + 描边保持区分。 */
+html.theme-light .qs-tile { background: var(--panel); }
+.qs-tile svg { width: 24px; height: 24px; flex: none; }
+.qs-tile:active { background: var(--pressed); }
+.qs-tile.on svg { color: var(--accent); }
+.qs-name { font-size: 12px; line-height: 1.2; }
+.qs-state {
+    max-width: 100%;
+    font-size: 10px;
+    line-height: 1.2;
+    color: var(--muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.qs-tile.on .qs-state { color: var(--accent-text); }
+.qs-big { background: var(--panel); border: 1px solid var(--line); }
+html.theme-light .qs-big { background: var(--key); }
+.qs-big svg { color: var(--accent); }
+.qs-dots { flex: none; display: flex; justify-content: center; gap: 7px; padding: 6px 0 4px; }
+.qs-dots span { width: 6px; height: 6px; border-radius: 50%; background: var(--line); }
+.qs-dots span.cur { background: var(--accent); }
 
 /* Shared surfaces and controls (docs/design/appearance.md). Distinct tool circles and
  * keycaps retain their roles; all text states use theme-specific colors. */
