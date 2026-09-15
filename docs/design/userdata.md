@@ -44,8 +44,13 @@
 - `webviewStores`：键盘 WebView localStorage 里设置级的键（见 §1.4）。
   最近符号/最近 emoji 属于使用痕迹，不备份。键盘高度走原生
   feelime_keyboard（物理 px），JS 副本是 CSS px，单位不同不进备份。
-- `userdb`：`filesDir/rime-user`、`filesDir/mozc-user` 逐文件 base64
-  （rime 用户词库、mozc 词典）。
+- `userdb`：`filesDir/rime-user`、`filesDir/mozc-user` 逐文件编码
+  （rime 用户词库、mozc 词典）。**version 2 起**：可压缩的文件写成
+  `{"gz": "<base64(gzip(bytes))>"}`（mozc 预分配的稀疏 DB 绝大部分是
+  零字节、leveldb `.ldb` 也可压，实测 649KB 备份缩到 ~57KB）；压不动
+  的小文件保持 v1 的纯 base64 字符串。导入双格式兼容（按条目形态区分，
+  version 1/2 都收）。`LOCK`/`LOG`/`LOG.old` 是 leveldb 可再生文件，
+  导出跳过；小写 `*.log` 是 write-ahead 日志（含未压实数据），保留。
 - **空即空状态**：favorites/webviewStores/userdb 即使为空也写出——备份表达
   「导出方的完整状态」，空列表的恢复语义就是清空目标（覆盖语义）。
 

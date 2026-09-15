@@ -11,8 +11,12 @@ import com.feelime.ime.PREF_KEY_HAPTIC
 import com.feelime.ime.PREF_KEY_SOUND
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.ByteArrayInputStream
+import java.io.ByteArrayOutputStream
 import java.io.File
 import java.util.Base64
+import java.util.zip.GZIPInputStream
+import java.util.zip.GZIPOutputStream
 
 /**
  * 设计 docs/design/userdata.md §1: 设置/常用语/词库打包成单个带版本的
@@ -135,7 +139,7 @@ class UserdataBackup(
         }
 
         val userdb = root.optJSONObject("userdb") ?: JSONObject()
-        // base64 解码与路径校验提前做：坏数据在校验阶段就失败，不落半个文件。
+        // base64/gzip 解码与路径校验提前做：坏数据在校验阶段就失败，不落半个文件。
         val stagedBytes = HashMap<String, Map<String, ByteArray>>()
         for (engine in listOf("rime", "mozc")) {
             val entries = userdb.optJSONObject(engine) ?: JSONObject()
@@ -144,13 +148,8 @@ class UserdataBackup(
                 if (relative.startsWith("/") || relative.split('/', '\\').any { it == ".." || it == "." }) {
                     return RestoreResult.Fail("PATH", "$engine/$relative")
                 }
-                files[relative] = try {
-                    Base64.getDecoder().decode(entries.getString(relative))
-                } catch (exception: IllegalArgumentException) {
-                    return RestoreResult.Fail("BASE64", "$engine/$relative")
-                } catch (exception: org.json.JSONException) {
-                    return RestoreResult.Fail("BASE64", "$engine/$relative")
-                }
+                files[relative] = decodeUserdbEntry(entries.opt(relative))
+                    ?: return RestoreResult.Fail("BASE64", "$engine/$relative")
             }
             stagedBytes[engine] = files
         }
@@ -263,15 +262,53 @@ class UserdataBackup(
 
     // ---- userdb 目录 -----------------------------------------------------
 
-    /** 逐文件 base64。空目录/不存在返回 null（导出里就不写这个键）。 */
+    /** 逐文件编码（issue #10）：可压缩的词库文件（mozc 预分配的稀疏 DB、
+     * leveldb .ldb）gzip 后 base64，写成熟悉的 `{"gz": …}` 对象——320KB 的
+     * 稀疏库能缩到几百字节；压不动的小文件保持 v1 的纯 base64 字符串。
+     * LOCK/LOG/LOG.old 是 leveldb 可再生文件，跳过。空目录/不存在返回
+     * null（导出里就不写这个键）。 */
     private fun collectDir(dir: File): JSONObject? {
         if (!dir.isDirectory) return null
         val out = JSONObject()
         dir.walkTopDown().filter { it.isFile }.forEach { file ->
             val relative = file.relativeTo(dir).invariantSeparatorsPath
-            out.put(relative, Base64.getEncoder().encodeToString(file.readBytes()))
+            if (file.name in REGENERABLE_FILES) return@forEach
+            out.put(relative, encodeUserdbFile(file.readBytes()))
         }
         return if (out.length() > 0) out else null
+    }
+
+    private fun encodeUserdbFile(bytes: ByteArray): Any {
+        val compressed = ByteArrayOutputStream().use { buffer ->
+            GZIPOutputStream(buffer).use { gzip -> gzip.write(bytes) }
+            buffer.toByteArray()
+        }
+        return if (compressed.size < bytes.size) {
+            JSONObject().put("gz", Base64.getEncoder().encodeToString(compressed))
+        } else {
+            Base64.getEncoder().encodeToString(bytes)
+        }
+    }
+
+    /** v1 = 纯 base64 字符串；v2 = `{"gz": base64(gzip(bytes))}` 对象。
+     * 任何一层坏掉都归 BASE64 错误（校验阶段拒绝，不落半个文件）。 */
+    private fun decodeUserdbEntry(entry: Any?): ByteArray? {
+        val encoded = when (entry) {
+            is JSONObject -> entry.opt("gz") as? String ?: return null
+            is String -> entry
+            else -> return null
+        }
+        val bytes = try {
+            Base64.getDecoder().decode(encoded)
+        } catch (exception: IllegalArgumentException) {
+            return null
+        }
+        if (entry !is JSONObject) return bytes
+        return try {
+            GZIPInputStream(ByteArrayInputStream(bytes)).use { it.readBytes() }
+        } catch (exception: java.io.IOException) {
+            return null
+        }
     }
 
     /** 写暂存目录；.ready 标记最后落盘，半写的暂存永远不会被换入。 */
@@ -312,10 +349,15 @@ class UserdataBackup(
 
     companion object {
         const val KIND = "feelime-userdata"
-        const val VERSION = 1
+        const val VERSION = 2
         const val WEBVIEW_PREFS = "feelime_webview_stores"
         const val WEBVIEW_KEY = "stores"
         const val READY_MARKER = ".ready"
+
+        /** leveldb 可再生文件（issue #10）：LOCK 是锁句柄、LOG 是人类可读
+         * 运行日志，换机后没有意义，导出时跳过、恢复时由引擎自己重建。
+         * 小写的 *.log 是 write-ahead 日志（含未压实的数据），必须保留。 */
+        private val REGENERABLE_FILES = setOf("LOCK", "LOG", "LOG.old")
 
         private const val FAVORITES_PREFS = "feelime_favorites"
         private const val UPDATE_PREFS = "keyboard_update"

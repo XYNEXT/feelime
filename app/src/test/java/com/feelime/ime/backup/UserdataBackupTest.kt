@@ -50,7 +50,7 @@ class UserdataBackupTest {
         // 导出文件是纯文本 JSON，kind/version 齐全。
         val parsed = JSONObject(json)
         assertEquals(UserdataBackup.KIND, parsed.getString("kind"))
-        assertEquals(1, parsed.getInt("version"))
+        assertEquals(UserdataBackup.VERSION, parsed.getInt("version"))
         assertEquals("9.9.9-test", parsed.getString("appVersion"))
 
         // 恢复到一套全新的 prefs + 目录。
@@ -126,6 +126,87 @@ class UserdataBackupTest {
         assertTrue(targetBackup.hasPendingUserdb())
         assertTrue(targetBackup.applyPendingUserdb())
         assertTrue(File(target, "mozc-user/user.db").isFile)
+    }
+
+    @Test
+    fun compressibleUserdbExportsGzippedAndRoundTrips() {
+        // issue #10：mozc 预分配的稀疏 DB 绝大部分是零字节，v2 把可压缩
+        // 文件写成 {"gz": base64(gzip(bytes))}，320KB 能缩到几百字节。
+        val files = newDir()
+        val mozc = File(files, "mozc-user").apply { mkdirs() }
+        val sparse = ByteArray(320 * 1024)
+        sparse[0] = 0x42
+        sparse[sparse.size - 1] = 0x7F
+        File(mozc, "segment.db").writeBytes(sparse)
+        // 压不动的随机小文件保持 v1 的纯 base64 字符串形态。
+        val noisy = File(mozc, "noise.db")
+        noisy.writeBytes(ByteArray(64) { (it * 37 + 11).toByte() })
+        // LOCK/LOG 是 leveldb 可再生文件，导出跳过；*.log 是 WAL，保留。
+        File(mozc, "LOCK").writeBytes(ByteArray(0))
+        File(mozc, "LOG").writeText("log")
+        File(mozc, "user-history.log").writeText("wal")
+
+        val backup = UserdataBackup(FakePrefs(), files)
+        val json = backup.export()
+        val entries = json.getJSONObject("userdb").getJSONObject("mozc")
+        assertTrue(entries.optJSONObject("segment.db")?.has("gz") == true)
+        assertTrue(entries.opt("noise.db") is String)
+        assertFalse(entries.has("LOCK"))
+        assertFalse(entries.has("LOG"))
+        assertTrue(entries.has("user-history.log"))
+        val v2Size = json.toString().toByteArray().size
+        assertTrue("v2 backup should shrink sparse DBs: $v2Size", v2Size < 2048)
+
+        val target = newDir()
+        val targetBackup = UserdataBackup(FakePrefs(), target)
+        assertTrue(targetBackup.restore(json.toString().toByteArray())
+            is UserdataBackup.RestoreResult.Ok)
+        assertTrue(targetBackup.applyPendingUserdb())
+        val restored = File(target, "mozc-user/segment.db").readBytes()
+        assertEquals(sparse.size, restored.size)
+        assertEquals(0x42.toByte(), restored[0])
+        assertEquals(0x7F.toByte(), restored[restored.size - 1])
+        assertTrue(File(target, "mozc-user/user-history.log").isFile)
+        assertFalse(File(target, "mozc-user/LOCK").exists())
+    }
+
+    @Test
+    fun v1PlainBase64UserdbStillRestores() {
+        // 版本前向兼容：老备份（纯 base64 字符串）必须一直能恢复。
+        val payload = "aGk=" // "hi"
+        val v1 = JSONObject()
+            .put("kind", UserdataBackup.KIND)
+            .put("version", 1)
+            .put("settings", JSONObject())
+            .put("userdb", JSONObject().put(
+                "rime",
+                JSONObject().put("user.yaml", payload),
+            ))
+        val targetDir = newDir()
+        val target = UserdataBackup(FakePrefs(), targetDir)
+        assertTrue(target.restore(v1.toString().toByteArray()) is UserdataBackup.RestoreResult.Ok)
+        assertTrue(target.applyPendingUserdb())
+        assertEquals("hi", File(targetDir, "rime-user/user.yaml").readText())
+    }
+
+    @Test
+    fun corruptGzipEntryFailsValidationWithoutSideEffects() {
+        val broken = JSONObject()
+            .put("kind", UserdataBackup.KIND)
+            .put("version", UserdataBackup.VERSION)
+            .put("settings", JSONObject())
+            .put("userdb", JSONObject().put(
+                "mozc",
+                JSONObject().put("segment.db", JSONObject().put("gz", "bm90LWd6aXA=")),
+            ))
+        val prefs = FakePrefs()
+        prefs.put("feelime_ui", "theme", "dark")
+        val target = UserdataBackup(prefs, newDir())
+        val result = target.restore(broken.toString().toByteArray())
+        assertTrue((result as UserdataBackup.RestoreResult.Fail).code == "BASE64")
+        // 校验失败不落任何状态：prefs 不被写、暂存目录不存在。
+        assertEquals("dark", prefs.all("feelime_ui")["theme"])
+        assertFalse(target.hasPendingUserdb())
     }
 
     @Test
