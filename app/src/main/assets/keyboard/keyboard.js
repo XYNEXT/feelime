@@ -152,6 +152,7 @@
         "正在聆听…": "Listening…",
         "启动识别…": "Starting…",
         "结束识别…": "Finishing…",
+        "请稍候，就绪后开口说话": "Hold on — start speaking when ready",
         "取消": "Cancel",
         "保存": "Save",
         "关闭": "Close",
@@ -228,7 +229,7 @@
         });
     }
 
-    const KEYBOARD_VERSION = '3.40.0';
+    const KEYBOARD_VERSION = '3.41.0';
     const MIN_NATIVE_API = 1;
     const REQUIRED_CAPABILITIES = [
         'candidate-revision-v1',
@@ -6409,6 +6410,10 @@
             const overlay = document.getElementById('voiceOverlay');
             const recording = ['listening', 'loading', 'stopping'].includes(this.voiceState);
             overlay.classList.toggle('open', recording);
+            // issue #11：data-state 驱动「可以开始说话」的信号——麦克风脉冲
+            // 只在真正聆听时出现，加载态弱化静态显示，用户不会过早开口。
+            if (recording) overlay.dataset.state = this.voiceState;
+            else delete overlay.dataset.state;
             // 两种浮层：长按空格（松手就上屏，无按钮，上滑撤销）与
             // 点 mic（撤销/说完了 按钮）。
             overlay.classList.toggle('hold', recording && this.voiceSession === 'space-hold');
@@ -6419,9 +6424,11 @@
                 : this.voiceState === 'stopping' ? t("结束识别…")
                 : '';
             document.getElementById('voiceHint').textContent =
-                this.voiceSession === 'space-hold'
-                    ? t("松手上屏")
-                    : t("点击任意位置结束");
+                this.voiceState === 'loading'
+                    ? t("请稍候，就绪后开口说话")
+                    : this.voiceSession === 'space-hold'
+                        ? t("松手上屏")
+                        : t("点击任意位置结束");
             if (payload.message && this.voiceState === 'error') {
                 document.getElementById('voiceStatus').textContent = payload.message;
             }

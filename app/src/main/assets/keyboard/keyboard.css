@@ -199,25 +199,22 @@ body.landscape .candidate { height: 40px; line-height: 40px; font-size: calc(16p
 body.landscape .kb-row { gap: 4px; margin-bottom: 3px; }
 body.landscape #symCatBar { margin-top: 3px; gap: 4px; }
 
-/* Composing preedit floats over the top padding; the keyboard height never
- * changes between idle and composing. */
-/* The candidate bar moved down (margin-top), so the pinyin
- * line no longer overlaps it. */
+/* Composing preedit（issue #8）：拼音行改成候选条内的行内前缀（工具按钮
+ * 之后、#candidates 滚动区之前）——搜狗式「拼音跟候选字」同一行，字号跟
+ * 候选字号档位一起缩放（--cand-font-scale），不再悬浮在顶部 14px 死区里
+ * 被大号候选反衬得难以辨认。键盘高度预算零变化（行仍在原位）。 */
 #preeditLine {
     display: none;
-    position: absolute;
-    top: 0;
-    left: 8px;
-    height: 14px;
-    line-height: 14px;
-    max-width: calc(100% - 16px);
+    flex: none;
+    align-self: center;
+    max-width: 45%;
     overflow: hidden;
     white-space: nowrap;
     text-overflow: ellipsis;
     /* Raw pinyin must be legible at a glance (review note b). */
-    font-size: 13px;
+    font-size: calc(13px * var(--cand-font-scale, 1));
+    font-weight: 600;
     color: var(--text);
-    z-index: 5;
 }
 body.composing #preeditLine { display: block; }
 
@@ -1328,6 +1325,13 @@ body.height-editing #candidateBar { margin-top: 39px; }
 }
 #voiceCard .vc-mic svg { display: block; width: 100%; height: 100%; }
 @keyframes vcPulse { 50% { opacity: .55; transform: scale(1.15); } }
+/* 引擎加载/收尾态（issue #11）：脉冲是「可以开始说话」的唯一信号——
+ * 加载中麦克风静态弱化，用户不会对着还没就绪的引擎过早开口。 */
+#voiceOverlay[data-state="loading"] .vc-mic,
+#voiceOverlay[data-state="stopping"] .vc-mic {
+    animation: none;
+    opacity: .45;
+}
 /* Landscape keyboards are short (~170-200px) - compact the
  * card and center it so nothing clips. */
 body.landscape #voiceCard {
