@@ -316,13 +316,45 @@ def main():
             # 收尾坐标=最后移动位置（touchend 的 changedTouches 语义）。
             d.synth_touch("end", hx, hy)
             time.sleep(0.5)
-            type_digits(geo, "26", wait=0.25)
-            time.sleep(0.8)
-            cands = wait_candidates()
-            joined = "".join(cands)
-            record("t9: H from hold popup + 26 reaches hao family",
-                   any(ch in joined for ch in "好号豪毫"), f"cands={cands[:6]}")
+            # 3.40.0 用户定稿：弹层字母 literal 直上屏（自然拖到 H 格在
+            # 相对跟手下落小写行 → 落 'h'），不进组合；hao 组合路径由
+            # 「down-swipe h + 26」gate 覆盖。
+            field = (d.field_text_retry() or "").strip()
+            record("t9: H from hold popup lands literal letter",
+                   field in ("H", "h"), f"field={field!r}")
         else:
+            d.synth_touch("cancel", x4, y4)
+
+    # ===== 长按大写格 literal 直上屏（大小写原样落，不进组合）=====
+    d.clear_field(kb)
+    if d.synth_touch("start", x4, y4) == "ok":
+        time.sleep(0.65)
+        rel = ev("""(() => {
+            const items = [...document.querySelectorAll('#keyPopup .kp-item')];
+            const t = items.find(i => i.textContent === 'G');
+            const a = items.find(i => i.textContent === '4');
+            if (!t || !a) return null;
+            const rt = t.getBoundingClientRect(), ra = a.getBoundingClientRect();
+            return { dx: rt.left + rt.width/2 - (ra.left + ra.width/2),
+                     dy: rt.top + rt.height/2 - (ra.top + ra.height/2) }; })()""")
+        if rel:
+            # 相对跟手的定义位移：手指从按点移动「目标格 − 锚点格」，
+            # 高亮必须停在 G 上（自然拖到 G 格会落在小写行，测不到该键）。
+            # x4/y4 是物理坐标，先还原 CSS 再加相对位移。
+            hx = (x4 - d._DT_OFFSET[0]) / d._DT_SCALE + rel["dx"]
+            hy = (y4 - d._DT_OFFSET[1]) / d._DT_SCALE + rel["dy"]
+            hx, hy = css2phys((hx, hy))
+            d.synth_touch("move", hx, hy)
+            sel = ev("document.querySelector('#keyPopup .kp-item.sel')?.textContent")
+            d.synth_touch("end", hx, hy)
+            time.sleep(0.6)
+            field = (d.field_text_retry() or "").strip()
+            record("t9: uppercase G pick lands G literally",
+                   sel == "G" and field == "G" and preedit_text() == "",
+                   f"sel={sel!r} field={field!r} preedit={preedit_text()!r}")
+        else:
+            record("t9: uppercase G pick lands G literally",
+                   False, "popup cells missing")
             d.synth_touch("cancel", x4, y4)
 
     # ===== 功能键 =====

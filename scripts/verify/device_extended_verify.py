@@ -120,9 +120,25 @@ def popup_items_and_select(kb, key, selected_text):
             d.screenshot("/tmp/fv-popup-forensics.png")
         target = dom_center(selector, kb) if selector else None
         if target:
-            d.synth_touch("move", target[0], target[1])
+            # 3.39.0 相对跟手：手指按「目标格 − 锚点格」的 CSS 位移拖动
+            # （拖到可见格会越过虚拟光标的卡片边界，被「松手撤销」吃掉）。
+            delta = d.devtools_eval(
+                "(() => { const items = [...document.querySelectorAll('#keyPopup .kp-item')];"
+                f" const t = items[{items.index(selected_text)}];"
+                " const a = document.querySelector('#keyPopup .kp-item.sel');"
+                " if (!t || !a) return null;"
+                " const rt = t.getBoundingClientRect(), ra = a.getBoundingClientRect();"
+                " return [rt.left + rt.width/2 - (ra.left + ra.width/2),"
+                " rt.top + rt.height/2 - (ra.top + ra.height/2)]; })()"
+            )
+            scale = kb.get("<density>") or 2.625
+            if delta:
+                mx, my = x + delta[0] * scale, y + delta[1] * scale
+            else:
+                mx, my = target
+            d.synth_touch("move", mx, my)
             time.sleep(0.15)
-            d.synth_touch("end", target[0], target[1])
+            d.synth_touch("end", mx, my)
         else:
             d.synth_touch("end", x, y)
         return items

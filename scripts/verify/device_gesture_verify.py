@@ -105,21 +105,29 @@ def main():
         f"selected={popup.get('selected')!r} text={text!r}",
     )
 
-    # 6: drag the same popup to its first item and release.
+    # 6: drag by the relative-tracking displacement (first-cell center minus
+    # the anchor cell center, applied from the press point) and release.
+    # 3.39.0: qwerty popups share the T9 relative tracking - the finger never
+    # has to climb onto the popup; dragging to the VISIBLE cell overshoots
+    # the virtual cursor (anchor + delta) and cancels instead.
     clear(kb)
     motion("DOWN", ex, ey)
     try:
         time.sleep(0.55)
-        first = d.devtools_eval(
-            "(() => { const e = document.querySelector('#keyPopup .kp-item');"
-            " if (!e) return null; const r = e.getBoundingClientRect();"
-            " return [r.left + r.width / 2, r.top + r.height / 2, e.textContent]; })()"
+        rel = d.devtools_eval(
+            "(() => { const items = [...document.querySelectorAll('#keyPopup .kp-item')];"
+            " const t = items.find(i => i.textContent === '3');"
+            " const a = document.querySelector('#keyPopup .kp-item.sel');"
+            " if (!t || !a) return null;"
+            " const rt = t.getBoundingClientRect(), ra = a.getBoundingClientRect();"
+            " return { dx: rt.left + rt.width/2 - (ra.left + ra.width/2),"
+            " dy: rt.top + rt.height/2 - (ra.top + ra.height/2) }; })()"
         )
-        if first:
-            offset_x, offset_y = d._DT_OFFSET
+        if rel:
             scale = kb["<density>"]
-            target_x = first[0] * scale + offset_x
-            target_y = first[1] * scale + offset_y
+            # 物理位移 = CSS 位移 × 密度（按点直接加位移，无需换算原点）。
+            target_x = int(ex + rel["dx"] * scale)
+            target_y = int(ey + rel["dy"] * scale)
             motion("MOVE", target_x, target_y)
             time.sleep(0.15)
             motion("UP", target_x, target_y)
@@ -130,7 +138,7 @@ def main():
         raise
     time.sleep(0.5)
     text = d.field_text_retry()
-    record("popup drag selects first item", bool(first) and first[2] == "3" and text == "3", repr(text))
+    record("popup drag selects first item", bool(rel) and text == "3", repr(text))
 
     # 6b: dragging far from every popup cell cancels the pick - the layer
     # fades (transform/opacity) and the release commits nothing.
@@ -144,8 +152,8 @@ def main():
         )
         if far and far.get("open"):
             # ~500 device px to the right (~180 CSS px at density 2.75):
-            # outside every cell's 60px CSS reach and past the 170px
-            # fully-gone radius.
+            # the virtual cursor (anchor + delta) lands far outside the
+            # popup card, so the pick enters the cancel state.
             motion("MOVE", int(ex + 500), int(ey - 30))
             time.sleep(0.2)
             faded = d.devtools_eval(

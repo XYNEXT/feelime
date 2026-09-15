@@ -228,7 +228,7 @@
         });
     }
 
-    const KEYBOARD_VERSION = '3.38.0';
+    const KEYBOARD_VERSION = '3.40.0';
     const MIN_NATIVE_API = 1;
     const REQUIRED_CAPABILITIES = [
         'candidate-revision-v1',
@@ -251,14 +251,6 @@
     // Over-long clipboard items cannot pass the native commitText limit, so
     // they render disabled in the panel (stored in full, paste blocked).
     const MAX_COMMIT_CODE_POINTS = 2000;
-    // Popup drag-away cancellation: the pick stays live
-    // while the finger is within POPUP_CELL_REACH of some popup cell; once it
-    // leaves every cell the layer shrinks/fades and the release commits
-    // nothing, fully invisible past POPUP_GONE_RADIUS. Distance is measured to
-    // the nearest cell, never to the touch origin: an edge-clamped popup
-    // (right-column keys) puts legal cells 100px+ away from the pressed key.
-    const POPUP_CELL_REACH = 60;
-    const POPUP_GONE_RADIUS = 170;
     // Cursor scrub: one caret step per 12px of drag at the default
     // 3x speed (SCRUB_UNIT_BASE_PX / scrubSpeed), counted after the fixed
     // recognition-threshold crossing. Exposes 1x..5x in the quick
@@ -883,8 +875,9 @@
             // settings app, delivered through hello (mode-fallback §4).
             this.holdMs = 350;
             // Popup swipe selection range: 0=loose 1.4x, 1=standard 1.0x,
-            // 2=tight 0.7x of POPUP_CELL_REACH (cancellation radius only;
-            // cell switching stays nearest-center).
+            // 2=tight 0.7x — scales the relative-tracking jitter dead zone
+            // and the card-boundary cancel slop (selection itself stays
+            // nearest-center).
             this.popupSnap = 1;
             // Bottom blank strip (CSS px) below the rows - native window
             // includes it; applyHeight/H budgets exclude it (mode-fallback §3).
@@ -1249,7 +1242,14 @@
 
         sendText(text) {
             if (!text) return;
-            this.call(() => Native.key(this.applyCase(text), this.token));
+            // T9 引擎拼写不区分大小写：schema 的 alphabet 只收小写字母+数字，
+            // 大写键会被 rime recognizer 的大写规则截成英文原文段直接上屏。
+            // 这条通道现在只剩滑动手势的「字母确认拼写」（长按弹层的字母格
+            // 是 literal 直上屏，不走这里），统一归一小写——applyCase 之后
+            // 做，残留 shift 不会反弹。
+            if (this.mode === 't9') text = this.applyCase(text).toLowerCase();
+            else text = this.applyCase(text);
+            this.call(() => Native.key(text, this.token));
             if (this.shift) { this.shift = false; this.updateLabels(); }
         }
 
@@ -2065,10 +2065,10 @@
                 button.classList.remove('active-touch');
                 clear();
                 if (this.popup) {
-                    // 快速甩出时最终位置只出现在 changedTouches：grid3 相对
-                    // 跟手收尾先刷新一次选中再提交，否则按旧高亮落错格
-                    // （codex P2）。split/qwerty 弹层保持既有语义不动。
-                    if (this.popup.grid3) {
+                    // 快速甩出时最终位置只出现在 changedTouches：相对跟手
+                    // 收尾先刷新一次选中再提交，否则按旧高亮落错格
+                    // （codex P2）。split 弹层保持既有语义不动。
+                    if (this.popup.relative) {
                         const last = event.changedTouches && event.changedTouches[0];
                         if (last) this.movePopup(last);
                     }
@@ -2339,18 +2339,19 @@
 
         /** 长按全后选：数字 + 字母组逐个（4 → [4 g h i]）。 */
         /** T9 长按（issue #9）：三行弹层——上行=字母组小写、中行=左符号
-         * ·数字·右符号、下行=大写。符号直上屏（literal → commitText），
-         * 字母/数字进引擎（字母确认拼写，数字=通配）。 */
+         * ·数字·右符号、下行=大写。字母与符号都是 literal 直上屏
+         * （commitText，大小写原样落）；数字格=通配，进引擎（与点按
+         * 同义）。拼音里确认字母由下滑/横滑手势承担，不经弹层。 */
         openT9HoldPopup(button) {
             const key = button.dataset.key;
             const letters = (LAYOUTS.t9.alts[key] || '').split('');
             const syms = LAYOUTS.t9.keySymbols[key] || [];
             const cells = [
-                ...letters.map(ch => ({ char: ch })),
+                ...letters.map(ch => ({ char: ch, literal: true })),
                 { char: syms[0], literal: true },
                 { char: key },
                 { char: syms[1], literal: true },
-                ...letters.map(ch => ({ char: ch.toUpperCase() })),
+                ...letters.map(ch => ({ char: ch.toUpperCase(), literal: true })),
             ].filter(cell => cell.char);
             this.openT9Popup(button, cells, { grid: true });
         }
@@ -2422,21 +2423,24 @@
             this.popup = { key: button.dataset.key, cells: items,
                 selected, cancelled: false, enginePath: true };
             if (opts.split) this.popup.split = true;
-            if (opts.grid) {
-                // 三行弹层（issue #9）：相对跟手的锚点 = 预选的数字格；
-                // cardRect 是虚拟光标的取消边界（滑出即「松手撤销」）。
-                // origin 拷贝自按下点：capture 收尾会清 touchOrigin，弹层
-                // 必须自带位移基准。
-                this.popup.grid3 = true;
-                this.popup.anchor = selected;
-                this.popup.origin = this.touchOrigin
-                    ? { x: this.touchOrigin.x, y: this.touchOrigin.y } : null;
-                const card = popup.getBoundingClientRect();
-                this.popup.cardRect = {
-                    left: card.left, top: card.top,
-                    right: card.right, bottom: card.bottom,
-                };
-            }
+            if (opts.grid) this.attachRelativeTracking(popup, selected);
+        }
+
+        /** 相对跟手选中（issue #9 定稿，qwerty accent 弹层同款）：高亮锚在
+         * 预选格上，跟随手指「相对按下点」的位移同步移动——手指全程不必
+         * 碰到浮层；虚拟光标滑出卡片边界 = 淡出 + 「松手撤销」，拖回恢复。
+         * origin 拷贝自按下点：capture 收尾会清 touchOrigin，弹层必须自带
+         * 位移基准。 */
+        attachRelativeTracking(popup, anchor) {
+            this.popup.relative = true;
+            this.popup.anchor = anchor;
+            this.popup.origin = this.touchOrigin
+                ? { x: this.touchOrigin.x, y: this.touchOrigin.y } : null;
+            const card = popup.getBoundingClientRect();
+            this.popup.cardRect = {
+                left: card.left, top: card.top,
+                right: card.right, bottom: card.bottom,
+            };
         }
 
         openPopup(button) {
@@ -2480,17 +2484,12 @@
             const selected = cells.find(cell => cell.char === upper) || cells[0];
             selected.item.classList.add('sel');
             this.popup = { key, cells, selected, cancelled: false };
+            // qwerty accent 弹层与 T9 三行弹层同一套相对跟手（用户定稿）：
+            // 高亮跟随手指位移，不要求手先滑上浮层。
+            this.attachRelativeTracking(popup, selected);
         }
 
-        /** Effective swipe-selection radius: the feel knob scales ONLY the
-         * cancellation reach (loose 1.4x / standard 1.0x / tight 0.7x);
-         * cell switching itself stays nearest-center (mode-fallback §4). */
-        popupReach() {
-            const scale = [1.4, 1, 0.7][this.popupSnap] || 1;
-            return Math.round(POPUP_CELL_REACH * scale);
-        }
-
-        /** 「松手撤销」提示（issue #9）：三行弹层滑出卡片边界时浮层淡出，
+        /** 「松手撤销」提示（issue #9）：弹层滑出卡片边界时浮层淡出，
          *  这条 toast 把状态说破——固定挂在浮层上方中线，不跟手；
          *  拖回卡片内自动恢复。 */
         showPopupCancelTip(show) {
@@ -2508,56 +2507,6 @@
 
         movePopup(touch) {
             if (!this.popup) return;
-            // 三行弹层（issue #9 定稿）：相对跟手。高亮锚在数字格上，跟随
-            // 手指位移同步移动——手往左滑高亮往左（到左符号）、往下滑高亮
-            // 往下滑，和手指位置是相对关系，手指全程不必碰到浮层。虚拟
-            // 光标（锚点+位移）滑出卡片 → 淡出 + 「松手撤销」，拖回恢复。
-            if (this.popup.grid3) {
-                const inner = document.getElementById('keyPopupInner');
-                const anchor = this.popup.anchor;
-                const r = this.popup.cardRect;
-                const origin = this.popup.origin || this.touchOrigin ||
-                    { x: anchor.cx, y: anchor.cy };
-                const dx = touch.clientX - origin.x;
-                const dy = touch.clientY - origin.y;
-                // 按点 12px 内的微动不动高亮（吃手指抖动，松手仍落数字格）。
-                if (!this.popup.tracking) {
-                    if (Math.hypot(dx, dy) <= 12) return;
-                    this.popup.tracking = true;
-                }
-                const vx = anchor.cx + dx;
-                const vy = anchor.cy + dy;
-                const SLOP = 6;
-                const inside = vx >= r.left - SLOP && vx <= r.right + SLOP &&
-                    vy >= r.top - SLOP && vy <= r.bottom + SLOP;
-                if (!inside) {
-                    if (!this.popup.cancelled) {
-                        this.popup.cancelled = true;
-                        this.popup.selected = null;
-                        this.popup.cells.forEach(cell => cell.item.classList.remove('sel'));
-                        inner.style.transform = 'scale(0.92)';
-                        inner.style.opacity = '0.5';
-                        this.showPopupCancelTip(true);
-                    }
-                    return;
-                }
-                if (this.popup.cancelled) {
-                    this.popup.cancelled = false;
-                    inner.style.transform = '';
-                    inner.style.opacity = '';
-                    this.showPopupCancelTip(false);
-                }
-                let selected = this.popup.cells[0];
-                let best = Infinity;
-                this.popup.cells.forEach(cell => {
-                    const d = Math.hypot(vx - cell.cx, vy - cell.cy);
-                    if (d < best) { best = d; selected = cell; }
-                });
-                this.popup.cells.forEach(cell =>
-                    cell.item.classList.toggle('sel', cell === selected));
-                this.popup.selected = selected;
-                return;
-            }
             // 拆分浮层（T9 7/9 下滑）：下左/下右按两格中点判定，
             // 不做距离取消——下滑开层后继续向左下/右下即选中。
             if (this.popup.split) {
@@ -2571,36 +2520,58 @@
                     cell.item.classList.toggle('sel', cell === sel));
                 return;
             }
-            // the reference parity: a finger that leaves every popup cell cancels the
-            // pick - the layer shrinks/fades with distance and past
-            // POPUP_GONE_RADIUS the release commits nothing. Dragging back
-            // near a cell restores selection. The distance is measured to the
-            // nearest cell, not the touch origin: an edge-clamped popup
-            // (right-column keys) sits its legal cells over 100px away from
-            // the pressed key, and those must stay valid picks.
-            let selected = this.popup.cells[0];
-            let best = Infinity;
-            this.popup.cells.forEach(cell => {
-                const d = Math.hypot(touch.clientX - cell.cx, touch.clientY - cell.cy);
-                if (d < best) { best = d; selected = cell; }
-            });
-            const k = Math.max(0, Math.min(1,
-                (best - this.popupReach()) / (POPUP_GONE_RADIUS - this.popupReach())));
+            // 相对跟手（issue #9 定稿，T9 三行与 qwerty accent 弹层共用）。
+            // 高亮锚在预选格上，跟随手指位移同步移动——手往左滑高亮往左、
+            // 往下滑高亮往下滑，和手指位置是相对关系，手指全程不必碰到
+            // 浮层。虚拟光标（锚点+位移）滑出卡片 → 淡出 + 「松手撤销」，
+            // 拖回恢复。
             const inner = document.getElementById('keyPopupInner');
-            inner.style.transform = k > 0 ? `scale(${(1 - k).toFixed(3)})` : '';
-            inner.style.opacity = k > 0 ? (1 - 0.9 * k).toFixed(3) : '';
-            if (best > this.popupReach()) {
+            const anchor = this.popup.anchor;
+            const r = this.popup.cardRect;
+            const origin = this.popup.origin || this.touchOrigin ||
+                { x: anchor.cx, y: anchor.cy };
+            const dx = touch.clientX - origin.x;
+            const dy = touch.clientY - origin.y;
+            // 手感档（松 1.4x / 标准 1.0x / 紧 0.7x）缩放抖动死区与卡片
+            // 边界容差：松=更难误取消，紧=更快撤销。选格本身始终按
+            // 最近格心判定。
+            const scale = [1.4, 1, 0.7][this.popupSnap] || 1;
+            const DEAD = Math.round(12 * scale);
+            const SLOP = Math.round(6 * scale);
+            // 按点死区内的微动不动高亮（吃手指抖动，松手仍落预选格）。
+            if (!this.popup.tracking) {
+                if (Math.hypot(dx, dy) <= DEAD) return;
+                this.popup.tracking = true;
+            }
+            const vx = anchor.cx + dx;
+            const vy = anchor.cy + dy;
+            const inside = vx >= r.left - SLOP && vx <= r.right + SLOP &&
+                vy >= r.top - SLOP && vy <= r.bottom + SLOP;
+            if (!inside) {
                 if (!this.popup.cancelled) {
                     this.popup.cancelled = true;
                     this.popup.selected = null;
                     this.popup.cells.forEach(cell => cell.item.classList.remove('sel'));
+                    inner.style.transform = 'scale(0.92)';
+                    inner.style.opacity = '0.5';
                     this.showPopupCancelTip(true);
                 }
                 return;
             }
-            this.popup.cancelled = false;
-            this.showPopupCancelTip(false);
-            this.popup.cells.forEach(cell => cell.item.classList.toggle('sel', cell === selected));
+            if (this.popup.cancelled) {
+                this.popup.cancelled = false;
+                inner.style.transform = '';
+                inner.style.opacity = '';
+                this.showPopupCancelTip(false);
+            }
+            let selected = this.popup.cells[0];
+            let best = Infinity;
+            this.popup.cells.forEach(cell => {
+                const d = Math.hypot(vx - cell.cx, vy - cell.cy);
+                if (d < best) { best = d; selected = cell; }
+            });
+            this.popup.cells.forEach(cell =>
+                cell.item.classList.toggle('sel', cell === selected));
             this.popup.selected = selected;
         }
 
@@ -2614,9 +2585,9 @@
             document.getElementById('keyPopup').classList.remove('open');
             this.showPopupCancelTip(false);
             if (cancel || popup?.cancelled) return;
-            // T9 弹层：选格进引擎（字母=确认拼写，数字=通配）——
-            // sendSymbol 会把字母当文本直上屏，拼音组合就断了。literal
-            // 格（中行符号）反过来：直上屏，进引擎会被拼音吃掉。
+            // T9 弹层：literal 格（字母大小写 + 中行符号）直上屏，大小写
+            // 原样落；数字格 = 通配进引擎（与点按同义）。拼音里确认字母
+            // 由滑动手势承担，不经弹层。
             if (popup?.enginePath) {
                 if (!popup.selected) return;
                 if (popup.selected.literal) this.sendSymbol(popup.selected.char);

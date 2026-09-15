@@ -655,8 +655,13 @@ test('long-press 350ms opens popup, drag selects, release commits', () => {
     assert(world.$('keyPopup').classList.contains('open'), 'popup open');
     const items = world.document.querySelectorAll('.kp-item');
     assert(items.length >= 3, 'popup has candidates');
-    const rect = items[1].getBoundingClientRect();
-    world.move(eKey, rect.left + rect.width / 2, 10);
+    // 相对跟手（3.39.0，qwerty 弹层与 T9 同款）：拖动量 = 目标格 − 锚点格。
+    const anchor0 = [...items].find(el => el.classList.contains('sel'));
+    const ar0 = anchor0.getBoundingClientRect();
+    const tr0 = items[1].getBoundingClientRect();
+    world.move(eKey,
+        20 + (tr0.left + tr0.width / 2) - (ar0.left + ar0.width / 2),
+        20 + (tr0.top + tr0.height / 2) - (ar0.top + ar0.height / 2));
     world.touchUp(eKey);
     const keys = world.native.of('key');
     assert(keys.length === 1, 'one commit from popup');
@@ -1210,6 +1215,10 @@ test('mode order from storage drives the long-press menu (requirement 12)', () =
 
 test('Chinese-mode popup pick lands literally (requirement 7)', () => {
     const world = fresh({ mode: 'double-pinyin' });
+    // \u76f8\u5bf9\u8ddf\u624b\u7684\u53d6\u6d88\u5224\u5b9a\u770b\u300c\u865a\u62df\u5149\u6807\u662f\u5426\u6ed1\u51fa\u6d6e\u5c42\u5361\u7247\u300d\uff1afake DOM \u6ca1\u6709\u771f\u5b9e
+    // \u5e03\u5c40\uff0c\u628a\u5361\u7247\u77e9\u5f62\u9489\u5230\u8986\u76d6\u6240\u6709\u683c\u5b50\u5047\u77e9\u5f62\u7684\u4f4d\u7f6e\u518d\u5f00\u5c42\u3002
+    world.document.getElementById('keyPopup').getBoundingClientRect =
+        () => ({ left: 0, top: 0, right: 500, bottom: 400, width: 500, height: 400 });
     // \u201c moved from J to K (j now carries \uff5e).
     const j = world.key('k');
     world.touchDown(j);
@@ -1217,9 +1226,19 @@ test('Chinese-mode popup pick lands literally (requirement 7)', () => {
     const items = [...world.document.querySelectorAll('.kp-item')];
     const quote = items.find(el => el.textContent === '\u201c');
     assert(quote, '\u201c offered in the popup');
-    const rect = quote.getBoundingClientRect();
-    world.move(j, rect.left + rect.width / 2, rect.top + rect.height / 2);
-    world.touchUp(j);
+    // \u76f8\u5bf9\u8ddf\u624b\uff083.39.0\uff09\uff1a\u62d6\u52a8\u91cf = \u76ee\u6807\u683c \u2212 \u951a\u70b9\u683c\uff08\u6309\u4e0b\u70b9 20,20\uff09\uff0c
+    // \u6536\u5c3e\u5750\u6807 = \u6700\u540e\u79fb\u52a8\u4f4d\u7f6e\uff08\u7ec8\u6001\u4f4d\u79fb\u7ed3\u7b97\uff0c\u4e0e\u771f\u5b9e\u624b\u6307\u4e00\u81f4\uff09\u3002
+    const selItem = () => [...world.document.querySelectorAll('.kp-item')]
+        .find(el => el.classList.contains('sel'));
+    const dragTo = (el, pressEl) => {
+        const ar = selItem().getBoundingClientRect();
+        const tr = el.getBoundingClientRect();
+        const mx = 20 + (tr.left + tr.width / 2) - (ar.left + ar.width / 2);
+        const my = 20 + (tr.top + tr.height / 2) - (ar.top + ar.height / 2);
+        world.move(pressEl, mx, my);
+        world.touchUp(pressEl, mx, my);
+    };
+    dragTo(quote, j);
     const commits = world.native.of('commitText').map(c => c.args[0]);
     equal(commits[commits.length - 1], '\u201c', 'popup symbol lands via commitText');
     equal(world.native.of('key').filter(c => c.args[0] === '\u201c').length, 0,
@@ -1228,9 +1247,7 @@ test('Chinese-mode popup pick lands literally (requirement 7)', () => {
     world.touchDown(j);
     world.clock.advance(360);
     const upper = [...world.document.querySelectorAll('.kp-item')].find(el => el.textContent === 'K');
-    const r2 = upper.getBoundingClientRect();
-    world.move(j, r2.left + r2.width / 2, r2.top + r2.height / 2);
-    world.touchUp(j);
+    dragTo(upper, j);
     const commits2 = world.native.of('commitText').map(c => c.args[0]);
     equal(commits2[commits2.length - 1], 'K', 'popup letter lands literally in Chinese mode');
 });
@@ -3117,6 +3134,9 @@ test('russian е popup offers both ё and Ё', () => {
 
 test('shift applies to accented popup selection (é → É)', () => {
     const world = fresh({ mode: 'french' });
+    // 相对跟手：把卡片矩形钉到覆盖所有格子假矩形的位置（取消边界用）。
+    world.document.getElementById('keyPopup').getBoundingClientRect =
+        () => ({ left: 0, top: 0, right: 500, bottom: 400, width: 500, height: 400 });
     const shift = [...world.document.querySelectorAll('.kb-key')].find(
         el => el.dataset.role === 'shift',
     );
@@ -3127,9 +3147,15 @@ test('shift applies to accented popup selection (é → É)', () => {
     const items = [...world.document.querySelectorAll('.kp-item')];
     const target = items.find(el => el.textContent === 'é');
     assert(target, 'é offered in popup');
-    const rect = target.getBoundingClientRect();
-    world.move(eKey, rect.left + rect.width / 2, rect.top + rect.height / 2);
-    world.touchUp(eKey);
+    // 相对跟手（3.39.0）：拖动量 = 目标格 − 锚点格（按下点 20,20），
+    // 收尾坐标 = 最后移动位置。
+    const ar = [...items].find(el => el.classList.contains('sel'))
+        .getBoundingClientRect();
+    const tr = target.getBoundingClientRect();
+    const mx = 20 + (tr.left + tr.width / 2) - (ar.left + ar.width / 2);
+    const my = 20 + (tr.top + tr.height / 2) - (ar.top + ar.height / 2);
+    world.move(eKey, mx, my);
+    world.touchUp(eKey, mx, my);
     const keys = world.native.of('key');
     equal(keys[keys.length - 1].args[0], 'É', 'shift applied to accented selection');
 });
@@ -4517,7 +4543,7 @@ test('mode switch clears assoc words', {since: '3.33.0'}, () => {
     equal(assocCount(), 0, 'mode change clears the assoc bar');
 });
 
-test('t9 long-press popup routes digit + letters through the engine', {since: '3.35.0'}, () => {
+test('t9 long-press popup: letters/symbols land literally, digit feeds the engine', {since: '3.35.0'}, () => {
     const world = fresh({ mode: 't9' });
     world.engineState({ phase: 'READY', mode: 't9', revision: 1, composing: '', rawInput: '',
         candidates: [], hasNextPage: false });
@@ -4547,9 +4573,12 @@ test('t9 long-press popup routes digit + letters through the engine', {since: '3
     assert(items[6].classList.contains('sel'), 'highlight moves with the finger delta');
     // 收尾坐标 = 最后移动位置（真实触摸的 changedTouches 语义）。
     world.touchUp(two, 20 - 34, 20 + 46);
-    const keys = world.native.of('key');
-    assert(keys.length >= 1, 'popup pick reaches the engine');
-    equal(keys[keys.length - 1].args[0], 'A', 'uppercase letter confirms the spelling');
+    // 大写格 = literal 直上屏，大小写原样落（用户定稿：弹层选字母就是打
+    // 这个字母，不参与拼音组合）；引擎通道收不到任何字母键。
+    const commitsA = world.native.of('commitText').map(c => c.args[0]);
+    equal(commitsA[commitsA.length - 1], 'A', 'uppercase cell lands literally');
+    equal(world.native.of('key').filter(c => c.args[0] === 'A' || c.args[0] === 'a').length, 0,
+        'popup letter never enters the engine');
     // 选符号格 → commitText 直上屏（进引擎会被拼音组合吃掉）。
     const worldSym = fresh({ mode: 't9' });
     worldSym.engineState({ phase: 'READY', mode: 't9', revision: 1, composing: '', rawInput: '',
@@ -4650,6 +4679,40 @@ test('t9 long-press popup routes digit + letters through the engine', {since: '3
     world2.touchUp(two2);
     const keys2 = world2.native.of('key');
     equal(keys2[keys2.length - 1].args[0], '2', 'release on the digit cell feeds the wildcard');
+});
+
+test('t9 popup letters land literally with case preserved (3.40.0)', {since: '3.39.0'}, () => {
+    // 用户定稿：长按弹层选字母 = 直接打这个字母（大写落大写、小写落
+    // 小写），不参与拼音组合；拼音确认字母由滑动手势承担。
+    const world = fresh({ mode: 't9' });
+    world.engineState({ phase: 'READY', mode: 't9', revision: 1, composing: '', rawInput: '',
+        candidates: [], hasNextPage: false });
+    const pinCard = w => {
+        w.document.getElementById('keyPopup').getBoundingClientRect =
+            () => ({ left: 0, top: 0, right: 500, bottom: 400, width: 500, height: 400 });
+    };
+    pinCard(world);
+    const four = world.key('4');
+    const pick = label => {
+        world.touchDown(four);
+        world.clock.advance(360);
+        // 每次开层 DOM 重建，必须重新查询格子。
+        const items = [...world.document.querySelectorAll('.kp-item')];
+        const el = items.find(i => i.textContent === label);
+        const ar = items.find(i => i.classList.contains('sel')).getBoundingClientRect();
+        const tr = el.getBoundingClientRect();
+        const mx = 20 + (tr.left + tr.width / 2) - (ar.left + ar.width / 2);
+        const my = 20 + (tr.top + tr.height / 2) - (ar.top + ar.height / 2);
+        world.move(four, mx, my);
+        world.touchUp(four, mx, my);
+    };
+    pick('I');
+    pick('g');
+    const commits = world.native.of('commitText').map(c => c.args[0]);
+    equal(JSON.stringify(commits), JSON.stringify(['I', 'g']),
+        'popup letters land literally, case preserved');
+    equal(world.native.of('key').filter(c => /^[a-z]$/i.test(c.args[0])).length, 0,
+        'popup letters never enter the engine');
 });
 
 test('t9 letter-key flicks: literal digit up, engine letters down/left/right', {since: '3.35.0'}, () => {
