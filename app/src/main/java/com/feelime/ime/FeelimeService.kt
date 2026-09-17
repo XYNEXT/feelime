@@ -1384,6 +1384,7 @@ class FeelimeService : InputMethodService(), AsrEngine.Listener {
             .put("preeditFont", preeditFont())
             .put("preeditBold", readPreeditBold(this))
             .put("oneHand", readOneHand(this))
+            .put("oneHandPad", readOneHandPad(this))
             .put("sideContent", readSideContent(this))
             .put("bgImageLight", readBgImageBase64(this, "light"))
             .put("bgImageDark", readBgImageBase64(this, "dark"))

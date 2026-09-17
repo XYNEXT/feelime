@@ -241,7 +241,7 @@
         });
     }
 
-    const KEYBOARD_VERSION = '3.45.2';
+    const KEYBOARD_VERSION = '3.45.3';
 /** 工具栏可编辑 icon 目录（issue #15 编辑模式）：id → 按钮 DOM id。
  *  logo（左）与收起（右）固定不可编辑；组合态工具（清除/展开）与
  *  完整设置齿轮不参与编辑。 */
@@ -929,6 +929,9 @@ const TOOLBAR_DEFAULT = { left: ['ctrl', 'ime'], right: ['clipboard', 'favorites
             // 内容 0=光标控制 1=空白。背景图片（原「侧边图片」升级）：铺满
             // 整个键盘区域，bgImageEnabled 控制展示。
             this.oneHand = 0;
+            // 单手压缩比例（2026-09-18 用户反馈：大屏单手仍够不着）：
+            // 0=默认让位（CSS --side-pad-w 64px），15/25/35=让位占屏宽百分比。
+            this.oneHandPad = 0;
             this.sideContent = 0;
             // 背景图亮/暗两组：各自独立，空串 = 该组无图（纯色背景）。
             this.bgImageLight = '';
@@ -1173,6 +1176,8 @@ const TOOLBAR_DEFAULT = { left: ['ctrl', 'ime'], right: ['clipboard', 'favorites
                         this.applyOrientation(window.innerWidth > window.innerHeight);
                     }
                     this.applyHeight();
+                    // 单手让位是屏宽百分比：旋转后重算。
+                    if ((this.oneHand || 0) !== 0) this.applyOneHand();
                 });
             }
             // Native height changes land after setKeyboardHeight returns.
@@ -3843,6 +3848,16 @@ const TOOLBAR_DEFAULT = { left: ['ctrl', 'ime'], right: ['clipboard', 'favorites
                 level === 1 ? 'left' : level === 2 ? 'right' : 'off';
             const content = Number(this.sideContent) || 0;
             document.body.dataset.sideContent = content === 1 ? 'blank' : 'cursor';
+            // 压缩比例：让位宽度 = 屏宽的百分比（大屏单手靠它收窄键区）。
+            // 0 档不覆盖，保持 CSS 默认 64px；旋转后 innerWidth 变化，
+            // resize 时本方法会重跑重算。
+            const padPct = Number(this.oneHandPad) || 0;
+            if (padPct > 0) {
+                const padW = Math.round(window.innerWidth * padPct / 100);
+                document.documentElement.style.setProperty('--side-pad-w', padW + 'px');
+            } else {
+                document.documentElement.style.removeProperty('--side-pad-w');
+            }
             // 让位宽度变了，候选条容量随之变化：重算溢出隐藏。
             this.pruneOverflowTools();
         }
@@ -4909,11 +4924,15 @@ const TOOLBAR_DEFAULT = { left: ['ctrl', 'ime'], right: ['clipboard', 'favorites
                 const pw = pageW();
                 if (drag.axis === 'x' && pw) {
                     const startPage = Math.round(drag.startLeft / pw);
-                    const moved = drag.startLeft - pages.scrollLeft;
-                    let page = Math.round(pages.scrollLeft / pw);
-                    if (Math.abs(drag.v) > 0.3 && Math.abs(moved) > pw * 0.12) {
-                        // 快速轻扫：位移不及半页也翻页
-                        page = startPage - Math.sign(drag.v);
+                    const delta = pages.scrollLeft - drag.startLeft; // >0 = 手指左移（下一页）
+                    // 翻页判定（2026-09-18 用户反馈「要划大半屏才翻页」）：
+                    // 快扫只要速度到位（滤点按抖动留 4% 位移下限）；慢拖
+                    // 从「过半页」放宽到 1/4 页。小幅度滑动也能翻页。
+                    const distance = Math.abs(delta);
+                    const fast = Math.abs(drag.v) > 0.2 && distance > pw * 0.04;
+                    let page = startPage;
+                    if (fast || distance > pw * 0.25) {
+                        page = startPage + (delta > 0 ? 1 : -1);
                     }
                     // 硬限制：一次操作最多翻一屏
                     page = Math.max(startPage - 1, Math.min(page, startPage + 1));
@@ -6822,6 +6841,10 @@ const TOOLBAR_DEFAULT = { left: ['ctrl', 'ime'], right: ['clipboard', 'favorites
             if (Number(payload.oneHand) in { 0: 1, 1: 1, 2: 1 }) {
                 this.oneHand = Number(payload.oneHand);
             }
+            // 单手压缩比例：白名单档（0=默认 64px），旧 APK 不带字段不覆盖。
+            if (Number(payload.oneHandPad) in { 0: 1, 15: 1, 25: 1, 35: 1 }) {
+                this.oneHandPad = Number(payload.oneHandPad);
+            }
             // 2 是废除的「自定义侧边图」档，按空白处理（防旧 pref 直漏）。
             const side = Number(payload.sideContent);
             if (side === 0 || side === 1) this.sideContent = side;
@@ -7495,6 +7518,10 @@ const TOOLBAR_DEFAULT = { left: ['ctrl', 'ime'], right: ['clipboard', 'favorites
         },
         setOneHand: level => {
             keyboard.oneHand = Number(level) || 0;
+            keyboard.applyOneHand();
+        },
+        setOneHandPad: pct => {
+            keyboard.oneHandPad = Number(pct) || 0;
             keyboard.applyOneHand();
         },
         setSideContent: mode => {

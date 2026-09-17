@@ -2434,6 +2434,23 @@ test('one-handed mode rides hello into the side pad (issue #15)', {since: '3.43.
     equal(world.document.body.dataset.sideContent, 'blank', 'off-whitelist sideContent ignored');
 });
 
+test('one-handed pad percent drives --side-pad-w (shrink tiers)', {since: '3.45.3'}, () => {
+    const world = fresh();
+    const padVar = () =>
+        world.document.documentElement.style.getPropertyValue('--side-pad-w');
+    world.hello({});
+    equal(padVar(), undefined, 'no hello field keeps the CSS default 64px');
+    world.hello({oneHand: 1, oneHandPad: 25});
+    // mock 视口 innerWidth 固定 393 → 25% = 98px。
+    equal(padVar(), '98px', '25% of the mock viewport (393px)');
+    world.hello({oneHandPad: 7});
+    equal(padVar(), '98px', 'off-whitelist pad tier is ignored');
+    world.hello({oneHandPad: 35});
+    equal(padVar(), '138px', '35% tier applies (393 * 0.35)');
+    world.hello({oneHandPad: 0});
+    equal(padVar(), undefined, 'tier 0 removes the override (CSS default again)');
+});
+
 test('key opacity: --key-alpha is a 0..1 fraction floored at 5%', {since: '3.45.1'}, () => {
     const alpha = world => world.document.documentElement.style.getPropertyValue('--key-alpha');
     const world = fresh();
@@ -3081,6 +3098,41 @@ test('quick tiles: cycle tiles rotate steps and apply locally', {since: '3.38.0'
     // hello re-push with the new locale translates the whole grid.
     world.hello({ uiLocale: 'en' });
     assert(world.tileNames().includes('Associations'), 'tile names translate on the echo');
+});
+
+test('quick tiles: small swipe flips a page (touchend threshold)', {since: '3.45.3'}, () => {
+    const world = fresh();
+    world.hello();
+    world.tap(world.$('setupButton'));
+    const strip = world.document.querySelector('.qs-pages');
+    const pw = strip.firstElementChild.offsetWidth;
+    // 跟手：横向拖动时 scrollLeft 实时跟随（手指没松，页面贴着手指走）。
+    world.dispatch(strip, 'touchstart', 300, 100);
+    world.dispatch(strip, 'touchmove', 300 - pw * 0.3, 100);
+    assert(Math.abs(strip.scrollLeft - pw * 0.3) < 3,
+        `finger-follow: scrollLeft tracks the finger (${strip.scrollLeft} vs ${pw * 0.3})`);
+    world.dispatch(strip, 'touchend', 300 - pw * 0.3, 100);
+    equal(strip.scrollLeft, pw, 'release snaps to the next page');
+    // 快扫小位移翻页。mock 假视口只有 44px，8px 轴死区已占 18%，
+    // 「4%~12% 位移」的旧/新分界构造不出来——这里验证快扫路径本身
+    // （速度+小位移），真机阈值（4% 位移 / 0.2px/ms / 慢拖 25%）由
+    // AVD 套件人手验证。
+    strip.scrollLeft = 0;
+    world.dispatch(strip, 'touchstart', 300, 100);
+    world.dispatch(strip, 'touchmove', 300 - 10, 100);
+    world.dispatch(strip, 'touchend', 300 - 10, 100);
+    equal(strip.scrollLeft, pw, 'small fast swipe flips too');
+    // 反向：往回小幅快扫回到第一页。
+    world.dispatch(strip, 'touchstart', 100, 100);
+    world.dispatch(strip, 'touchmove', 100 + 10, 100);
+    world.dispatch(strip, 'touchend', 100 + 10, 100);
+    equal(strip.scrollLeft, 0, 'small fast swipe back returns to page 1');
+    // 微动不过界：2% 位移（低于 4% 抖动下限）留在当前页。
+    strip.scrollLeft = pw;
+    world.dispatch(strip, 'touchstart', 300, 100);
+    world.dispatch(strip, 'touchmove', 300 - pw * 0.02, 100);
+    world.dispatch(strip, 'touchend', 300 - pw * 0.02, 100);
+    equal(strip.scrollLeft, pw, '2% jiggle does not flip');
 });
 
 test('quick tiles: re-render keeps the current page (no jump to page 1)', {since: '3.38.0'}, () => {

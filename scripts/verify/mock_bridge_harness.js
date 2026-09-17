@@ -137,6 +137,11 @@ class FakeElement {
         const max = Math.max(0, this.scrollWidth - this.clientWidth);
         this._scrollLeft = Math.max(0, Math.min(Number(value) || 0, max));
     }
+    scrollTo(options) {
+        // Real browsers animate with behavior:'smooth'; the harness jumps
+        // straight to the target — enough for page-decision assertions.
+        if (options && options.left !== undefined) this.scrollLeft = options.left;
+    }
 
     markPageStrip() {
         this._pageStrip = true;
@@ -482,6 +487,9 @@ class FakeDocument extends FakeElement {
             this.documentElement.style[name] = value;
         };
         this.documentElement.style.getPropertyValue = name => this.documentElement.style[name];
+        this.documentElement.style.removeProperty = name => {
+            delete this.documentElement.style[name];
+        };
         this.documentElement.append(this.body);
         this.append(this.documentElement);
         this.elementsById = new Map();

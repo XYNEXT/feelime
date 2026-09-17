@@ -306,6 +306,18 @@
       </div>
       <div class="row language-row">
         <span class="row-label">
+          <span data-i18n="input.feel.oneHandPad">单手压缩比例</span>
+          <small data-i18n="input.feel.oneHandPadHint">大屏上把键盘进一步收窄，方便拇指够到全部按键。</small>
+        </span>
+        <select id="oneHandPad" class="select" aria-label="单手压缩比例" data-i18n-aria="input.feel.oneHandPad">
+          <option value="0" data-i18n="pad.default">不压缩</option>
+          <option value="15" data-i18n="pad.15">收窄 15%</option>
+          <option value="25" data-i18n="pad.25">收窄 25%</option>
+          <option value="35" data-i18n="pad.35">收窄 35%</option>
+        </select>
+      </div>
+      <div class="row language-row">
+        <span class="row-label">
           <span data-i18n="input.feel.sideContent">侧边条内容</span>
           <small data-i18n="input.feel.sideContentHint">单手模式下空出区域的内容。</small>
         </span>
@@ -547,7 +559,7 @@
         <input type="checkbox" id="diagnosticsOn" class="toggle">
       </label>
       <div class="actions">
-        <button class="btn" id="btnCopyDiagnostics" type="button" data-i18n="diag.copy">复制诊断信息</button>
+        <button class="btn" id="btnExportDiagnostics" type="button" data-i18n="diag.copy">导出诊断信息</button>
         <span class="save-note" id="diagNote" role="status" aria-live="polite"></span>
       </div>
     </section>

@@ -2351,7 +2351,9 @@ body[data-bg-image="on"] #settingsPanel { background: transparent; }
     display: flex;
     overflow-x: auto;
     overflow-y: hidden;
-    scroll-snap-type: x mandatory;
+    /* 翻页吸附由 keyboard.js 手势接管（touchmove 跟手 + touchend
+     * scrollTo），CSS scroll-snap 会在松手时抢先吸附、与 JS 目标页
+     * 竞争（用户反馈「要划大半屏才翻页」的元凶之一），必须关闭。 */
     scrollbar-width: none;
     -webkit-overflow-scrolling: touch;
 }
@@ -2359,7 +2361,6 @@ body[data-bg-image="on"] #settingsPanel { background: transparent; }
 .qs-page {
     flex: 0 0 100%;
     min-width: 100%;
-    scroll-snap-align: center;
     display: grid;
     grid-template-columns: repeat(4, 1fr);
     grid-template-rows: repeat(2, 1fr);

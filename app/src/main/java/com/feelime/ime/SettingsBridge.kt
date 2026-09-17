@@ -16,6 +16,7 @@ import android.os.PersistableBundle
 import android.util.Base64
 import android.util.Log
 import android.webkit.JavascriptInterface
+import androidx.core.content.FileProvider
 import com.feelime.ime.backup.AndroidPrefs
 import com.feelime.ime.backup.UserdataBackup
 import com.feelime.ime.update.GithubReleaseSource
@@ -89,6 +90,17 @@ fun readOneHand(context: Context): Int =
     context.getSharedPreferences(KEYBOARD_PREFS_FILE, Context.MODE_PRIVATE)
         .getInt(PREF_ONE_HAND, 0)
         .takeIf { it in 0..2 }
+        ?: 0
+
+/** 单手压缩比例：让位宽度占屏宽的百分比；0=默认让位（64px）。
+ *  2026-09-18 用户反馈：大屏单手模式 64px 让位后键区仍太宽。 */
+const val PREF_ONE_HAND_PAD = "one_hand_pad"
+val ONE_HAND_PAD_CHOICES = setOf(0, 15, 25, 35)
+
+fun readOneHandPad(context: Context): Int =
+    context.getSharedPreferences(KEYBOARD_PREFS_FILE, Context.MODE_PRIVATE)
+        .getInt(PREF_ONE_HAND_PAD, 0)
+        .takeIf { it in ONE_HAND_PAD_CHOICES }
         ?: 0
 
 /** 侧边条内容：0=光标控制 1=空白。历史上的 2（自定义侧边图）已废除
@@ -479,6 +491,7 @@ class SettingsBridge(
             .put("preeditFont", readPreeditFont(context))
             .put("preeditBold", readPreeditBold(context))
             .put("oneHand", readOneHand(context))
+            .put("oneHandPad", readOneHandPad(context))
             .put("sideContent", readSideContent(context))
             .put("bgImageLight", readBgImageBase64(context, "light"))
             .put("bgImageDark", readBgImageBase64(context, "dark"))
@@ -937,6 +950,27 @@ class SettingsBridge(
         pushState()
     }
 
+    /** 单手压缩比例：0=默认让位 15/25/35=让位占屏宽百分比。 */
+    @JavascriptInterface
+    fun setOneHandPad(pct: Int, token: String) = guarded(token) {
+        if (pct !in ONE_HAND_PAD_CHOICES) {
+            pushEvent(
+                JSONObject()
+                    .put("type", "oneHandError")
+                    .put("code", "BAD_ONE_HAND_PAD")
+                    .put("message", t(context, "单手压缩比例无效", "Invalid one-hand pad option")),
+            )
+            pushState()
+            return@guarded
+        }
+        context.getSharedPreferences(KEYBOARD_PREFS_FILE, Context.MODE_PRIVATE)
+            .edit().putInt(PREF_ONE_HAND_PAD, pct).apply()
+        context.sendBroadcast(
+            Intent(ACTION_KEYBOARD_PREFS_CHANGED).setPackage(context.packageName),
+        )
+        pushState()
+    }
+
     /** 侧边条内容：0=光标控制 1=空白（2=自定义图片已废除，升级为背景图片）。 */
     @JavascriptInterface
     fun setSideContent(mode: Int, token: String) = guarded(token) {
@@ -1194,9 +1228,10 @@ class SettingsBridge(
         pushState()
     }
 
-    /** 组装诊断导出并直接进剪贴板（标记敏感），返回条数供 JS 提示。 */
+    /** 组装诊断导出为文本文件并弹出系统分享面板（微信/邮件等均可收），
+     *  返回文件名供 JS 提示。不再进剪贴板（2026-09-18 用户反馈）。 */
     @JavascriptInterface
-    fun copyDiagnostics(token: String) = guarded(token) {
+    fun exportDiagnostics(token: String) = guarded(token) {
         val events = Diagnostics.snapshot()
         val header = listOf(
             "Feelime 诊断导出 ${java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.US)
@@ -1208,16 +1243,25 @@ class SettingsBridge(
             "--- events ---",
         )
         val text = (header + events).joinToString("\n")
+        val stamp = java.text.SimpleDateFormat("yyyyMMdd-HHmmss", java.util.Locale.US)
+            .format(java.util.Date())
+        val file = File(File(context.cacheDir, "exports"), "feelime-diagnostics-$stamp.txt")
+        file.parentFile?.mkdirs()
+        file.writeText(text)
         Handler(Looper.getMainLooper()).post {
             runCatching {
-                val clip = ClipData.newPlainText("feelime", text)
-                if (Build.VERSION.SDK_INT >= 33) {
-                    clip.description.extras = PersistableBundle().apply {
-                        putBoolean(ClipDescription.EXTRA_IS_SENSITIVE, true)
-                    }
+                val uri = FileProvider.getUriForFile(context, "${context.packageName}.files", file)
+                val send = Intent(Intent.ACTION_SEND).apply {
+                    type = "text/plain"
+                    putExtra(Intent.EXTRA_STREAM, uri)
+                    putExtra(Intent.EXTRA_SUBJECT, file.name)
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                 }
-                clipboardManager().setPrimaryClip(clip)
-            }.onFailure { Log.w(TAG, "copyDiagnostics failed", it) }
+                // IME service 无任务栈，分享面板必须 NEW_TASK
+                context.startActivity(
+                    Intent.createChooser(send, file.name)
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            }.onFailure { Log.w(TAG, "exportDiagnostics failed", it) }
         }
     }
 

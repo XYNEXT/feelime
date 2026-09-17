@@ -250,6 +250,12 @@ const I18N = {
         "input.feel.preeditBoldHint": "打字时的拼音字母用粗体显示，默认关。",
         "input.feel.oneHand": "单手模式",
         "input.feel.oneHandHint": "键盘贴左或贴右，空出的侧边条放光标与编辑操作。",
+        "input.feel.oneHandPad": "单手压缩比例",
+        "input.feel.oneHandPadHint": "大屏上把键盘进一步收窄，方便拇指够到全部按键。",
+        "pad.default": "不压缩",
+        "pad.15": "收窄 15%",
+        "pad.25": "收窄 25%",
+        "pad.35": "收窄 35%",
         "input.feel.sideContent": "侧边条内容",
         "input.feel.sideContentHint": "单手模式下空出区域的内容。",
         "input.feel.bgImageLight": "亮色背景",
@@ -291,8 +297,9 @@ const I18N = {
         "diag.badge": "调试",
         "diag.toggle": "记录引擎诊断事件",
         "diag.toggleHint": "复现「按键字母直接上屏」这类故障前打开。只记录引擎与编辑器事件（包名、inputType、降级原因），不含任何输入内容。",
-        "diag.copy": "复制诊断信息",
-        "diag.on": "诊断记录已开启，复现问题后回到这里复制诊断信息。",
+        "diag.copy": "导出诊断信息",
+        "diag.on": "诊断记录已开启，复现问题后回到这里导出诊断信息。",
+        "diag.exported": "诊断文件已生成，在弹出的分享面板里选微信 / 邮件等方式发送。",
         "diag.off": "诊断记录未开启。",
         "input.feel.keyHapticHint": "按键时轻短振动一下，强度跟随机型；系统触感总开关关闭时不震。",
         "error.INVALID_FEEL_OPTION": "手感参数无效，已还原为原值。",
@@ -584,6 +591,12 @@ const I18N = {
         "input.feel.preeditBoldHint": "Show the composing pinyin letters in bold; off by default.",
         "input.feel.oneHand": "One-handed mode",
         "input.feel.oneHandHint": "Shift the keys left or right; the freed side strip holds cursor and editing actions.",
+        "input.feel.oneHandPad": "One-handed shrink",
+        "input.feel.oneHandPadHint": "Narrow the keyboard further on big screens so your thumb reaches every key.",
+        "pad.default": "Off",
+        "pad.15": "Shrink 15%",
+        "pad.25": "Shrink 25%",
+        "pad.35": "Shrink 35%",
         "input.feel.sideContent": "Side strip content",
         "input.feel.sideContentHint": "What fills the freed strip in one-handed mode.",
         "input.feel.bgImageLight": "Light background",
@@ -626,8 +639,9 @@ const I18N = {
         "diag.badge": "Debug",
         "diag.toggle": "Record engine diagnostic events",
         "diag.toggleHint": "Enable before reproducing issues like raw letters landing directly. Records engine/editor events only (package, inputType, degrade reason) — never any typed content.",
-        "diag.copy": "Copy diagnostics",
-        "diag.on": "Recording. Reproduce the issue, then come back and copy the diagnostics.",
+        "diag.copy": "Export diagnostics",
+        "diag.on": "Recording. Reproduce the issue, then come back and export the diagnostics.",
+        "diag.exported": "Diagnostics file created — pick WeChat / email etc. in the share sheet.",
         "diag.off": "Diagnostics recording is off.",
         "input.feel.keyHapticHint": "A light tap on each key press; strength follows the device tuning. No vibration while the system haptics master switch is off.",
         "input.feel.snapLoose": "Loose",
@@ -959,6 +973,7 @@ function renderFeel(state) {
     setSelect("candidateFont", state.candidateFont ?? 0, ["0", "1", "2"]);
     setSelect("preeditFont", state.preeditFont ?? 0, ["0", "1", "2"]);
     setSelect("oneHand", state.oneHand ?? 0, ["0", "1", "2"]);
+    setSelect("oneHandPad", state.oneHandPad ?? 0, ["0", "15", "25", "35"]);
     setSelect("sideContent", state.sideContent ?? 0, ["0", "1"]);
     // 外观页:色彩模式 + 按键不透明度。
     const themeSel = $("themeMode");
@@ -1447,6 +1462,7 @@ $("candidateFont").addEventListener("change", event => call("setCandidateFont", 
 $("preeditFont").addEventListener("change", event => call("setPreeditFont", parseInt(event.target.value, 10)));
 $("preeditBold").addEventListener("change", event => call("setPreeditBold", event.target.checked));
 $("oneHand").addEventListener("change", event => call("setOneHandMode", parseInt(event.target.value, 10)));
+$("oneHandPad").addEventListener("change", event => call("setOneHandPad", parseInt(event.target.value, 10)));
 $("sideContent").addEventListener("change", event => call("setSideContent", parseInt(event.target.value, 10)));
 // 外观页:色彩模式 + 键帽不透明度(input 实时预览,松手才落盘一次)。
 $("themeMode").addEventListener("change", event => call("setThemeMode", event.target.value));
@@ -1634,13 +1650,13 @@ $("diagnosticsOn").addEventListener("change", event => {
     call("setDiagnostics", event.target.checked);
     setNote("diagNote", event.target.checked ? t("diag.on") : t("diag.off"));
 });
-$("btnCopyDiagnostics").addEventListener("click", () => {
+$("btnExportDiagnostics").addEventListener("click", () => {
     if (!lastState || !lastState.diagnosticsOn) {
         setNote("diagNote", t("diag.off"));
         return;
     }
-    call("copyDiagnostics");
-    setNote("diagNote", t("note.copied"));
+    call("exportDiagnostics");
+    setNote("diagNote", t("diag.exported"));
 });
 $("btnAppStore").addEventListener("click", () => call("openAppStore"));
 $("btnCopyAbout").addEventListener("click", () => {

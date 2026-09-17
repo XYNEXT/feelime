@@ -85,7 +85,8 @@ class MockSettingsNative {
     setFuzzyPinyinMask(...a) { this._rec('setFuzzyPinyinMask', a); }
     setAssociation(...a) { this._rec('setAssociation', a); }
     setDiagnostics(...a) { this._rec('setDiagnostics', a); }
-    copyDiagnostics(...a) { this._rec('copyDiagnostics', a); }
+    exportDiagnostics(...a) { this._rec('exportDiagnostics', a); }
+    setOneHandPad(...a) { this._rec('setOneHandPad', a); }
     setKeySound(...a) { this._rec('setKeySound', a); }
     setKeyHaptic(...a) { this._rec('setKeyHaptic', a); }
     // /R8: page reporting (BACK returns home first) + about-page
@@ -547,14 +548,27 @@ test('diagnostics toggle records via bridge; copy button exports', () => {
     change.handler({ target: box });
     equal(world.lastCall('setDiagnostics').args, [true, world.token], 'setDiagnostics + token');
     assert(world.$('diagNote').textContent.length > 0, 'note tells the user recording started');
-    // 复制按钮：开关打开 → copyDiagnostics；未打开 → 只提示不导出。
+    // 导出按钮：开关打开 → exportDiagnostics；未打开 → 只提示不导出。
     world.push({ ...BASE_STATE, diagnosticsOn: true });
-    world.$('btnCopyDiagnostics').click();
-    equal(world.lastCall('copyDiagnostics').args, [world.token], 'copy button exports');
+    world.$('btnExportDiagnostics').click();
+    equal(world.lastCall('exportDiagnostics').args, [world.token], 'export button exports');
     world.push({ ...BASE_STATE, diagnosticsOn: false });
-    world.$('btnCopyDiagnostics').click();
-    equal(world.native.of('copyDiagnostics').length, 1,
-        'copy is gated on the toggle (no second export)');
+    world.$('btnExportDiagnostics').click();
+    equal(world.native.of('exportDiagnostics').length, 1,
+        'export is gated on the toggle (no second export)');
+});
+
+test('one-handed pad select mirrors state and routes setOneHandPad', () => {
+    const world = new SettingsWorld();
+    world.push({ ...BASE_STATE, oneHand: 1, oneHandPad: 25 });
+    equal(world.$('oneHandPad').value, '25', 'select mirrors the hello state');
+    world.native.calls.length = 0;
+    const sel = world.$('oneHandPad');
+    const change = sel.listeners.filter(l => l.type === 'change');
+    assert(change.length === 1, '#oneHandPad has a change listener');
+    change[0].handler({ target: { value: '35' } });
+    equal(world.lastCall('setOneHandPad').args, [35, world.token],
+        'change routes the pad tier with token');
 });
 
 test('navigation: home starts as the only visible page; showPage swaps and reports', () => {
