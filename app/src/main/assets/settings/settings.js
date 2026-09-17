@@ -54,6 +54,10 @@ const I18N = {
         "entry.test.title": "输入测试",
         "entry.test.subtitle": "唤起键盘试一试",
         "page.input": "键盘与输入",
+        "page.appearance": "外观",
+        "themeMode.auto": "跟随系统",
+        "themeMode.light": "浅色",
+        "themeMode.dark": "深色",
         "page.voice": "语音识别",
         "page.update": "键盘热更新",
         "page.about": "关于",
@@ -233,16 +237,44 @@ const I18N = {
         "error.INVALID_DP_SCHEME": "双拼方案选项无效。",
         "input.feel.title": "键盘手感",
         "input.feel.badge": "微调",
-        "input.feel.pad": "底部留白",
-        "input.feel.padHint": "键盘下方的空白高度，0 保持贴底（终端场景）。横竖屏分开保存，补偿全面屏手势条或 ColorOS 收起键等系统元素。",
+
+        "input.feel.padHint": "键盘下方的空白高度，0 保持贴底（终端场景），补偿全面屏手势条或系统元素。",
         "input.feel.padPortrait": "底部留白 · 竖屏",
         "input.feel.padLandscape": "底部留白 · 横屏",
+        "input.feel.padLandscapeHint": "横屏单独保存，互不影响。",
         "input.feel.candFont": "候选字号",
         "input.feel.candFontHint": "候选词文字的大小，不改变键盘行高。",
         "input.feel.preeditFont": "拼音字号",
         "input.feel.preeditFontHint": "打字时拼音字母的大小；特大档会占一行更多高度。",
         "input.feel.preeditBold": "拼音加粗",
         "input.feel.preeditBoldHint": "打字时的拼音字母用粗体显示，默认关。",
+        "input.feel.oneHand": "单手模式",
+        "input.feel.oneHandHint": "键盘贴左或贴右，空出的侧边条放光标与编辑操作。",
+        "input.feel.sideContent": "侧边条内容",
+        "input.feel.sideContentHint": "单手模式下空出区域的内容。",
+        "input.feel.bgImageLight": "亮色背景",
+        "input.feel.bgImageDark": "暗色背景",
+        "input.feel.themeMode": "色彩模式",
+        "input.feel.themeModeHint": "跟随系统，或固定浅色/深色。",
+        "input.feel.keyOpacity": "按键不透明度",
+        "input.feel.kbHeight": "键盘高度",
+        "input.feel.kbHeightHint": "竖屏键盘的高度；键盘上拖拽调节与此处等效。",
+        "input.feel.kbHeightReset": "恢复默认",
+        "input.feel.keyOpacityHint": "键帽在背景图上的透明程度，文字始终实色。",
+        "entry.appearance.title": "外观",
+        "entry.appearance.subtitle": "色彩模式 · 背景图片 · 透明度",
+        "input.appearance.title": "外观",
+        "input.appearance.preview": "预览",
+        "input.appearance.previewHint": "进入本页时，真实键盘会在屏幕底部弹出（本页自动让位），上面的设置实时生效，直接在这里打字试。",
+        "input.appearance.previewPlaceholder": "直接在这里打字试试",
+        "input.appearance.badge": "主题",
+        "input.feel.bgImageHint": "铺满整个键盘区域（工具条到底部留白），压缩到 720px 宽存储，只在本机生效。",
+        "input.feel.bgImageHintDark": "亮暗切换时各自使用对应组的图片。",
+        "自定义": "Custom",
+        "光标控制": "光标控制",
+        "自定义图片": "自定义图片",
+        "左手": "左手",
+        "右手": "右手",
         "input.feel.hold": "长按触发时长",
         "input.feel.holdHint": "长按弹出选字、锁定大写、打开模式菜单的等待时间。",
         "input.feel.scrub": "光标移动速度",
@@ -356,6 +388,10 @@ const I18N = {
         "entry.test.title": "Input test",
         "entry.test.subtitle": "Wake Feelime and try it",
         "page.input": "Keyboard & input",
+        "page.appearance": "Appearance",
+        "themeMode.auto": "Follow system",
+        "themeMode.light": "Light",
+        "themeMode.dark": "Dark",
         "page.voice": "Voice recognition",
         "page.update": "Keyboard updates",
         "page.about": "About",
@@ -539,12 +575,44 @@ const I18N = {
         "input.feel.padHint": "Blank strip under the keys; 0 keeps the keyboard flush with the screen (terminal use). Saved per orientation to compensate gesture bars or OEM IME buttons.",
         "input.feel.padPortrait": "Bottom padding · Portrait",
         "input.feel.padLandscape": "Bottom padding · Landscape",
+        "input.feel.padLandscapeHint": "Saved separately from portrait.",
         "input.feel.candFont": "Candidate text size",
         "input.feel.candFontHint": "Size of the candidate words; keyboard row height is unchanged.",
         "input.feel.preeditFont": "Pinyin text size",
         "input.feel.preeditFontHint": "Size of the pinyin letters while typing; the largest level takes extra band height.",
         "input.feel.preeditBold": "Bold pinyin",
         "input.feel.preeditBoldHint": "Show the composing pinyin letters in bold; off by default.",
+        "input.feel.oneHand": "One-handed mode",
+        "input.feel.oneHandHint": "Shift the keys left or right; the freed side strip holds cursor and editing actions.",
+        "input.feel.sideContent": "Side strip content",
+        "input.feel.sideContentHint": "What fills the freed strip in one-handed mode.",
+        "input.feel.bgImageLight": "Light background",
+        "input.feel.bgImageDark": "Dark background",
+        "input.feel.themeMode": "Color mode",
+        "input.feel.themeModeHint": "Follow the system, or pin light/dark.",
+                "无": "None",
+        "选择图片": "Pick an image…",
+"input.feel.keyOpacity": "Key opacity",
+        "input.feel.kbHeight": "Keyboard height",
+        "input.feel.kbHeightHint": "Portrait keyboard height; dragging on the keyboard stays equivalent.",
+        "input.feel.kbHeightReset": "Reset",
+        "input.feel.keyOpacityHint": "How transparent the keycaps sit over the background image; labels stay solid.",
+        "entry.appearance.title": "Appearance",
+        "entry.appearance.subtitle": "Color mode · Background · Opacity",
+        "input.appearance.title": "Appearance",
+        "input.appearance.preview": "Preview",
+        "input.appearance.previewHint": "On this page the real keyboard pops up at the bottom of the screen (this page yields). Every setting above applies to it live - type here to try.",
+        "input.appearance.previewPlaceholder": "Type here to try it",
+        "input.appearance.badge": "Theme",
+        "input.feel.bgImageHint": "Covers the whole keyboard (toolbar to bottom padding), compressed to 720px wide and stored locally.",
+        "input.feel.bgImageHintDark": "Each theme uses its own image when you switch.",
+        "自定义": "Custom",
+        "光标控制": "Cursor",
+        "自定义图片": "Custom image",
+        "左手": "Left hand",
+        "右手": "Right hand",
+        "关": "Off",
+        "空白": "Blank",
         "input.feel.hold": "Long-press trigger",
         "input.feel.holdHint": "How long a press waits before popup selection, caps lock, or the mode menu opens.",
         "input.feel.scrub": "Cursor speed",
@@ -623,7 +691,7 @@ const I18N = {
     },
 };
 
-const PAGES = ["home", "input", "voice", "update", "backup", "about", "test"];
+const PAGES = ["home", "appearance", "input", "voice", "update", "backup", "about", "test"];
 const ERROR_KEYS = new Set(Object.keys(I18N.zh).filter(key => key.startsWith("error.")));
 const progressPercent = {};
 
@@ -662,6 +730,20 @@ function call(action, ...args) {
 
 function setTheme(theme) {
     if (theme === "light" || theme === "dark") document.documentElement.className = `theme-${theme}`;
+}
+
+/** 左上角 logo 换成真实的输入法应用图标（桥下发 base64）。失败/缺失
+ *  时保留「F.」占位方块，幂等：已替换过就不再动 DOM。 */
+function applyAppIcon(dataUri) {
+    if (!dataUri) return;
+    const mark = $("heroLogo");
+    if (!mark || mark.dataset.appIcon === "1") return;
+    const img = document.createElement("img");
+    img.src = dataUri;
+    img.alt = "";
+    mark.textContent = "";
+    mark.append(img);
+    mark.dataset.appIcon = "1";
 }
 
 function applyLocale() {
@@ -755,6 +837,7 @@ window.FeelimeSettings = {
         payload = payload || {};
         token = payload.token || "";
         if (payload.theme) setTheme(payload.theme);
+        applyAppIcon(payload.appIcon);
         if (payload.uiLanguage !== undefined) uiChoice = normalizeChoice(payload.uiLanguage);
         const helloLocale = normalizeLocale(payload.uiLocale);
         uiLocale = helloLocale || (uiChoice === "auto" ? browserLocale() : uiChoice);
@@ -830,12 +913,19 @@ window.FeelimeSettings = {
 
 /* --- pages ------------------------------------------------------------- */
 
+let currentPage = "home";
+
 function showPage(name) {
     if (!PAGES.includes(name)) return;
+    const wasAppearance = currentPage === "appearance";
+    currentPage = name;
     document.querySelectorAll("[data-page]").forEach(node => {
         node.hidden = node.dataset.page !== name;
     });
     if (typeof window.scrollTo === "function") window.scrollTo(0, 0);
+    // 外观页预览：真实键盘在屏幕底部弹出、本页窗口被压缩；离开时收起。
+    if (name === "appearance" && !wasAppearance) call("previewKeyboard", true);
+    if (name !== "appearance" && wasAppearance) call("previewKeyboard", false);
     call("reportPage", name !== "home");
 }
 
@@ -868,6 +958,43 @@ function renderFeel(state) {
     setSelect("bottomPadLandscape", state.bottomPadLandscape ?? 0, ["0", "12", "24", "36", "48"]);
     setSelect("candidateFont", state.candidateFont ?? 0, ["0", "1", "2"]);
     setSelect("preeditFont", state.preeditFont ?? 0, ["0", "1", "2"]);
+    setSelect("oneHand", state.oneHand ?? 0, ["0", "1", "2"]);
+    setSelect("sideContent", state.sideContent ?? 0, ["0", "1"]);
+    // 外观页:色彩模式 + 按键不透明度。
+    const themeSel = $("themeMode");
+    if (themeSel) {
+        const mode = state.themeMode || "auto";
+        themeSel.value = ["auto", "light", "dark"].includes(mode) ? mode : "auto";
+    }
+    const opacity = $("keyOpacity");
+    if (opacity) opacity.value = String(Math.max(5, Math.min(100, Number(state.keyOpacity ?? 100))));
+    const kbHeight = $("kbHeight");
+    if (kbHeight) {
+        const min = Number(state.kbHeightMin ?? 210);
+        const max = Number(state.kbHeightMax ?? 400);
+        kbHeight.min = String(min);
+        kbHeight.max = String(max);
+        kbHeight.step = "5";
+        // 0 = 默认（键盘内置 272css）；滑块位停在默认值上。
+        const saved = Number(state.kbHeightPortrait ?? 0);
+        kbHeight.value = String(saved >= min ? saved : 272);
+        kbHeight.dataset.default = "272";
+    }
+    // 背景图两组回显：source = none/builtin/custom（custom 选项按需挂载）。
+    [["bgImageLight", "bgImageLightSource"], ["bgImageDark", "bgImageDarkSource"]].forEach(([id, key]) => {
+        const sel = $(id);
+        if (!sel) return;
+        const src = state[key] || "none";
+        let opt = sel.querySelector('option[value="custom"]');
+        if (src === "custom" && !opt) {
+            opt = document.createElement("option");
+            opt.value = "custom";
+            opt.textContent = t("自定义");
+            sel.append(opt);
+        }
+        if (opt && src !== "custom") opt.remove();
+        sel.value = src === "custom" ? "custom" : src;
+    });
     setSelect("holdMs", state.holdMs ?? 350, ["200", "300", "350", "450", "600"]);
     setSelect("scrubSpeed", state.scrubSpeed ?? 3, ["1", "2", "3", "4", "5"]);
     setSelect("popupSnap", state.popupSnap ?? 1, ["0", "1", "2"]);
@@ -1319,6 +1446,85 @@ $("bottomPadLandscape").addEventListener("change", event => call("setBottomPadLa
 $("candidateFont").addEventListener("change", event => call("setCandidateFont", parseInt(event.target.value, 10)));
 $("preeditFont").addEventListener("change", event => call("setPreeditFont", parseInt(event.target.value, 10)));
 $("preeditBold").addEventListener("change", event => call("setPreeditBold", event.target.checked));
+$("oneHand").addEventListener("change", event => call("setOneHandMode", parseInt(event.target.value, 10)));
+$("sideContent").addEventListener("change", event => call("setSideContent", parseInt(event.target.value, 10)));
+// 外观页:色彩模式 + 键帽不透明度(input 实时预览,松手才落盘一次)。
+$("themeMode").addEventListener("change", event => call("setThemeMode", event.target.value));
+let keyOpacityDirty = false;
+$("keyOpacity").addEventListener("input", event => {
+    keyOpacityDirty = true;
+});
+$("keyOpacity").addEventListener("change", event => {
+    if (!keyOpacityDirty) return;
+    keyOpacityDirty = false;
+    call("setKeyOpacity", parseInt(event.target.value, 10));
+});
+// 键盘高度滑块：拖动即时反映在预览上，松手落盘；「恢复默认」写 0。
+let kbHeightDirty = false;
+$("kbHeight").addEventListener("input", event => {
+    kbHeightDirty = true;
+});
+$("kbHeight").addEventListener("change", event => {
+    if (!kbHeightDirty) return;
+    kbHeightDirty = false;
+    call("setKbHeight", parseInt(event.target.value, 10));
+});
+$("kbHeightReset").addEventListener("click", () => {
+    const slider = $("kbHeight");
+    slider.value = slider.dataset.default || "272";
+    call("setKbHeight", 0);
+});
+// 背景图两组（亮/暗）：「选择图片…」打开文件选择器，选完压到 720px 宽
+// JPEG 走桥；「无 / 内置」直接桥调用。选中自定义图后 select 挂「自定义」
+// 回显；pick 项本身永不作为状态（取消选择时回退原值）。
+[["bgImageLight", "light"], ["bgImageDark", "dark"]].forEach(([id, variant]) => {
+    const sel = $(id);
+    sel.dataset.prev = "none";
+    sel.addEventListener("change", () => {
+        const v = sel.value;
+        if (v === "none") { call("clearBgImage", variant); sel.dataset.prev = "none"; }
+        else if (v === "builtin") { call("setBuiltinBgImage", variant); sel.dataset.prev = "builtin"; }
+        else if (v === "custom") { sel.value = sel.dataset.prev; }
+        else if (v === "pick") {
+            sel.value = sel.dataset.prev;
+            pickBgImage(variant);
+        }
+    });
+});
+function markBgCustom(variant) {
+    const sel = $("bgImage" + (variant === "light" ? "Light" : "Dark"));
+    let opt = sel.querySelector('option[value="custom"]');
+    if (!opt) {
+        opt = document.createElement("option");
+        opt.value = "custom";
+        opt.textContent = t("自定义");
+        sel.append(opt);
+    }
+    sel.value = "custom";
+    sel.dataset.prev = "custom";
+}
+function pickBgImage(variant) {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = "image/*";
+    input.addEventListener("change", () => {
+        const file = input.files && input.files[0];
+        if (!file) return;
+        const img = new Image();
+        img.onload = () => {
+            const scale = Math.min(1, 720 / img.naturalWidth);
+            const canvas = document.createElement("canvas");
+            canvas.width = Math.max(1, Math.round(img.naturalWidth * scale));
+            canvas.height = Math.max(1, Math.round(img.naturalHeight * scale));
+            canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
+            call("setBgImage", variant, canvas.toDataURL("image/jpeg", 0.72).split(",")[1]);
+            markBgCustom(variant);
+            URL.revokeObjectURL(img.src);
+        };
+        img.src = URL.createObjectURL(file);
+    });
+    input.click();
+}
 $("holdMs").addEventListener("change", submitFeelOptions);
 $("scrubSpeed").addEventListener("change", submitFeelOptions);
 $("popupSnap").addEventListener("change", submitFeelOptions);

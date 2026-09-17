@@ -51,6 +51,19 @@ class ClassList {
     }
 }
 
+// Real DOM moves never leave a node in two places: append/insertBefore
+// detach the node from its current parent first. Toolbar editing moves
+// the same button elements between the bar and the pool repeatedly, so
+// a missing detach would duplicate them across both containers.
+function detachMockNode(node) {
+    if (node.parentNode) {
+        const siblings = node.parentNode.children;
+        const i = siblings.indexOf(node);
+        if (i >= 0) siblings.splice(i, 1);
+        node.parentNode._materializeTextCache();
+    }
+}
+
 class FakeElement {
     constructor(tagName) {
         this.tagName = String(tagName || 'div').toUpperCase();
@@ -79,6 +92,16 @@ class FakeElement {
         this.hidden = false;
         // Form fields (panel add/edit inputs) carry a value.
         this.value = '';
+        // 设置页外观预览嵌真键盘 iframe：contentWindow 只需要记录
+        // postMessage 载荷供断言（设置页单向发，不需要收）。
+        if (this.tagName === 'IFRAME') {
+            this.contentWindow = {
+                calls: [],
+                postMessage(payload, origin) {
+                    this.calls.push({ payload, origin });
+                },
+            };
+        }
         this._innerHTML = '';
         // Review follow-up: minimal horizontal-scroll model. Elements
         // marked scrollable (OVERFLOW_X_IDS, mirroring keyboard.css
@@ -185,6 +208,7 @@ class FakeElement {
                 this.children.push(textNode);
                 return;
             }
+            detachMockNode(node);
             node.parentNode = this;
             this.children.push(node);
         });
@@ -209,6 +233,7 @@ class FakeElement {
     insertBefore(node, ref) {
         if (node === null || node === undefined) return node;
         this._materializeTextCache();
+        detachMockNode(node);
         node.parentNode = this;
         const idx = ref ? this.children.indexOf(ref) : -1;
         if (idx < 0) this.children.push(node);
@@ -251,11 +276,14 @@ class FakeElement {
         return this.attributes[name] === undefined ? null : this.attributes[name];
     }
     addEventListener(type, handler, options) {
+        // DOM accepts both the legacy boolean capture argument and the
+        // options object; keyboard.js uses the boolean form on candidateBar.
+        const opts = typeof options === 'boolean' ? { capture: options } : options;
         this.listeners.push({
             type,
             handler,
-            capture: !!(options && options.capture),
-            passive: !!(options && options.passive),
+            capture: !!(opts && opts.capture),
+            passive: !!(opts && opts.passive),
         });
     }
     removeEventListener(type, handler) {
@@ -264,10 +292,9 @@ class FakeElement {
         );
     }
     click() {
-        const click = this.listeners.find(l => l.type === 'click');
-        if (click) {
-            click.handler({ target: this, preventDefault() {}, stopPropagation() {} });
-        }
+        // Real browsers dispatch click through the full capture/bubble path
+        // and invoke *every* listener (capture interceptors included).
+        fakeDispatch(this, 'click', 0, 0);
     }
     matches(selector) {
         return matchesSelector(this, selector);
@@ -934,36 +961,7 @@ class KeyboardWorld {
 
     // ---- touch helpers
     dispatch(el, type, x, y, details = {}) {
-        const event = {
-            target: el,
-            defaultPrevented: false,
-            touches: [{ clientX: x, clientY: y }],
-            changedTouches: [{ clientX: x, clientY: y }],
-            preventDefault() {
-                this.defaultPrevented = true;
-            },
-            ...details,
-        };
-        const path = [];
-        let node = el;
-        while (node) {
-            path.push(node);
-            node = node.parentNode;
-        }
-        // capture phase: root -> target
-        path.slice().reverse().forEach(ancestor => {
-            ancestor.listeners
-                .filter(l => l.type === type && l.capture)
-                .forEach(l => l.handler(event));
-        });
-        if (event.propagationStopped) return event;
-        // bubble phase: target -> root
-        path.forEach(ancestor => {
-            ancestor.listeners
-                .filter(l => l.type === type && !l.capture)
-                .forEach(l => l.handler(event));
-        });
-        return event;
+        return fakeDispatch(el, type, x, y, details);
     }
 
     touchDown(el, x = 20, y = 20) {
@@ -1013,6 +1011,50 @@ class KeyboardWorld {
         this.dispatch(el, 'touchend', x + dx, y);
         return { cancelled, scrollLeft: scroller ? scroller.scrollLeft : 0 };
     }
+}
+
+// Shared event dispatcher (used by KeyboardWorld.dispatch for touch
+// synthesis and by FakeElement.click for synthetic clicks): walks the
+// ancestor chain capture-first, honors stopPropagation, then bubbles.
+function fakeDispatch(el, type, x, y, details = {}) {
+    const event = {
+        target: el,
+        defaultPrevented: false,
+        touches: [{ clientX: x, clientY: y }],
+        changedTouches: [{ clientX: x, clientY: y }],
+        preventDefault() {
+            this.defaultPrevented = true;
+        },
+        stopPropagation() {
+            this.propagationStopped = true;
+        },
+        stopImmediatePropagation() {
+            this.propagationStopped = true;
+            this.immediateStopped = true;
+        },
+        ...details,
+    };
+    const path = [];
+    let node = el;
+    while (node) {
+        path.push(node);
+        node = node.parentNode;
+    }
+    const run = listeners => {
+        for (const l of listeners) {
+            if (event.immediateStopped) return;
+            l.handler(event);
+            if (event.propagationStopped) return;
+        }
+    };
+    // capture phase: root -> target
+    run(path.slice().reverse().flatMap(ancestor =>
+        ancestor.listeners.filter(l => l.type === type && l.capture)));
+    if (event.propagationStopped) return event;
+    // bubble phase: target -> root
+    run(path.flatMap(ancestor =>
+        ancestor.listeners.filter(l => l.type === type && !l.capture)));
+    return event;
 }
 
 module.exports = { KeyboardWorld, FakeElement, FakeClock, MockNative, loadDocument, KEYBOARD_VERSION };

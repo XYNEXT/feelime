@@ -91,6 +91,13 @@ class MockSettingsNative {
     // /R8: page reporting (BACK returns home first) + about-page
     // one-tap copy.
     reportPage(...a) { this._rec('reportPage', a); }
+    setThemeMode(...a) { this._rec('setThemeMode', a); }
+    setKeyOpacity(...a) { this._rec('setKeyOpacity', a); }
+    setKbHeight(...a) { this._rec('setKbHeight', a); }
+    previewKeyboard(...a) { this._rec('previewKeyboard', a); }
+    setBgImage(...a) { this._rec('setBgImage', a); }
+    clearBgImage(...a) { this._rec('clearBgImage', a); }
+    setBuiltinBgImage(...a) { this._rec('setBuiltinBgImage', a); }
     copyText(...a) { this._rec('copyText', a); }
     of(method) {
         return this.calls.filter(c => c.method === method);
@@ -558,12 +565,14 @@ test('navigation: home starts as the only visible page; showPage swaps and repor
     const hiddenMap = () => Object.fromEntries(
         [...world.doc.querySelectorAll('[data-page]')].map(p => [p.dataset.page, p.hidden]));
     equal(hiddenMap(), {
-        home: false, input: true, voice: true, update: true, backup: true, about: true, test: true,
+        home: false, appearance: true, input: true, voice: true, update: true, backup: true,
+        about: true, test: true,
     }, 'initial: home visible, sub-pages hidden');
 
     world.FeelimeSettings().showPage('voice');
     equal(hiddenMap(), {
-        home: true, input: true, voice: false, update: true, backup: true, about: true, test: true,
+        home: true, appearance: true, input: true, voice: false, update: true, backup: true,
+        about: true, test: true,
     }, 'voice page visible, everything else hidden');
     equal(world.lastCall('reportPage').args, [true, world.token], 'reportPage(true) on sub-page');
 
@@ -826,6 +835,97 @@ test('key feedback toggles reflect state and commit with the token (default off)
         change.handler({ target: box });
         equal(world.lastCall(method).args, [true, world.token], `${id} toggle + token`);
     }
+});
+
+test('appearance page reflects state and commits themeMode / keyOpacity with the token', () => {
+    const world = new SettingsWorld();
+    world.push({ ...BASE_STATE });
+    equal(world.$('themeMode').value, 'auto', 'theme mode default auto');
+    equal(world.$('keyOpacity').value, '100', 'key opacity default 100 (opaque)');
+    world.push({ ...BASE_STATE, themeMode: 'dark', keyOpacity: 45 });
+    equal(world.$('themeMode').value, 'dark', 'theme mode follows state');
+    equal(world.$('keyOpacity').value, '45', 'key opacity follows state');
+
+    // Off-whitelist values never adopt.
+    world.push({ ...BASE_STATE, themeMode: 'sepia', keyOpacity: 9999 });
+    equal(world.$('themeMode').value, 'auto', 'bad theme mode falls back to auto');
+    equal(world.$('keyOpacity').value, '100', 'out-of-range opacity clamps to 100');
+
+    const theme = world.$('themeMode');
+    theme.listeners.find(l => l.type === 'change').handler({ target: { value: 'light' } });
+    equal(world.lastCall('setThemeMode').args, ['light', world.token], 'theme mode commit + token');
+
+    // Slider: input only marks dirty, change commits once with the parsed value.
+    const slider = world.$('keyOpacity');
+    const inputEvt = slider.listeners.find(l => l.type === 'input');
+    const changeEvt = slider.listeners.find(l => l.type === 'change');
+    assert(inputEvt && changeEvt, 'slider has input + change listeners');
+    inputEvt.handler({ target: { value: '70' } });
+    equal(world.native.calls.filter(c => c.method === 'setKeyOpacity').length, 0,
+        'dragging (input) does not commit');
+    changeEvt.handler({ target: { value: '70' } });
+    equal(world.lastCall('setKeyOpacity').args, [70, world.token], 'release commits once + token');
+    changeEvt.handler({ target: { value: '70' } });
+    equal(world.native.calls.filter(c => c.method === 'setKeyOpacity').length, 1,
+        'change without a prior input is ignored (no duplicate commit)');
+
+    // Background selects still commit from the appearance page (the handler
+    // reads the select's own value, not the event target).
+    const bgLight = world.$('bgImageLight');
+    bgLight.value = 'builtin';
+    bgLight.listeners.find(l => l.type === 'change').handler({ target: bgLight });
+    equal(world.lastCall('setBuiltinBgImage').args, ['light', world.token],
+        'bg builtin commit keeps working from the appearance page');
+});
+
+test('keyboard height slider commits setKbHeight; reset writes 0; preview follows state', () => {
+    const world = new SettingsWorld();
+    world.push({ ...BASE_STATE, theme: 'dark', kbHeightPortrait: 0, kbHeightMin: 210, kbHeightMax: 400 });
+    equal(world.$('kbHeight').min, '210', 'slider min from the shell bounds');
+    equal(world.$('kbHeight').max, '400', 'slider max from the shell bounds');
+    equal(world.$('kbHeight').value, '272', '0 (default) shows the built-in default');
+
+    world.push({ ...BASE_STATE, theme: 'dark', kbHeightPortrait: 320, kbHeightMin: 210, kbHeightMax: 400 });
+    equal(world.$('kbHeight').value, '320', 'saved height fills the slider');
+
+    const slider = world.$('kbHeight');
+    // 拖动（input 标记 dirty）→ 松手（change 才提交），与按键透明度同款。
+    slider.listeners.find(l => l.type === 'input').handler({ target: { value: '300' } });
+    slider.listeners.find(l => l.type === 'change').handler({ target: { value: '300' } });
+    equal(world.lastCall('setKbHeight').args, [300, world.token], 'release commits px + token');
+
+    world.$('kbHeightReset').listeners.find(l => l.type === 'click').handler({});
+    equal(world.lastCall('setKbHeight').args[0], 0, 'reset writes 0 (= remove pref)');
+
+    world.push({
+        ...BASE_STATE, theme: 'dark', themeMode: 'auto', keyOpacity: 50,
+        kbHeightPortrait: 320, kbHeightMin: 210, kbHeightMax: 400,
+        bottomPadPortrait: 24, bgImageDark: 'REFEQz=', bgImageLight: '',
+    });
+
+    // 滑块 input 只标记（松手 change 才提交），预览交给真实键盘。
+    const opacitySlider = world.$('keyOpacity');
+    opacitySlider.value = '35';
+    opacitySlider.listeners.find(l => l.type === 'input').handler({ target: { value: '35' } });
+    equal(world.native.calls.filter(c => c.method === 'setKeyOpacity').length, 0,
+        'dragging alone does not commit');
+});
+
+test('entering the appearance page pops the REAL keyboard; leaving dismisses it', () => {
+    const world = new SettingsWorld();
+    world.push({ ...BASE_STATE });
+    world.native.calls.length = 0;
+
+    const previewCalls = () => world.native.of('previewKeyboard').map(c => c.args[0]);
+    equal(world.$('previewEditor') != null, true, 'demo editor exists on the page');
+
+    world.FeelimeSettings().showPage('appearance');
+    equal(previewCalls(), [true], 'entering appearance shows the real keyboard');
+    world.FeelimeSettings().showPage('home');
+    equal(previewCalls(), [true, false], 'leaving appearance dismisses it');
+    // 重复进入/离开（单页路由重复 showPage 不重复发）。
+    world.FeelimeSettings().showPage('home');
+    equal(previewCalls(), [true, false], 'staying off appearance sends nothing');
 });
 
 test('bridge validation errors surface on the feel note', () => {

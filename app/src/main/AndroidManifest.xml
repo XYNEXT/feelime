@@ -2,6 +2,10 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <!-- 按键触感直接走 Vibrator（issue #15 真机返工）：系统触摸振动
+         总开关在 Android 14+ 会拦截 performHapticFeedback，直连通道
+         需要 VIBRATE 权限。 -->
+    <uses-permission android:name="android.permission.VIBRATE" />
     <!-- the setup page performs the audited HTTPS keyboard update. -->
     <uses-permission android:name="android.permission.INTERNET" />
     <!-- Model download consent checks whether the active network is metered. -->
@@ -23,7 +27,8 @@
         <activity
             android:name=".SetupActivity"
             android:exported="true"
-            android:launchMode="singleTop">
+            android:launchMode="singleTop"
+            android:windowSoftInputMode="adjustResize">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />

@@ -672,6 +672,25 @@ def keyboard_metrics():
     return top, (height - top) / 272.0, palette
 
 
+def devtools_to_screen(css_x, css_y):
+    """CSS viewport 坐标 → 屏幕物理坐标（DevTools 偏移 + DOM 缩放比）。
+    devtools_key_geometry() 里的换算逻辑的公共形态。"""
+    import subprocess as _sp
+    import re as _re
+    inner = devtools_eval("window.innerWidth")
+    if not inner:
+        return None
+    screen = _sp.run(
+        ["adb", "-s", SERIAL, "shell", "wm size"], capture_output=True, timeout=15
+    ).stdout.decode()
+    match = _re.search(r"(\d+)x(\d+)", screen)
+    if not match:
+        return None
+    scale = int(match.group(1)) / inner
+    offset_x, offset_y = _DT_OFFSET
+    return (int(css_x * scale) + offset_x, int(css_y * scale) + offset_y)
+
+
 def devtools_key_geometry():
     """Exact key centers from the live DOM (CSS px scaled to physical)."""
     if devtools_eval(
@@ -1111,7 +1130,16 @@ def prepare():
     shell("input keyevent KEYCODE_WAKEUP")
     shell("wm dismiss-keyguard")
     shell("input keyevent 82")
+    # 设备被拿去把玩后可能停在横屏（加速度旋转开着 + 平放）——设置页
+    # 的验证全程假设竖屏，先锁死再继续；已在前台的 activity 对旋转
+    # 设置不响应，回一次桌面让重进的窗口按新方向布局。
+    shell("settings put system accelerometer_rotation 0")
+    shell("settings put system user_rotation 0")
     shell(f"ime set {PKG}/.FeelimeService")
+    import re as _re
+    if shell("dumpsys input | grep -m1 SurfaceOrientation").strip().endswith("1"):
+        shell("input keyevent KEYCODE_HOME")
+        time.sleep(1.2)
     shell(f"am start -n {PKG}/.SetupActivity --ez com.feelime.ime.extra.SHOW_DEBUG_FIXTURES true")
     time.sleep(1.5)
     for attempt in range(8):
@@ -1197,6 +1225,10 @@ def app_hard_reset():
     shell("am force-stop " + PKG)
     time.sleep(1.5)
     shell(f"ime set {PKG}/.FeelimeService")
+    import re as _re
+    if shell("dumpsys input | grep -m1 SurfaceOrientation").strip().endswith("1"):
+        shell("input keyevent KEYCODE_HOME")
+        time.sleep(1.2)
     shell(f"am start -n {PKG}/.SetupActivity --ez com.feelime.ime.extra.SHOW_DEBUG_FIXTURES true")
     time.sleep(3.5)
     global _DT_SOCKET, _DT_PID
@@ -1923,6 +1955,10 @@ def case_mode_persistence(kb):
     shell("am force-stop " + PKG)
     time.sleep(2.0)
     shell(f"ime set {PKG}/.FeelimeService")
+    import re as _re
+    if shell("dumpsys input | grep -m1 SurfaceOrientation").strip().endswith("1"):
+        shell("input keyevent KEYCODE_HOME")
+        time.sleep(1.2)
     shell(f"am start -n {PKG}/.SetupActivity --ez com.feelime.ime.extra.SHOW_DEBUG_FIXTURES true")
     time.sleep(3.5)
     scroll_setup_top()

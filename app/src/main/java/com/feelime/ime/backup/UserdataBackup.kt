@@ -413,9 +413,9 @@ class UserdataBackup(
 
         /** 键盘 WebView localStorage 里设置级的键（见设计 §1.4）。
          * 键盘高度走原生 feelime_keyboard（物理px），JS 副本是 CSS px，
-         * 单位不同不进备份。 */
+         * 单位不同不进备份。色彩模式已迁 theme_mode（feelime_keyboard.xml，
+         * PREFS_FILES 打包），localStorage 值是迁移前遗留，不进备份。 */
         val WEBVIEW_STORE_KEYS = listOf(
-            "feelime_theme",
             "feelime_ui_locale",
             "feelime_scrub_speed",
             "feelime_quick_pair",

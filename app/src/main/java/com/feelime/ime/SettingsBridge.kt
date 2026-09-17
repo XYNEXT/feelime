@@ -13,6 +13,7 @@ import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.os.PersistableBundle
+import android.util.Base64
 import android.util.Log
 import android.webkit.JavascriptInterface
 import com.feelime.ime.backup.AndroidPrefs
@@ -45,6 +46,10 @@ const val ACTION_FUZZY_PINYIN_CHANGED = "com.feelime.ime.FUZZY_PINYIN_CHANGED"
 /** 设置页改动键盘侧偏好（底部留白/手感参数）后通知 IME 重推 hello。 */
 const val ACTION_KEYBOARD_PREFS_CHANGED = "com.feelime.ime.KEYBOARD_PREFS_CHANGED"
 
+/** 外观页预览：设置页让 IME 弹出/收起真实键盘（无编辑框场景，由 IME
+ *  自己 requestShowSelf，不依赖输入焦点）。 */
+const val ACTION_PREVIEW_KEYBOARD = "com.feelime.ime.PREVIEW_KEYBOARD"
+
 // 键盘侧偏好的键与合法档位（mode-fallback §3/§4）：设置页写入、IME 读取，
 // 双方共用同一份定义；非法持久值一律回落默认。
 const val KEYBOARD_PREFS_FILE = "feelime_keyboard"
@@ -76,6 +81,112 @@ const val PREF_PREEDIT_BOLD = "preedit_bold"
 fun readPreeditBold(context: Context): Boolean =
     context.getSharedPreferences(KEYBOARD_PREFS_FILE, Context.MODE_PRIVATE)
         .getBoolean(PREF_PREEDIT_BOLD, false)
+
+/** 单手模式（issue #15）：0=关 1=左手（键区贴左，侧边条在右） 2=右手。 */
+const val PREF_ONE_HAND = "one_hand"
+
+fun readOneHand(context: Context): Int =
+    context.getSharedPreferences(KEYBOARD_PREFS_FILE, Context.MODE_PRIVATE)
+        .getInt(PREF_ONE_HAND, 0)
+        .takeIf { it in 0..2 }
+        ?: 0
+
+/** 侧边条内容：0=光标控制 1=空白。历史上的 2（自定义侧边图）已废除
+ *  ——图片功能升级为覆盖整个键盘的「背景图片」，读到旧值按空白处理。 */
+const val PREF_SIDE_CONTENT = "side_content"
+
+fun readSideContent(context: Context): Int =
+    context.getSharedPreferences(KEYBOARD_PREFS_FILE, Context.MODE_PRIVATE)
+        .getInt(PREF_SIDE_CONTENT, 0)
+        .let { if (it == 2) 1 else it.takeIf { v -> v in 0..1 } ?: 0 }
+
+/** 工具栏编辑布局（issue #15）：JSON {"left":[...],"right":[...]}，键盘
+ *  侧已按目录校验，这里只透传。 */
+const val PREF_TOOLBAR_LAYOUT = "toolbar_layout"
+
+fun readToolbarLayout(context: Context): String =
+    context.getSharedPreferences(KEYBOARD_PREFS_FILE, Context.MODE_PRIVATE)
+        .getString(PREF_TOOLBAR_LAYOUT, "") ?: ""
+
+/** 键帽不透明度（0-100，默认 100）：背景图开启时键帽可半透。 */
+const val PREF_KEY_OPACITY = "key_opacity"
+const val KB_HEIGHT_PORTRAIT_KEY = "keyboard_height_portrait"
+
+fun readKeyOpacity(context: Context): Int =
+    context.getSharedPreferences(KEYBOARD_PREFS_FILE, Context.MODE_PRIVATE)
+        .getInt(PREF_KEY_OPACITY, 100)
+        .let { if (it in 0..100) it else 100 }
+
+/** 键盘高度（竖屏存值；pref 物理px，对外统一转 CSS px；0=默认）。 */
+fun readKbHeightPortrait(context: Context): Int {
+    val physical = context.getSharedPreferences(KEYBOARD_PREFS_FILE, Context.MODE_PRIVATE)
+        .getInt(KB_HEIGHT_PORTRAIT_KEY, 0)
+    if (physical <= 0) return 0
+    val density = context.resources.displayMetrics.density
+    return Math.round(physical / density)
+}
+
+/** 竖屏高度滑块边界（CSS px，与 FeelimeService.setKeyboardHeight 的
+ *  clamp 同源：min 210dp，max 竖屏可用高度 45%）。 */
+fun readKbHeightBounds(context: Context): Pair<Int, Int> {
+    val metrics = context.resources.displayMetrics
+    val min = 210
+    val max = ((metrics.heightPixels * 45 / 100) / metrics.density).toInt()
+    return Pair(min, maxOf(min, max))
+}
+
+/** 设置页左上角 logo：用应用本身的 launcher 图标（adaptive icon 也能
+ *  画出背景+前景），编码一次缓存——icon 不随状态变化。 */
+private var cachedAppIconDataUri: String? = null
+
+fun appIconDataUri(context: Context): String {
+    cachedAppIconDataUri?.let { return it }
+    return try {
+        val drawable = context.packageManager.getApplicationIcon(context.packageName)
+        val size = 96
+        val bitmap = android.graphics.Bitmap.createBitmap(
+            size, size, android.graphics.Bitmap.Config.ARGB_8888,
+        )
+        val canvas = android.graphics.Canvas(bitmap)
+        drawable.setBounds(0, 0, size, size)
+        drawable.draw(canvas)
+        val bytes = java.io.ByteArrayOutputStream().use { output ->
+            bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 90, output)
+            output.toByteArray()
+        }
+        bitmap.recycle()
+        ("data:image/png;base64," + Base64.encodeToString(bytes, Base64.NO_WRAP))
+            .also { cachedAppIconDataUri = it }
+    } catch (error: Exception) {
+        Log.w("FeelimeBridge", "appIcon encode failed: ${error.message}")
+        ""
+    }
+}
+
+/** 三态主题（外观页写、键盘 hello 读回应用；键盘侧改动经 pushStores
+ *  回写此 pref，保持单一事实源）。 */
+const val PREF_THEME_MODE = "theme_mode"
+
+fun readThemeMode(context: Context): String =
+    context.getSharedPreferences(KEYBOARD_PREFS_FILE, Context.MODE_PRIVATE)
+        .getString(PREF_THEME_MODE, "") ?: ""
+
+/** 背景图片（亮/暗各一组）：设置页压缩到 ≤720px 宽 JPEG 后经桥写入。
+ *  variant 只认 light/dark；「无」= 删文件。src 记录来源供设置页回显。 */
+fun isValidBgVariant(variant: String): Boolean = variant == "light" || variant == "dark"
+
+fun bgImageFile(context: Context, variant: String): File =
+    File(context.filesDir, "bg_image_$variant.jpg")
+
+fun readBgImageBase64(context: Context, variant: String): String =
+    bgImageFile(context, variant).takeIf { it.exists() }
+        ?.readBytes()
+        ?.let { Base64.encodeToString(it, Base64.NO_WRAP) } ?: ""
+
+fun readBgImageSource(context: Context, variant: String): String =
+    context.getSharedPreferences(KEYBOARD_PREFS_FILE, Context.MODE_PRIVATE)
+        .getString("bg_image_${variant}_src", "") ?: ""
+        ?: ""
 
 /** 键盘侧偏好读取（非法持久值回落默认）；设置页 state 与 IME hello 共用。 */
 fun readBottomPadPortraitDp(context: Context): Int =
@@ -367,6 +478,21 @@ class SettingsBridge(
             .put("candidateFont", readCandidateFont(context))
             .put("preeditFont", readPreeditFont(context))
             .put("preeditBold", readPreeditBold(context))
+            .put("oneHand", readOneHand(context))
+            .put("sideContent", readSideContent(context))
+            .put("bgImageLight", readBgImageBase64(context, "light"))
+            .put("bgImageDark", readBgImageBase64(context, "dark"))
+            .put("bgImageLightSource", readBgImageSource(context, "light"))
+            .put("bgImageDarkSource", readBgImageSource(context, "dark"))
+            .put("keyOpacity", readKeyOpacity(context))
+            .put("themeMode", readThemeMode(context))
+            .put("kbHeightPortrait", readKbHeightPortrait(context))
+            .apply {
+                val (min, max) = readKbHeightBounds(context)
+                put("kbHeightMin", min)
+                put("kbHeightMax", max)
+            }
+            .put("toolbarLayout", readToolbarLayout(context))
             .put("appVersion", BuildConfig.VERSION_NAME)
             .put("keyboardVersion", keyboardVersion())
             .put("diagnosticsOn", Diagnostics.enabled(context))
@@ -789,6 +915,187 @@ class SettingsBridge(
         )
         pushState()
     }
+
+    /** 单手模式（issue #15）：0=关 1=左手 2=右手。 */
+    @JavascriptInterface
+    fun setOneHandMode(mode: Int, token: String) = guarded(token) {
+        if (mode !in 0..2) {
+            pushEvent(
+                JSONObject()
+                    .put("type", "oneHandError")
+                    .put("code", "BAD_ONE_HAND")
+                    .put("message", t(context, "单手模式选项无效", "Invalid one-hand option")),
+            )
+            pushState()
+            return@guarded
+        }
+        context.getSharedPreferences(KEYBOARD_PREFS_FILE, Context.MODE_PRIVATE)
+            .edit().putInt(PREF_ONE_HAND, mode).apply()
+        context.sendBroadcast(
+            Intent(ACTION_KEYBOARD_PREFS_CHANGED).setPackage(context.packageName),
+        )
+        pushState()
+    }
+
+    /** 侧边条内容：0=光标控制 1=空白（2=自定义图片已废除，升级为背景图片）。 */
+    @JavascriptInterface
+    fun setSideContent(mode: Int, token: String) = guarded(token) {
+        if (mode !in 0..1) {
+            pushEvent(
+                JSONObject()
+                    .put("type", "sideContentError")
+                    .put("code", "BAD_SIDE_CONTENT")
+                    .put("message", t(context, "侧边条选项无效", "Invalid side-pad option")),
+            )
+            pushState()
+            return@guarded
+        }
+        context.getSharedPreferences(KEYBOARD_PREFS_FILE, Context.MODE_PRIVATE)
+            .edit().putInt(PREF_SIDE_CONTENT, mode).apply()
+        context.sendBroadcast(
+            Intent(ACTION_KEYBOARD_PREFS_CHANGED).setPackage(context.packageName),
+        )
+        pushState()
+    }
+
+    /** 背景图片（variant=light/dark）：设置页压缩到 ≤720px 宽的 JPEG
+     *  base64，落盘 + 记录来源，广播让键盘重拉 hello。 */
+    @JavascriptInterface
+    fun setBgImage(variant: String, base64: String, token: String) = guarded(token) {
+        if (!isValidBgVariant(variant)) return@guarded
+        try {
+            val bytes = Base64.decode(base64, Base64.NO_WRAP)
+            if (bytes.isEmpty()) throw IllegalArgumentException("empty image")
+            bgImageFile(context, variant).writeBytes(bytes)
+        } catch (error: Exception) {
+            pushEvent(
+                JSONObject()
+                    .put("type", "bgImageError")
+                    .put("code", "BAD_BG_IMAGE")
+                    .put("message", t(context, "图片保存失败", "Failed to save the image")),
+            )
+            pushState()
+            return@guarded
+        }
+        context.getSharedPreferences(KEYBOARD_PREFS_FILE, Context.MODE_PRIVATE)
+            .edit().putString("bg_image_" + variant + "_src", "custom").apply()
+        context.sendBroadcast(
+            Intent(ACTION_KEYBOARD_PREFS_CHANGED).setPackage(context.packageName),
+        )
+        pushState()
+    }
+
+    /** 色彩模式（外观页）：写 theme_mode pref + 广播，键盘 hello 读回
+     *  应用到 localStorage/背景图/工具栏图形。 */
+    @JavascriptInterface
+    fun setThemeMode(mode: String, token: String) = guarded(token) {
+        if (mode !in listOf("auto", "light", "dark")) return@guarded
+        context.getSharedPreferences(KEYBOARD_PREFS_FILE, Context.MODE_PRIVATE)
+            .edit().putString(PREF_THEME_MODE, mode).apply()
+        context.sendBroadcast(
+            Intent(ACTION_KEYBOARD_PREFS_CHANGED).setPackage(context.packageName),
+        )
+        pushState()
+    }
+
+    /** 键帽不透明度（0-100）。 */
+    @JavascriptInterface
+    fun setKeyOpacity(pct: Int, token: String) = guarded(token) {
+        if (pct !in 0..100) return@guarded
+        context.getSharedPreferences(KEYBOARD_PREFS_FILE, Context.MODE_PRIVATE)
+            .edit().putInt(PREF_KEY_OPACITY, pct).apply()
+        context.sendBroadcast(
+            Intent(ACTION_KEYBOARD_PREFS_CHANGED).setPackage(context.packageName),
+        )
+        pushState()
+    }
+
+    /** 外观页预览：让 IME 显示/收起真实键盘（service 自己 show self）。 */
+    @JavascriptInterface
+    fun previewKeyboard(show: Boolean, token: String) = guarded(token) {
+        context.sendBroadcast(
+            Intent(ACTION_PREVIEW_KEYBOARD)
+                .setPackage(context.packageName)
+                .putExtra("show", show),
+        )
+    }
+
+    /** 键盘高度（竖屏，入参 CSS px；0=恢复默认）。写 pref 后广播，service
+     *  侧统一重读 override（拖拽调节的 setKeyboardHeight 也落同一 pref，
+     *  两条路收敛到同一真相源）。pref 的既存语义是物理 px（拖拽路径
+     *  flushHeightPref 写 clamped 物理值），这里写盘必须 ×density 对齐，
+     *  否则广播重读后窗口高度塌成 1/3、键位被裁（真机实录）。 */
+    @JavascriptInterface
+    fun setKbHeight(px: Int, token: String) = guarded(token) {
+        val (min, max) = readKbHeightBounds(context)
+        val density = context.resources.displayMetrics.density
+        val value = when {
+            px <= 0 -> 0
+            else -> px.coerceIn(min, max)
+        }
+        val prefs = context.getSharedPreferences(KEYBOARD_PREFS_FILE, Context.MODE_PRIVATE)
+        if (value == 0) {
+            prefs.edit().remove(KB_HEIGHT_PORTRAIT_KEY).apply()
+        } else {
+            prefs.edit().putInt(KB_HEIGHT_PORTRAIT_KEY, Math.round(value * density)).apply()
+        }
+        context.sendBroadcast(
+            Intent(ACTION_KEYBOARD_PREFS_CHANGED).setPackage(context.packageName),
+        )
+        pushState()
+    }
+
+    /** 「无」：删除该组背景图（回到纯色背景）。 */
+    @JavascriptInterface
+    fun clearBgImage(variant: String, token: String) = guarded(token) {
+        if (!isValidBgVariant(variant)) return@guarded
+        bgImageFile(context, variant).delete()
+        context.getSharedPreferences(KEYBOARD_PREFS_FILE, Context.MODE_PRIVATE)
+            .edit().remove("bg_image_" + variant + "_src").apply()
+        context.sendBroadcast(
+            Intent(ACTION_KEYBOARD_PREFS_CHANGED).setPackage(context.packageName),
+        )
+        pushState()
+    }
+
+    /** 内置背景图（随包 assets，设置页直接选用）：从 assets 拷贝到该组
+     *  落盘位，省一遍 base64 编解码。variant 只认 light/dark。 */
+    @JavascriptInterface
+    fun setBuiltinBgImage(variant: String, token: String) = guarded(token) {
+        if (!isValidBgVariant(variant)) {
+            pushEvent(
+                JSONObject()
+                    .put("type", "bgImageError")
+                    .put("code", "BAD_BG_IMAGE")
+                    .put("message", t(context, "图片保存失败", "Failed to save the image")),
+            )
+            return@guarded
+        }
+        try {
+            context.assets.open("settings/bg-$variant.jpg").use { input ->
+                bgImageFile(context, variant).outputStream().use { output ->
+                    input.copyTo(output)
+                }
+            }
+        } catch (error: Exception) {
+            pushEvent(
+                JSONObject()
+                    .put("type", "bgImageError")
+                    .put("code", "BAD_BG_IMAGE")
+                    .put("message", t(context, "图片保存失败", "Failed to save the image")),
+            )
+            return@guarded
+        }
+        context.getSharedPreferences(KEYBOARD_PREFS_FILE, Context.MODE_PRIVATE)
+            .edit().putString("bg_image_" + variant + "_src", "builtin").apply()
+        context.sendBroadcast(
+            Intent(ACTION_KEYBOARD_PREFS_CHANGED).setPackage(context.packageName),
+        )
+        pushState()
+    }
+
+
+
 
     /** 中文联想开关（docs/design/association.md §4）：落盘 + 广播重推
      *  hello；关掉时的联想清屏由 service 的 keyboardPrefsReceiver 处理。 */

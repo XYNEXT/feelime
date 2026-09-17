@@ -361,9 +361,16 @@ def settings_geometry(selector):
         root = ElementTree.fromstring(d.ui_dump())
     except ElementTree.ParseError:
         return None
+    # 标题匹配优先；但 IME 窗口还挂在无障碍树里时（上一个套件 fresh_kb
+    # 收尾常见），ColorOS 会把两个 WebView 都报成空 text，此时按「bounds
+    # 高度 ≈ 页面 innerHeight×scale」挑出承载设置页的那块——标题只是
+    # 代理，宽高比例才是本体。元素在视口外也要给 geometry，否则外层
+    # 拿不到坐标、连滚动都触发不了。
+    inner_h = float(payload.get("innerHeight") or 0)
+    fallback = None
+    fallback_gap = None
     for node in root.iter("node"):
-        if (node.get("class") != "android.webkit.WebView"
-                or node.get("text") != payload.get("title")):
+        if node.get("class") != "android.webkit.WebView":
             continue
         bounds = re.fullmatch(r"\[(\d+),(\d+)\]\[(\d+),(\d+)\]", node.get("bounds", ""))
         if not bounds:
@@ -374,6 +381,41 @@ def settings_geometry(selector):
         # Native debug editors and the IME can shrink the settings WebView.
         # Its own accessibility bounds define the origin; CSS pixels scale
         # uniformly and must never be stretched to the whole screen height.
+        scale = (right - left) / inner_w
+        x = left + (payload["left"] + payload["width"] / 2) * scale
+        y = top + (payload["top"] + payload["height"] / 2) * scale
+        visible_top = max(top, top + payload["top"] * scale)
+        visible_bottom = min(bottom, top + (payload["top"] + payload["height"]) * scale)
+        if visible_bottom - visible_top >= min(payload["height"], 24) * scale:
+            y = (visible_top + visible_bottom) / 2
+        geometry = ((round(x), round(y)), (left, top, right, bottom))
+        if node.get("text") == payload.get("title"):
+            return geometry
+        if node.get("text"):
+            continue
+        gap = abs((bottom - top) - inner_h * scale)
+        if fallback_gap is None or gap < fallback_gap:
+            fallback, fallback_gap = geometry, gap
+    if fallback_gap is not None and fallback_gap <= max(60.0, 0.2 * inner_h):
+        return fallback
+    # AVD 快照会间歇性整棵丢掉 WebView 的虚拟视图树（ColorOS 稳定）。
+    # 树没了 WebView 原点无从对账，但原生容器节点还在：取最大容器近似
+    # 原点，按 CSS 比例换算出目标点。这次点击本身就会让 a11y 重新物化，
+    # 后续轮次回到精确路径（settings_tap 的重试循环负责衔接）。
+    approx = None
+    approx_area = 0
+    for node in root.iter("node"):
+        bounds = re.fullmatch(r"\[(\d+),(\d+)\]\[(\d+),(\d+)\]", node.get("bounds", ""))
+        if not bounds:
+            continue
+        left, top, right, bottom = map(int, bounds.groups())
+        if right <= left or bottom <= top:
+            continue
+        area = (right - left) * (bottom - top)
+        if area > approx_area:
+            approx, approx_area = (left, top, right, bottom), area
+    if approx and (approx[2] - approx[0]) >= inner_w:
+        left, top, right, bottom = approx
         scale = (right - left) / inner_w
         x = left + (payload["left"] + payload["width"] / 2) * scale
         y = top + (payload["top"] + payload["height"] / 2) * scale
@@ -420,28 +462,54 @@ def settings_tap(selector, wait=0.7, scroll=True):
     return False
 
 
-def pick_select_option(selector, option_text, wait=1.0):
+def pick_select_option(selector, option_text, wait=1.0, expect_value=None):
     """Real-tap a settings <select>, then pick the option in the system dialog.
 
     WebView select dialogs are native UI - the options are visible in the
-    a11y dump and tappable like any other dialog row.
+    a11y dump and tappable like any other dialog row.  option_text accepts a
+    str or a list of alternates (the page follows the device UI language:
+    AVD runs English, the ColorOS handset runs Chinese).
+
+    The dump ALSO contains ghost matches - the closed select's own value
+    text, stale hidden pages - so tapping the first hit is not proof of
+    anything.  With expect_value (the option's value inside the <select>)
+    every tap is verified over DevTools: the value must actually change,
+    otherwise the next candidate (or a reopened dialog) gets the next try.
     """
+    wanted = [option_text] if isinstance(option_text, str) else list(option_text)
     if not settings_tap(selector, wait=wait):
         return False
     time.sleep(0.9)
+
+    def value_now():
+        if expect_value is None:
+            return None
+        return sev("document.querySelector(" + _quoted(selector) + ")?.value")
+
+    start = value_now()
     for _ in range(5):
+        candidates = []
         try:
             root = ElementTree.fromstring(d.ui_dump())
         except ElementTree.ParseError:
             root = None
-        for node in root.iter("node") if root is not None else ():
-            if node.get("text", "").strip() == option_text:
-                bounds = re.fullmatch(
-                    r"\[(\d+),(\d+)\]\[(\d+),(\d+)\]", node.get("bounds", ""))
-                if bounds:
-                    x1, y1, x2, y2 = map(int, bounds.groups())
-                    d.tap((x1 + x2) / 2, (y1 + y2) / 2, wait=0.8)
-                    return True
+        if root is not None:
+            for node in root.iter("node"):
+                if node.get("text", "").strip() in wanted:
+                    bounds = re.fullmatch(
+                        r"\[(\d+),(\d+)\]\[(\d+),(\d+)\]", node.get("bounds", ""))
+                    if bounds:
+                        x1, y1, x2, y2 = map(int, bounds.groups())
+                        candidates.append(((x1 + x2) / 2, (y1 + y2) / 2))
+        for point in candidates:
+            d.tap(*point, wait=0.8)
+            if expect_value is None or value_now() != start:
+                return True
+            # Ghost hit (value unchanged): its tap may have toggled the
+            # dialog - reopen before trying the next candidate.
+            time.sleep(0.6)
+            settings_tap(selector, wait=wait)
+            time.sleep(0.9)
         time.sleep(0.6)
     # Never leave the dialog open on a failure path.
     d.shell("input keyevent KEYCODE_BACK")

@@ -10,10 +10,16 @@
  * (html.theme-light / html.theme-dark). */
 :root {
     color-scheme: dark;
+    /* 键帽不透明度滑块（外观页）：--key/--special/--pressed 由 rgb 基色
+     * + alpha 合成，JS 只调 --key-alpha（0-1），键帽文字保持实色。 */
+    --key-rgb: 95 95 95;
+    --special-rgb: 65 65 65;
+    --pressed-rgb: 110 110 110;
+    --key-alpha: 1;
     --bg: #202020;
-    --key: #5f5f5f;
-    --special: #414141;
-    --pressed: #6e6e6e;
+    --key: rgb(var(--key-rgb) / var(--key-alpha));
+    --special: rgb(var(--special-rgb) / var(--key-alpha));
+    --pressed: rgb(var(--pressed-rgb) / var(--key-alpha));
     --text: #e8e8e8;
     --muted: #b0b0b0;
     --accent: #23c890;
@@ -38,10 +44,13 @@
 
 html.theme-light {
     color-scheme: light;
+    --key-rgb: 252 252 252;
+    --special-rgb: 183 187 196;
+    --pressed-rgb: 236 238 242;
     --bg: #e2e3e8;
-    --key: #fcfcfc;
-    --special: #b7bbc4;
-    --pressed: #eceef2;
+    --key: rgb(var(--key-rgb) / var(--key-alpha));
+    --special: rgb(var(--special-rgb) / var(--key-alpha));
+    --pressed: rgb(var(--pressed-rgb) / var(--key-alpha));
     --text: #181818;
     /* The old #b0b0b0 sat at ~2.1:1 on the light surfaces -
      * quick-settings text was effectively invisible. #5c616b keeps the
@@ -74,10 +83,13 @@ html.theme-dark {
 @media (prefers-color-scheme: light) {
     html:not(.theme-light):not(.theme-dark) {
         color-scheme: light;
+        --key-rgb: 252 252 252;
+        --special-rgb: 183 187 196;
+        --pressed-rgb: 236 238 242;
         --bg: #e2e3e8;
-        --key: #fcfcfc;
-        --special: #b7bbc4;
-        --pressed: #eceef2;
+        --key: rgb(var(--key-rgb) / var(--key-alpha));
+        --special: rgb(var(--special-rgb) / var(--key-alpha));
+        --pressed: rgb(var(--pressed-rgb) / var(--key-alpha));
         --text: #181818;
         --muted: #5c616b; /* See html.theme-light */
         --accent: #23c890;
@@ -229,6 +241,231 @@ body.landscape #symCatBar { margin-top: 3px; gap: 4px; }
     z-index: 5;
 }
 body.composing #preeditLine { display: flex; }
+
+/* ===== 单手模式（issue #15）=====
+ * body[data-one-hand="left"|"right"] 时 #softKeyboard 用同侧 padding 让位
+ * （键区贴 left/right），#sidePad absolute 贴另一侧、占满整个让位条
+ * （拼音带 + 候选条 + 键区的全高——工具栏旁的空白一并利用，键更高），
+ * bottom 对齐键区底（不含 safe area 与底部留白，不与系统手势条冲突）。
+ * 拼音带在右手模式跟随键区贴右。侧边内容 body[data-side-content] 三态。 */
+#sidePad {
+    position: absolute;
+    top: 0;
+    bottom: calc(5px + var(--safe-bottom, 0px) + var(--kb-bottom-pad, 0px));
+    width: var(--side-pad-w, 64px);
+    display: none;
+    z-index: 4;
+}
+/* off 态显式兜底（display:none 由 data-one-hand 完全驱动，JS 不碰 hidden）。 */
+body[data-one-hand="off"] #sidePad { display: none; }
+body[data-one-hand="left"] #softKeyboard { padding-right: var(--side-pad-w, 64px); }
+body[data-one-hand="left"] #sidePad { display: block; right: 0; }
+body[data-one-hand="right"] #softKeyboard { padding-left: var(--side-pad-w, 64px); }
+body[data-one-hand="right"] #sidePad { display: block; left: 0; }
+/* 拼音带跟随候选条起点（issue #15 真机反馈）：右手模式候选条从侧边条
+ * 右侧开始，拼音带贴到同一位置上方，与第一个候选词保持视觉关联——
+ * 不跟键区右缘（那会和候选脱节）。 */
+body[data-one-hand="right"] #preeditLine { left: calc(var(--side-pad-w, 64px) + 8px); right: auto; }
+/* 工具按钮在缩窄的候选条里临界溢出（8 键 + gap 会顶进侧边条）：单手
+ * 模式下收紧行间距。 */
+body[data-one-hand] #candidateBar { gap: 5px; }
+/* 收起键/设置键贴着让位边界时与侧边栏视觉压边（真机截图回归）。
+ * 用容器 padding 内收：margin-right 对最后一个 flex 项无效（不改变
+ * 自身位置），hide 是末项、setup 是首项，padding 两侧各留 8px 缝。 */
+body[data-one-hand="left"] #candidateBar { padding-right: 8px; }
+body[data-one-hand="right"] #candidateBar { padding-left: 8px; }
+
+/* ===== 工具栏编辑模式（issue #15）=====
+ * 长按候选条任意可编辑工具进入；键区被 #toolbarEditor（未上栏 icon
+ * 仓库，右上角 + 角标，点按添加）替换；候选条内可编辑 icon 右上角
+ * 出现 ×（点按移除到仓库），长按拖动可在左/右两组内与组间排序。 */
+#toolbarEditor {
+    flex: 1;
+    display: none;
+    flex-direction: column;
+    min-height: 0;
+    padding: 4px 6px;
+    background: var(--bg);
+}
+#toolbarEditor[hidden] { display: none; }
+body.toolbar-edit #toolbarEditor { display: flex; }
+/* 背景图开启时编辑区同样透出图（与快捷设置面板一致）；仓库格子
+ * 自带 #ffffff18 底 + 按钮描边，图上仍可辨识。 */
+body[data-bg-image="on"] #toolbarEditor { background: transparent; }
+body.toolbar-edit #qwertyLayer,
+body.toolbar-edit #symbolLayer,
+body.toolbar-edit #numPadLayer { display: none; }
+/* 模式切换用 hidden 属性;显式兜底防止 author display 覆盖 hidden。 */
+#qwertyLayer[hidden] { display: none; }
+#symbolLayer[hidden] { display: none; }
+#numPadLayer[hidden] { display: none; }
+.tbe-head { display: flex; align-items: center; gap: 10px; padding: 2px 4px 8px; }
+.tbe-title { font-size: 15px; font-weight: 650; color: var(--text); }
+.tbe-hint { flex: 1; font-size: 11px; color: var(--muted); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.tbe-done {
+    flex: none;
+    border: 0;
+    border-radius: 8px;
+    background: var(--accent, #18ad7c);
+    color: #fff;
+    font-size: 13px;
+    font-weight: 600;
+    padding: 6px 14px;
+}
+.tbe-cancel {
+    flex: none;
+    border: 1px solid var(--pill, #ffffff2e);
+    border-radius: 8px;
+    background: transparent;
+    color: var(--muted, #999);
+    font-size: 13px;
+    font-weight: 600;
+    padding: 5px 12px;
+}
+#toolbarEditorGrid {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-content: flex-start;
+    padding: 8px;
+    border-radius: 10px;
+    /* 固定半透明白：不能用 --pill（浅色 #fff/深色 #3d3d3d），否则容器
+     * 和圆钮同色，按钮融进背景只剩 + 角标（preview 实测）。 */
+    background: #ffffff18;
+    overflow-y: auto;
+}
+/* 仓库里的按钮恢复圆形工具样式（.tool 的圆钮样式挂在
+ * #candidateBar .tool 下，仓库里不生效，这里独立给全）+ 右上角 +
+ * 角标（点按整钮即添加）。 */
+#toolbarEditorGrid .tool {
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    background: var(--pill);
+    color: var(--icon);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    /* 容器底色与圆钮在两个主题下都可能接近，靠阴影给轮廓。 */
+    box-shadow: 0 1px 4px #0003;
+}
+#toolbarEditorGrid .tool.editor-pool { position: relative; }
+#toolbarEditorGrid .tool.editor-pool::after {
+    content: '+';
+    position: absolute;
+    top: -4px;
+    right: -4px;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: var(--accent, #18ad7c);
+    color: #fff;
+    font-size: 13px;
+    line-height: 16px;
+    text-align: center;
+    font-weight: 700;
+}
+/* 候选条编辑态：可编辑 icon 右上角 × 徽章（点按移除）；非编辑态隐藏
+ * 且不参与按钮 flex 布局。 */
+.tool-x { display: none; }
+body.toolbar-edit #candidateBar .tool[data-tool] {
+    position: relative;
+    /* × 伸出按钮顶边 5px，左组紧邻候选区（DOM 靠后=绘制在上）时会被
+     * 盖住点不到——编辑态把工具抬到候选区之上。 */
+    z-index: 2;
+}
+body.toolbar-edit #candidateBar .tool[data-tool] .tool-x {
+    display: block;
+    position: absolute;
+    top: -5px;
+    right: -5px;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: #c62828;
+    color: #fff;
+    font-size: 12px;
+    line-height: 16px;
+    text-align: center;
+    font-weight: 700;
+    z-index: 2;
+}
+/* 拖拽中的按钮浮起、原位置半透明。ghost 是独立的圆形浮钮——
+ * clone 出来的 .tool 在 body 下没有候选条的圆钮样式，这里给全，
+ * 并把 × 藏掉（编辑态的徽章跟着 clone 会一起出来）。 */
+.tool.toolbar-dragging { opacity: 0.35; }
+.tool.toolbar-drag-ghost {
+    position: fixed;
+    z-index: 60;
+    pointer-events: none;
+    border: 0;
+    padding: 0;
+    border-radius: 50%;
+    background: var(--pill);
+    color: var(--icon);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 6px 16px #0007;
+}
+.tool.toolbar-drag-ghost .tool-x { display: none; }
+#sideGrid {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    height: 100%;
+    box-sizing: border-box;
+    padding: 3px;
+}
+/* 方向行（上 / 左右 / 下）：左右行是高频主键，高度 +30%；其余行
+   （▲ / ▼ / 四个编辑键）等高（issue #15 定稿微调）。 */
+.side-row { display: flex; gap: 3px; flex: 1; min-height: 0; }
+.side-row.side-row-mid { flex: 1.3; }
+.side-key {
+    flex: 1;
+    min-height: 0;
+    border: 0;
+    border-radius: var(--radius-key);
+    background: var(--key);
+    color: var(--text);
+    font-size: 13px;
+    font-weight: 550;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+}
+.side-row .side-key { min-width: 0; }
+.side-key:active { background: var(--pressed); }
+/* 编辑键：icon+文字横排（纯 icon 语义不明确），四键等高。 */
+.side-key.side-labeled { gap: 5px; justify-content: center; }
+.side-key.side-labeled span { font-size: 11px; font-weight: 550; line-height: 1; }
+/* 侧边内容两态：blank 收起键簇。 */
+body[data-side-content="blank"] #sideGrid { display: none; }
+
+/* ===== 背景图片（原「侧边图片」升级） =====
+ * 铺满整个键盘区域（工具条到底部留白；float band 扩展透明区在
+ * WebView 之外，天然不覆盖）。on 时根背景转透明，键帽/候选 pill
+ * 保持实色浮在图上（键盘皮肤形态）。 */
+#softKeyboard { isolation: isolate; }
+#bgImage {
+    position: absolute;
+    inset: 0;
+    /* 负 z-index:画在容器背景之上、键区等普通流内容之下（z-index:0
+     * 的定位元素会画到普通流之上，把键全盖住）。isolate 把 context
+     * 锁在 softKeyboard 内，图不会沉到键盘窗口之外。 */
+    z-index: -1;
+    display: none;
+    background-size: cover;
+    background-position: center;
+    pointer-events: none;
+}
+body[data-bg-image="on"] #bgImage { display: block; }
+body[data-bg-image="on"] #softKeyboard { background: transparent; }
 /* 拼音加粗（issue #8）：设置开关，默认关。 */
 body[data-preedit-bold="1"] #preeditLine { font-weight: 600; }
 body[data-preedit-font="large"] { --preedit-font-scale: 1.2; --preedit-band: 22px; }
@@ -262,6 +499,20 @@ body[data-preedit-font="xlarge"] { --preedit-font-scale: 1.35; --preedit-band: 2
     justify-content: center;
 }
 #candidateBar .tool:active, #candidateBar .tool.active-touch { background: var(--pressed); }
+/* 开关型工具（振动/声音/联想/单手）：开着时点亮。色彩模式是三态
+ * 循环无开/关语义，syncToolStates 不再给它挂 state-on。
+ * 底色用 active 深绿（mic listening / ctrl active 同配方）、icon 走
+ * accent——之前的实心亮绿 + 纯白 icon 在暗色键盘里像颗灯泡（真机
+ * 截图定罪）。快捷设置 tile 的 on 也只是 icon 变绿，语义统一。 */
+#candidateBar .tool.state-on,
+#toolbarEditorGrid .tool.state-on {
+    /* 开 = icon 变 accent + 一圈细描边，底色不动——大色块（实心绿/
+     * 深绿底）在暗色键区里两次被用户点名刺眼；快捷设置 tile 的 on
+     * 也只是 icon 变绿，两处语义保持一致。 */
+    background: var(--pill, #3d3d3d);
+    color: var(--accent, #23c890);
+    box-shadow: inset 0 0 0 1px var(--accent, #23c890);
+}
 /* Settings sub-page chrome rides the toolbar - back +
  * title on the left, close on the right, all in .tool pill styling; the
  * regular tools (logo, gear, clipboard, favorites, mic, hide, strip) hide
@@ -285,16 +536,12 @@ body[data-preedit-font="xlarge"] { --preedit-font-scale: 1.35; --preedit-band: 2
     text-overflow: ellipsis;
 }
 body.settings-page #settingsPageBar { display: flex; }
+/* 子页打开时隐藏所有常规工具——直接子元素级选择器，动态开关工具
+ * （toolTheme 等五个）自动覆盖，新增工具也不会再漏（真机翻车：逐 id
+ * 枚举漏掉动态按钮，「输入法快捷切换」子页标题栏边上挂着一颗色彩
+ * 模式）。settingsPageBar 的 ‹/× 在其内部，不受 > 影响。 */
 body.settings-page #candidates,
-body.settings-page #setupButton,
-body.settings-page #fullSetupButton,
-body.settings-page #ctrlTool,
-body.settings-page #imeSwitchButton,
-body.settings-page #clipboardButton,
-body.settings-page #favoritesButton,
-body.settings-page #mic,
-body.settings-page #hide,
-body.settings-page .compose-tool { display: none; }
+body.settings-page #candidateBar > .tool { display: none; }
 /* [hidden] must win even against the settings-page swap (lint R2). */
 #setupButton[hidden], #fullSetupButton[hidden], #clipboardButton[hidden],
 #favoritesButton[hidden], #hide[hidden], #settingsPageBar[hidden],
@@ -1498,6 +1745,10 @@ body.editing .phrase-add, body.editing .phrase-cancel { padding: 6px 10px; }
     z-index: 35;
 }
 #expandLayer[hidden] { display: none; }
+/* 候选展开模式避让侧边条（issue #15）：让位的侧边条继续可用——浏览
+ * 候选时正好用得上复制/剪切/光标键。 */
+body[data-one-hand="left"] #expandLayer { inset: 0 var(--side-pad-w, 64px) 0 0; }
+body[data-one-hand="right"] #expandLayer { inset: 0 0 0 var(--side-pad-w, 64px); }
 body.expanded #preeditLine { display: none; }
 .expand-head {
     flex: none;
@@ -1651,6 +1902,9 @@ body.expanded #preeditLine { display: none; }
     overflow-y: auto;
 }
 #settingsPanel.open { display: flex; }
+/* 背景图开启时面板透出图（tile 本体仍实色，文字可读性不受影响）；
+ * 纯色背景时维持 --bg 实底。 */
+body[data-bg-image="on"] #settingsPanel { background: transparent; }
 #settingsPanel[hidden] { display: none; }
 /* The custom table's per-row preview. */
 .custom-editor .set-row { align-items: center; }

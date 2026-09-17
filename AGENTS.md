@@ -156,6 +156,15 @@ DevTools 合成 TouchEvent 切到符号层（`<123>`）时会触发 qemu **静�
 
 ## 工程约定
 
+- **设置不进 localStorage，壳提供统一 pref 接口**：一切「设置」（用户
+  偏好，需要备份/换机跟随的值）的真相源必须是原生层（键盘侧走
+  `feelime_keyboard.xml` + hello 下发 + `setQuickPref`/SettingsBridge
+  回写；设置页走 SettingsBridge）。localStorage 只允许两类用途：
+  ① 纯 UI 缓存（如系统主题镜像，壳每轮重发、丢了无害）；② 使用痕迹
+  （最近符号/表情，明确不进备份）。新增设置项时直接接桥，别再落
+  localStorage；旧项按批次迁移（色彩模式已于 3.45.1 迁 `theme_mode`）。
+  违反后果真实发生过：tile 循环只写 localStorage，任何一次 hello 按旧
+  pref 把主题洗回系统亮色（2026-09-17）。
 - **UI 改动先过 preview**：本版若含任何键盘/设置页的外观变化，发布前
   必须已走「键盘外观变更流程（demo-first，强制）」并拿到确认；检查单
   先过这条，再看双 bump/tag/冒烟。外观改动的 hotfix 同样适用（热更

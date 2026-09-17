@@ -110,6 +110,7 @@ body { height: 100dvh; display: flex; flex-direction: column; overflow: hidden; 
   <button id="actClear">结束输入</button>
   <button id="actSettings">快捷设置</button>
   <button id="actCtrl">控制键层</button>
+  <button id="actOneHand">单手 关→左→右</button>
   <button id="actNumpad">九宫格</button>
   <button id="actT9">T9 键盘</button>
   <button id="actVoiceOverlay">语音浮层(mic)</button>
@@ -157,7 +158,7 @@ let keyboardMode = 'pinyin'; // 假引擎当前键盘（桥 hello 下发）
 // 模拟落盘并重推 hello，方块状态即可回读）。
 let previewPrefs = { associationOn: true, keySound: false, keyHaptic: false,
     candidateFont: 0, holdMs: 350, popupSnap: 1, dpScheme: 'ziranma',
-    uiLanguage: 'zh' };
+    oneHand: 0, sideContent: 0, uiLanguage: 'zh' };
 
 function log(method, detail) {
     const div = document.createElement('div');
@@ -477,6 +478,7 @@ function makeBridge() {
             }
             const map = { association: 'associationOn', keySound: 'keySound',
                 keyHaptic: 'keyHaptic', candidateFont: 'candidateFont',
+                oneHand: 'oneHand', sideContent: 'sideContent',
                 holdMs: 'holdMs', popupSnap: 'popupSnap', dpScheme: 'dpScheme' };
             const slot = map[key];
             if (!slot) return;
@@ -588,6 +590,8 @@ function pushHello() {
         keySound: previewPrefs.keySound,
         keyHaptic: previewPrefs.keyHaptic,
         candidateFont: previewPrefs.candidateFont,
+        oneHand: previewPrefs.oneHand,
+        sideContent: previewPrefs.sideContent,
         holdMs: previewPrefs.holdMs,
         popupSnap: previewPrefs.popupSnap,
         dpScheme: previewPrefs.dpScheme,
@@ -754,6 +758,14 @@ document.getElementById('actT9').onclick = () => {
     rawInput = '';
     pushEngineState('', false);
     pushHello();
+};
+// 单手模式（issue #15）：关→左→右循环，走键盘门面钩子。
+let oneHandLevel = 0;
+document.getElementById('actOneHand').onclick = () => {
+    oneHandLevel = (oneHandLevel + 1) % 3;
+    frame.contentWindow.Feelime.setOneHand(oneHandLevel);
+    document.getElementById('actOneHand').textContent =
+        '单手 ' + ['关', '左手', '右手'][oneHandLevel] + '（再点切换）';
 };
 
 // 语音浮层两种形态：mic（撤销右上角小按钮 + 说完了居中大按钮）与

@@ -86,6 +86,7 @@
         "滑动跟手": "Cursor speed",
         "光标移动速度": "Cursor speed",
         "快捷切换": "Quick switch",
+        "编辑工具栏": "Edit toolbar",
         "正在准备语言数据…": "Preparing language data…",
         "「{0}」引擎启动失败，暂时英文直出；点模式键重试": "{0} failed to start; English Direct is serving. Tap the mode key to retry",
         "「{0}」暂以英文直出，点模式键重试": "{0} is temporarily serving as English Direct; tap the mode key to retry",
@@ -96,6 +97,17 @@
         "中文联想": "Associations",
         "按键声音": "Key sound",
         "按键振动": "Key vibration",
+        "单手模式": "One-handed",
+        "左手": "Left hand",
+        "右手": "Right hand",
+        "全选": "Select all",
+        "粘贴": "Paste",
+        "复制": "Copy",
+        "剪切": "Cut",
+        "光标左移": "Move cursor left",
+        "光标右移": "Move cursor right",
+        "光标上移": "Move cursor up",
+        "光标下移": "Move cursor down",
         "候选字号": "Candidate size",
         "界面语言": "Language",
         "底部留白": "Bottom padding",
@@ -229,7 +241,24 @@
         });
     }
 
-    const KEYBOARD_VERSION = '3.42.0';
+    const KEYBOARD_VERSION = '3.45.2';
+/** 工具栏可编辑 icon 目录（issue #15 编辑模式）：id → 按钮 DOM id。
+ *  logo（左）与收起（右）固定不可编辑；组合态工具（清除/展开）与
+ *  完整设置齿轮不参与编辑。 */
+const TOOL_CATALOG = {
+    ctrl: 'ctrlTool',
+    ime: 'imeSwitchButton',
+    clipboard: 'clipboardButton',
+    favorites: 'favoritesButton',
+    mic: 'mic',
+    // 开关型工具：默认不上栏，只待在编辑仓库里由用户添加（动态创建）。
+    theme: 'toolTheme',
+    vibrate: 'toolVibrate',
+    sound: 'toolSound',
+    assoc: 'toolAssoc',
+    onehand: 'toolOneHand',
+};
+const TOOLBAR_DEFAULT = { left: ['ctrl', 'ime'], right: ['clipboard', 'favorites', 'mic'] };
     const MIN_NATIVE_API = 1;
     const REQUIRED_CAPABILITIES = [
         'candidate-revision-v1',
@@ -354,7 +383,11 @@
         arrowLeft: 'M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z',
         smiley: 'M15.5 11c.83 0 1.5-.67 1.5-1.5S16.33 8 15.5 8 14 8.67 14 9.5s.67 1.5 1.5 1.5zm-7 0c.83 0 1.5-.67 1.5-1.5S9.33 8 8.5 8 7 8.67 7 9.5 7.67 11 8.5 11zm3.5 6.5c2.33 0 4.31-1.46 5.11-3.5H6.89c.8 2.04 2.78 3.5 5.11 3.5zM11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8z',
         // 快捷设置方块图标（wechat 式 tile 网格）。同一构建器，键面不用。
+        // 色彩模式三态三图形（fill 同色 currentColor，不换色）：
+        // auto=半填充圆（自动切换）、light=太阳、dark=月牙。
         theme: 'M12 3a9 9 0 100 18 9 9 0 000-18zm0 2v14a7 7 0 010-14z',
+        themeSun: 'M12 8.2a3.8 3.8 0 110 7.6 3.8 3.8 0 010-7.6zM12 1.5a1.5 1.5 0 1 1 0 3.0a1.5 1.5 0 1 1 0 -3.0zM12 19.5a1.5 1.5 0 1 1 0 3.0a1.5 1.5 0 1 1 0 -3.0zM3 10.5a1.5 1.5 0 1 1 0 3.0a1.5 1.5 0 1 1 0 -3.0zM21 10.5a1.5 1.5 0 1 1 0 3.0a1.5 1.5 0 1 1 0 -3.0zM5.6 4.1a1.5 1.5 0 1 1 0 3.0a1.5 1.5 0 1 1 0 -3.0zM18.4 4.1a1.5 1.5 0 1 1 0 3.0a1.5 1.5 0 1 1 0 -3.0zM5.6 16.9a1.5 1.5 0 1 1 0 3.0a1.5 1.5 0 1 1 0 -3.0zM18.4 16.9a1.5 1.5 0 1 1 0 3.0a1.5 1.5 0 1 1 0 -3.0z',
+        themeMoon: 'M21 12.8A9 9 0 1111.2 3a7 7 0 009.8 9.8z',
         assoc: 'M5 4h14a2 2 0 012 2v9a2 2 0 01-2 2H10l-5 4V6a2 2 0 012-2zm2 4h10v2H7V8zm0 4h6v2H7v-2z',
         sound: 'M3 9v6h4l5 4V5L7 9H3zm11.5 3a3.5 3.5 0 00-2-3.16v6.32a3.5 3.5 0 002-3.16zM12.5 3.8v2.1a6.2 6.2 0 010 12.2v2.1a8.3 8.3 0 000-16.4z',
         vibrate: 'M8 2h8a1 1 0 011 1v18a1 1 0 01-1 1H8a1 1 0 01-1-1V3a1 1 0 011-1zm1 2v16h6V4H9zM3 8h2v8H3V8zm16 0h2v8h-2V8z',
@@ -363,6 +396,7 @@
         font: 'M10 4h4l5 16h-2.6l-1.2-4H8.8l-1.2 4H5L10 4zm-.4 9.5h4.8L12 6.8 9.6 13.5z',
         lang: 'M12 2a10 10 0 100 20 10 10 0 000-20zm7.9 9h-3.4a15 15 0 00-1.2-5.7A8 8 0 0119.9 11zM12 4c.9 1.2 1.9 3.4 2.2 7H9.8c.3-3.6 1.3-5.8 2.2-7zM8.7 5.3A15 15 0 007.5 11H4.1a8 8 0 014.6-5.7zM4.1 13h3.4a15 15 0 001.2 5.7A8 8 0 014.1 13zM12 20c-.9-1.2-1.9-3.4-2.2-7h4.4c-.3 3.6-1.3 5.8-2.2 7zm3.3-1.3a15 15 0 001.2-5.7h3.4a8 8 0 01-4.6 5.7z',
         pad: 'M3 5h18a1 1 0 011 1v10a1 1 0 01-1 1H3a1 1 0 01-1-1V6a1 1 0 011-1zm1 2v8h16V7H4zM2 19h20v2H2v-2z',
+        onehand: 'M4 4h10a1 1 0 011 1v14a1 1 0 01-1 1H4a1 1 0 01-1-1V5a1 1 0 011-1zm1 2v12h8V6H5zm12 3h4v2h-4V9zm0 4h4v2h-4v-2z',
         timer: 'M12 3a9 9 0 100 18 9 9 0 000-18zm0 2a7 7 0 110 14 7 7 0 010-14zm-1 2h2v5.4l4 2.4-1 1.6-5-3V7z',
         snap: 'M12 8a2 2 0 110 4 2 2 0 010-4zM2 11h5v2H2v-2zm15 0h5v2h-5v-2zM11 3h2v5h-2V3zm0 13h2v5h-2v-5z',
         menu: 'M5 4h3v3H5V4zm5.5 0h3v3h-3V4zM16 4h3v3h-3V4zM5 10.5h3v3H5v-3zm5.5 0h3v3h-3v-3zm5.5 0h3v3h-3v-3zM5 17h3v3H5v-3zm5.5 0h3v3h-3v-3zm5.5 0h3v3h-3v-3z',
@@ -647,8 +681,10 @@
     // 备份数据源（docs/design/userdata.md §1.4）：这些设置级 localStorage
     // 键在握手后与每次变化时镜像给原生（ImeBridge.pushStores），导出/换机
     // 由原生统一打包；最近符号/最近 emoji 属于使用痕迹，不进备份。
+    // 色彩模式已迁到 native pref（feelime_keyboard.xml 的 theme_mode），
+    // 由 PREFS_FILES 打包备份，不再走 localStorage 镜像。
     const STORE_BACKUP_KEYS = [
-        'feelime_theme', 'feelime_ui_locale', 'feelime_scrub_speed',
+        'feelime_ui_locale', 'feelime_scrub_speed',
         'feelime_quick_pair', 'feelime_menu_modes', 'feelime_mode_order',
     ];
 
@@ -889,6 +925,24 @@
             // 没有该字段时保持默认档 = 原始 13px 悬浮带）。加粗开关默认关。
             this.preeditFont = 0;
             this.preeditBold = false;
+            // 单手模式（issue #15）：0=关 1=左手（键区贴左）2=右手；侧边条
+            // 内容 0=光标控制 1=空白。背景图片（原「侧边图片」升级）：铺满
+            // 整个键盘区域，bgImageEnabled 控制展示。
+            this.oneHand = 0;
+            this.sideContent = 0;
+            // 背景图亮/暗两组：各自独立，空串 = 该组无图（纯色背景）。
+            this.bgImageLight = '';
+            this.bgImageDark = '';
+            // 键帽不透明度（0-100，默认 100=不透明）。
+            this.keyOpacity = 100;
+            // 色彩模式（auto/light/dark）：真相源是 native pref theme_mode，
+            // hello 下发、tile 循环上报。AGENTS.md「设置不走 localStorage」。
+            this.themeMode = 'auto';
+            // 工具栏编辑模式（issue #15）：可编辑 icon 的左右分组顺序；
+            // toolbarEdit 为编辑态（键区被仓库替换，候选条 icon 可删/拖）。
+            this.toolbarLeft = TOOLBAR_DEFAULT.left.slice();
+            this.toolbarRight = TOOLBAR_DEFAULT.right.slice();
+            this.toolbarEdit = false;
             // 中文联想（docs/design/association.md），hello/onAssoc 驱动。
             this.associationOn = false;
             this.assocWords = [];
@@ -973,6 +1027,28 @@
             }
             // Symbol layer row 4 : the enter key lives there too.
             document.getElementById('symEnterKey').addEventListener('click', () => this.call(() => Native.enter(this.token)));
+            this.setupToolbarEditor && this.setupToolbarEditor();
+            // 单手模式侧边条（issue #15）：光标四向发 DPAD 键事件（与物理
+            // 方向键同通道，终端 cursor 语义兼容），全选/复制/剪切/粘贴走
+            // 宿主 context menu action；旧 APK 无桥方法时点击无效果
+            // （typeof 守卫，与 setQuickPref 同策略，不产生假成功）。
+            document.querySelectorAll('#sideGrid .side-key').forEach(key => {
+                const dir = key.getAttribute('data-side-cursor');
+                const action = key.getAttribute('data-side-action');
+                key.addEventListener('click', () => {
+                    if (dir) {
+                        this.call(() => {
+                            if (typeof Native.editorCursor !== 'function') return;
+                            Native.editorCursor(dir, this.token);
+                        });
+                    } else if (action) {
+                        this.call(() => {
+                            if (typeof Native.editorAction !== 'function') return;
+                            Native.editorAction(action, this.token);
+                        });
+                    }
+                });
+            });
             // Clipboard/favorites moved into the quick panel rows.
             const clipBtn = document.getElementById('clipboardButton');
             if (clipBtn) clipBtn.addEventListener('click', () => this.openPanel('clipboard'));
@@ -1191,7 +1267,12 @@
             // sides in sync, the fallback styles the total view directly).
             if (this.kbHeight) this.applyKbHeight(this.kbHeight);
             this.applyHeight();
-            Native.requestState();
+            // 预览 iframe（设置页外观页）没有桥：直接引用会 ReferenceError
+            // 中断构造，键网格画不出来。正常键盘 WebView 里 Native 恒在。
+            if (typeof Native === 'object' && Native !== null
+                && typeof Native.requestState === 'function') {
+                Native.requestState();
+            }
         }
 
         /* ===== bridge helpers ===== */
@@ -1701,11 +1782,13 @@
             this.renderT9SymbolBar();
         }
 
-        /** 工具栏让位开关（T9 符号行与中文联想共用）：setup/控制/切换/
-         * 剪贴板/收藏/mic 全部隐藏，仅留 ×。关闭时全部复位。 */
+        /** 工具栏让位开关（T9 符号行与中文联想共用）：整条语义——上栏
+         * 的所有工具（含动态开关工具与 mic）全部收起，仅留 ×。不得逐 id
+         * 枚举：动态工具曾被漏掉，联想让位时还挂着半条工具栏（真机翻
+         * 车）。固定 chrome（setup）不在 TOOL_CATALOG，单列。 */
         setToolbarYield(active) {
-            ['setupButton', 'ctrlTool', 'imeSwitchButton',
-                'clipboardButton', 'favoritesButton', 'mic'].forEach(id => {
+            this.toolbarYield = active;
+            ['setupButton', ...Object.values(TOOL_CATALOG)].forEach(id => {
                 const el = document.getElementById(id);
                 if (el) el.hidden = active;
             });
@@ -2796,6 +2879,12 @@
             this.setControlView(false);
             this.setExpanded(false);
             this.showLetters();
+            // 编辑态是模态 UI：reset 到主视图时不该残留（收起再弹出
+            // 的某些路径只走 resetToHome，不走原生 onFinishInputView
+            // 的取消通道）。取消语义 = 快照回退、不落盘。
+            if (this.toolbarEdit) this.cancelToolbarEdit();
+            // 工具栏对账：任何操作链丢掉的按钮在这里强制归位。
+            this.auditToolbarTools();
         }
 
         recent() {
@@ -3745,6 +3834,572 @@
             this.applyHeight();
         }
 
+        // 单手模式（issue #15）：data 属性驱动 CSS 布局（键区同侧让位 +
+        // #sidePad 贴另一侧占满让位条），侧边内容三态与自定义图在这里一并
+        // 落地。位置纯 CSS（含安全区对齐），无需 JS 定位。
+        applyOneHand() {
+            const level = Number(this.oneHand) || 0;
+            document.body.dataset.oneHand =
+                level === 1 ? 'left' : level === 2 ? 'right' : 'off';
+            const content = Number(this.sideContent) || 0;
+            document.body.dataset.sideContent = content === 1 ? 'blank' : 'cursor';
+            // 让位宽度变了，候选条容量随之变化：重算溢出隐藏。
+            this.pruneOverflowTools();
+        }
+
+        /** 背景图片（亮/暗两组，issue #15）：铺满整个键盘区域（工具条
+         *  到底部留白；float band 扩展透明区在 WebView 之外，天然不覆
+         *  盖）。按当前主题取对应组；该组无图 = 纯色背景。 */
+        applyBackground() {
+            const light = document.documentElement.classList.contains('theme-light');
+            const image = light ? this.bgImageLight : this.bgImageDark;
+            const layer = document.getElementById('bgImage');
+            if (layer) {
+                // 该组无图必须清掉残留——不清会把另一组的图带到当前
+                // 主题（真机：暗色主题铺着亮色组的老图）。
+                layer.style.backgroundImage =
+                    image ? `url("data:image/jpeg;base64,${image}")` : '';
+            }
+            document.body.dataset.bgImage = image ? 'on' : 'off';
+        }
+
+        /** 键帽不透明度：只动背景 alpha 变量，键帽文字保持实色。 */
+        applyKeyOpacity() {
+            const pct = Math.max(0, Math.min(100, Number(this.keyOpacity) || 0));
+            document.documentElement.style.setProperty(
+                '--key-alpha', String(Math.max(0.05, pct / 100)));
+        }
+
+        // ---- 工具栏编辑模式（issue #15）----
+        // 布局是两个有序数组（左组 / 右组，中间候选区留空）。按钮 DOM 永远
+        // 存在于 candidateBar（编辑态把未上栏的按钮移进下方仓库 grid），
+        // applyToolbarLayout 只负责按数组重排；事件绑定在元素上，移动安全。
+
+        applyToolbarLayoutValue(raw) {
+            let parsed = null;
+            try { parsed = JSON.parse(raw); } catch (error) { parsed = null; }
+            const valid = arr => Array.isArray(arr) && arr.length <= 4
+                && arr.every(id => typeof id === 'string' && id in TOOL_CATALOG)
+                && new Set(arr).size === arr.length;
+            if (!parsed || !valid(parsed.left) || !valid(parsed.right)) return;
+            this.toolbarLeft = parsed.left.slice();
+            this.toolbarRight = parsed.right.slice();
+        }
+
+        applyToolbarLayout() {
+            // 左组锚在候选区之前（candidateBar 行内，F logo 之后）；右组
+            // 锚在收起键之前。拼音带 preeditLine 在 softKeyboard 顶部、
+            // 候选条之外——拿它当锚点会把左组插成键盘顶部的全宽行，把
+            // 键盘顶出一屏（真机截图教训），两个锚点都必须在行内。
+            const pre = document.getElementById('candidates');
+            const hideBtn = document.getElementById('hide');
+            if (!pre || !hideBtn) return;
+            const resolve = id => document.getElementById(TOOL_CATALOG[id]);
+            this.toolbarLeft.forEach(id => {
+                const el = resolve(id);
+                if (el) pre.parentNode.insertBefore(el, pre);
+            });
+            this.toolbarRight.forEach(id => {
+                const el = resolve(id);
+                if (el) hideBtn.parentNode.insertBefore(el, hideBtn);
+            });
+            this.pruneOverflowTools();
+            this.renderToolbarEditor();
+        }
+
+        /** 工具栏对账（兜底，每次编辑操作 / 键盘弹起后跑）：不变式是
+         *  「每颗工具要么在候选条、要么在下方仓库完整展示」。实现拆两层：
+         *  1) applyToolbarLayout 把数组内的按钮重新插桩（防 DOM 脱队），
+         *     末尾的 renderToolbarEditor 把栏上没有的全部收进仓库；
+         *  2) hidden 只对栏上按钮按 composing/溢出重算，仓库内的按钮
+         *     一律可见（历史上把 hidden 写到仓库按钮上，编辑态里看着
+         *     像凭空消失）。 */
+        auditToolbarTools() {
+            this.applyToolbarLayout();
+            const composeHidden = document.body.classList.contains('composing');
+            const overflow = this._overflowTools || new Set();
+            Object.entries(TOOL_CATALOG).forEach(([id, dom]) => {
+                if (dom === 'mic') return;
+                const el = document.getElementById(dom);
+                if (!el) return;
+                el.hidden = el.closest('#toolbarEditorGrid')
+                    ? false
+                    : (composeHidden || overflow.has(dom));
+            });
+            const mic = document.getElementById('mic');
+            if (mic) mic.hidden = composeHidden && this.voiceState === 'idle';
+        }
+
+        /** 溢出兜底：已保存的布局可能比当前候选条容量大（典型：单手模式
+         *  让位 64px 后放不下 6 颗）——放不下的按钮隐藏，收起键永远留在
+         *  栏内、不压侧边栏。配置不丢：切回宽布局/退出单手自动恢复。 */
+        pruneOverflowTools() {
+            const cap = this.toolbarCapacity();
+            this._overflowTools = new Set();
+            let shown = 0;
+            [...this.toolbarLeft, ...this.toolbarRight].forEach(id => {
+                if (shown >= cap) {
+                    this._overflowTools.add(id);
+                    return;
+                }
+                shown++;
+            });
+            [...this.toolbarLeft, ...this.toolbarRight].forEach(id => {
+                const el = document.getElementById(TOOL_CATALOG[id]);
+                if (el) el.hidden = this._overflowTools.has(id);
+            });
+        }
+
+        enterToolbarEdit() {
+            if (this.toolbarEdit || this.composing) return;
+            const editor = document.getElementById('toolbarEditor');
+            if (!editor) return;
+            this.closeSettingsPanel();
+            // 快照进入时的布局：「完成」才落盘，「取消」按快照整体回退。
+            this._toolbarSnapshot = {
+                left: this.toolbarLeft.slice(),
+                right: this.toolbarRight.slice(),
+            };
+            this.toolbarEdit = true;
+            document.body.classList.add('toolbar-edit');
+            editor.hidden = false;
+            this.renderToolbarEditor();
+            this.showToast(t("工具栏编辑：点下方图标添加，拖动排序，× 移除"));
+        }
+
+        exitToolbarEdit() {
+            this.closeToolbarEdit(true);
+        }
+
+        /** 「取消」：按进入编辑时的快照整体回退，不落盘。 */
+        cancelToolbarEdit() {
+            if (!this.toolbarEdit) return;
+            if (this._toolbarSnapshot) {
+                this.toolbarLeft = this._toolbarSnapshot.left.slice();
+                this.toolbarRight = this._toolbarSnapshot.right.slice();
+            }
+            this.closeToolbarEdit(false);
+        }
+
+        closeToolbarEdit(save) {
+            if (!this.toolbarEdit) return;
+            this.toolbarEdit = false;
+            document.body.classList.remove('toolbar-edit');
+            const editor = document.getElementById('toolbarEditor');
+            if (editor) editor.hidden = true;
+            this._toolbarSnapshot = null;
+            this.applyToolbarLayout();
+            if (save && typeof Native.setQuickPref === 'function') {
+                this.call(() => Native.setQuickPref('toolbarLayout',
+                    JSON.stringify({ left: this.toolbarLeft, right: this.toolbarRight }),
+                    this.token));
+            }
+        }
+
+        /** 下方仓库：把未上栏的 catalog 按钮移入 grid（点按添加）。只做
+         *  增量搬移、绝不清空 grid——按钮一旦被移出 DOM，getElementById
+         *  就再也找不回它（× 掉第二个 icon 时第一个会凭空消失）。 */
+        renderToolbarEditor() {
+            const grid = document.getElementById('toolbarEditorGrid');
+            if (!grid) return;
+            const used = new Set([...this.toolbarLeft, ...this.toolbarRight]);
+            Object.keys(TOOL_CATALOG).forEach(id => {
+                const el = document.getElementById(TOOL_CATALOG[id]);
+                if (!el) return;
+                if (used.has(id)) return;
+                // 未上栏 = 仓库态：class 幂等补齐（历史版本挪进仓库时可能
+                // 漏掉 editor-pool，+ 角标挂在这个 class 上，缺了就没有 +）。
+                el.classList.add('editor-pool');
+                if (!el.closest('#toolbarEditorGrid')) grid.append(el);
+            });
+        }
+
+        addToToolbar(id) {
+            // 幂等：合成 click 在部分 WebView（ColorOS 实测）拦不干净，
+            // 触摸链 + 合成 click 双通道会把同一颗加两次。
+            if (this.toolbarLeft.includes(id) || this.toolbarRight.includes(id)) return;
+            const el = document.getElementById(TOOL_CATALOG[id]);
+            if (!el || !el.classList.contains('editor-pool')) return;
+            if (this.toolbarLeft.length + this.toolbarRight.length
+                >= this.toolbarCapacity()) {
+                this.showToast(t("工具栏空间不够"));
+                return;
+            }
+            el.classList.remove('editor-pool');
+            if (this.toolbarRight.length < 4) {
+                this.toolbarRight.push(id);
+            } else if (this.toolbarLeft.length < 4) {
+                this.toolbarLeft.push(id);
+            } else return;
+            this.applyToolbarLayout();
+        }
+
+        removeFromToolbar(id) {
+            this.toolbarLeft = this.toolbarLeft.filter(x => x !== id);
+            this.toolbarRight = this.toolbarRight.filter(x => x !== id);
+            this.applyToolbarLayout();
+        }
+
+        /** 开关型工具（色彩模式/振动/声音/联想/单手）：index.html 没有静
+         *  态节点，这里动态创建，初始只待在编辑仓库里，由用户上栏。点击
+         *  行为 = 快捷设置同名 tile 的 toggle；状态用 state-on 底色。 */
+        buildToggleTools() {
+            const defs = [
+                { key: 'theme', id: 'toolTheme', icon: 'theme', label: '色彩模式' },
+                { key: 'vibrate', id: 'toolVibrate', icon: 'vibrate', label: '按键振动' },
+                { key: 'sound', id: 'toolSound', icon: 'sound', label: '按键声音' },
+                { key: 'assoc', id: 'toolAssoc', icon: 'assoc', label: '中文联想' },
+                { key: 'onehand', id: 'toolOneHand', icon: 'onehand', label: '单手模式' },
+            ];
+            const pool = document.getElementById('toolbarEditorGrid');
+            defs.forEach(({ key, id, icon, label }) => {
+                if (document.getElementById(id)) return;
+                const b = document.createElement('button');
+                b.id = id;
+                b.className = 'tool editor-pool';
+                b.dataset.tool = key;
+                b.setAttribute('aria-label', t(label));
+                b.setAttribute('data-i18n-aria-label', label);
+                // ICONS[name] 是活的 SVG 元素（同一节点只能挂一处），必须
+                // clone；拼进 innerHTML 会变成 "[object SVGSVGElement]"。
+                const svg = ICONS[icon].cloneNode(true);
+                svg.setAttribute('width', '16');
+                svg.setAttribute('height', '16');
+                b.append(svg);
+                b.addEventListener('click', () => {
+                    if (this.toolbarEdit) return;
+                    this.toggleExtraTool(key);
+                });
+                if (pool) pool.append(b);
+            });
+            this.syncToolStates();
+        }
+
+        /** 色彩模式三态循环（工具条按钮与快捷设置方块共用）。本地即时
+         *  生效，意图进 quickPending 并落 native pref（theme_mode 是唯一
+         *  真相源）。只写 localStorage 的话，任何一次 hello——比如调
+         *  不透明度滑块触发的 PREFS_CHANGED——都会按旧 pref 把主题洗回
+         *  去（真机实录：暗色下调滑块，键盘弹回系统亮色）。 */
+        cycleThemeNative() {
+            const modes = ['auto', 'light', 'dark'];
+            const next = this.qStep('themeMode', modes,
+                modes.includes(this.themeMode) ? this.themeMode : 'auto');
+            this.themeMode = next;
+            applyTheme(next);
+            if (typeof Native.setQuickPref === 'function') {
+                this.call(() => Native.setQuickPref('themeMode', next, this.token));
+            }
+            pushStores();
+            return next;
+        }
+
+        /** 开关型工具的点击行为（与快捷设置 tile 同参）。 */
+        toggleExtraTool(key) {
+            const setNative = (k, v) => {
+                if (typeof Native.setQuickPref === 'function') {
+                    this.call(() => Native.setQuickPref(k, String(v), this.token));
+                }
+            };
+            if (key === 'theme') {
+                this.cycleThemeNative();
+            } else if (key === 'sound') {
+                this.keySound = this.qFlip('keySound', this.keySound);
+                setNative('keySound', this.keySound ? '1' : '0');
+            } else if (key === 'vibrate') {
+                this.keyHaptic = this.qFlip('keyHaptic', this.keyHaptic);
+                setNative('keyHaptic', this.keyHaptic ? '1' : '0');
+            } else if (key === 'assoc') {
+                this.associationOn = this.qFlip('association', this.associationOn);
+                if (!this.associationOn) this.assocWords = [];
+                setNative('association', this.associationOn ? '1' : '0');
+            } else if (key === 'onehand') {
+                this.oneHand = this.qStep('oneHand', [0, 1, 2], this.oneHand);
+                this.applyOneHand();
+                setNative('oneHand', this.oneHand);
+            }
+            if (this.settingsPage === null) this.renderSettingsPanel();
+            this.syncToolStates();
+        }
+
+        /** 开关型工具 icon 的 on 底色跟随当前状态（hello / 点击后同步）。 */
+        syncToolStates() {
+            const set = (id, on) => {
+                const el = document.getElementById(id);
+                if (el) el.classList.toggle('state-on', !!on);
+            };
+            const theme = this.themeMode || 'auto';
+            // 色彩模式不挂 on 态：auto/浅/深是三态循环，没有开/关语义，
+            // 亮绿 icon+描边在暗色背景上是整条工具栏唯一的亮点（用户三次
+            // 点名刺眼）——工具栏上与其他工具完全同款。三态换图形区分
+            // （auto=半填充圆/light=太阳/dark=月牙，同色不换色）。
+            set('toolTheme', false);
+            this.swapThemeGlyph(theme);
+            set('toolVibrate', this.keyHaptic);
+            set('toolSound', this.keySound);
+            set('toolAssoc', this.associationOn);
+            set('toolOneHand', (this.oneHand || 0) !== 0);
+        }
+
+        /** 色彩模式按钮的三态图形：跟随系统=半填充圆、浅色=太阳、
+         *  深色=月牙（同一 currentColor，只换形不换色）。幂等：图形
+         *  名记在 dataset，不变就不动 DOM。 */
+        swapThemeGlyph(theme) {
+            const el = document.getElementById('toolTheme');
+            if (!el) return;
+            const glyph = theme === 'light' ? 'themeSun'
+                : theme === 'dark' ? 'themeMoon' : 'theme';
+            if (el.dataset.glyph === glyph) return;
+            el.dataset.glyph = glyph;
+            const old = el.querySelector('svg');
+            if (old) old.remove();
+            const svg = ICONS[glyph].cloneNode(true);
+            svg.setAttribute('width', '16');
+            svg.setAttribute('height', '16');
+            el.append(svg);
+        }
+
+        /** 候选条当前宽度还放得下几颗工具（单手模式键区让位后 bar 变窄，
+         *  容量自动变小）。MIN_CAND 给候选词留的最小宽度必须收窄：96px
+         *  时 352px 宽的 ace 真机 cap=4，比默认布局的 5 颗还少，新增一律
+         *  被拒（真机验收抓到）；候选区本身可横向滚动兜底。布局塌陷时
+         *  （宽度 0）放宽到 8，不挡编辑。 */
+        toolbarCapacity() {
+            const bar = document.getElementById('candidateBar');
+            const setup = document.getElementById('setupButton');
+            const hide = document.getElementById('hide');
+            if (!bar || !setup || !hide || !bar.clientWidth) return 8;
+            const BTN = 32, GAP = 5, MIN_CAND = 24;
+            const avail = bar.clientWidth - setup.offsetWidth - hide.offsetWidth
+                - MIN_CAND - GAP * 2;
+            return Math.max(1, Math.floor(avail / (BTN + GAP)));
+        }
+
+        /** 编辑态下按组内索引移动 id（拖拽落位）。跨组拖入满组（4）时
+         *  与落点按钮交换——拖动是调序手段，静默拒绝会让用户以为坏了。
+         *  id 还在仓库（不在任何组）时是「从仓库拖上栏」，走 addToToolbar
+         *  （带容量检查 + 清掉 editor-pool 角标）。 */
+        moveInToolbar(id, group, index) {
+            if (!this.toolbarLeft.includes(id) && !this.toolbarRight.includes(id)) {
+                this.addToToolbar(id);
+                return;
+            }
+            const from = this.toolbarLeft.includes(id) ? this.toolbarLeft : this.toolbarRight;
+            const to = group === 'left' ? this.toolbarLeft : this.toolbarRight;
+            const origIndex = from.indexOf(id);
+            const old = from.filter(x => x !== id);
+            if (to === from) {
+                old.splice(Math.max(0, Math.min(index, old.length)), 0, id);
+                this.toolbarLeft = group === 'left' ? old : this.toolbarLeft;
+                this.toolbarRight = group === 'right' ? old : this.toolbarRight;
+                this.applyToolbarLayout();
+                return;
+            }
+            if (to.length < 4) {
+                to.splice(Math.max(0, Math.min(index, to.length)), 0, id);
+            } else {
+                const victimIndex = Math.max(0, Math.min(index, to.length - 1));
+                const victim = to[victimIndex];
+                to.splice(victimIndex, 1, id);
+                old.splice(Math.max(0, Math.min(origIndex, old.length)), 0, victim);
+            }
+            if (from === this.toolbarLeft) this.toolbarLeft = old;
+            else this.toolbarRight = old;
+            this.applyToolbarLayout();
+        }
+
+        /** 编辑模式事件接线（issue #15）：长按候选条工具进入编辑；× 移除
+         *  到仓库；仓库点按添加；编辑态长按工具=拖动排序（跨左右组，中间
+         *  候选区不放按钮）；「完成」退出并保存。 */
+        setupToolbarEditor() {
+            const bar = document.getElementById('candidateBar');
+            const doneBtn = document.getElementById('toolbarEditDone');
+            if (!bar || !doneBtn) return;
+            const EDIT_HOLD_MS = 280;
+            this.buildToggleTools();
+            Object.entries(TOOL_CATALOG).forEach(([id, dom]) => {
+                const el = document.getElementById(dom);
+                if (!el) return;
+                el.dataset.tool = id;
+                const x = document.createElement('span');
+                x.className = 'tool-x';
+                x.textContent = '×';
+                // × 自己接管触摸：阻止冒泡到按钮的 bindTouch（否则
+                // preventDefault 后手动 button.click() 的 target 是整颗
+                // 按钮，× 的移除永远轮不到）。
+                x.addEventListener('touchstart', event => {
+                    event.stopPropagation();
+                    event.preventDefault();
+                }, { passive: false });
+                x.addEventListener('touchend', event => {
+                    event.stopPropagation();
+                    event.preventDefault();
+                    if (this.toolbarEdit) this.removeFromToolbar(id);
+                }, { passive: false });
+                el.append(x);
+                // 长按入口（非编辑态）→ 进入编辑；编辑态长按 → 拖拽。
+                // 编辑态必须 stopImmediatePropagation 压掉同节点后注册的
+                // bindTouch（click 拦截管不到它的 350ms 长按 hold，否则
+                // 进编辑 70ms 后原功能长按照常触发——preview 实测）。
+                // 长按计时不能被 touchmove 一票清掉：真机手指长按必然有
+                // 亚像素微动（ace 实测 swipe 同点也插 MOVE），一旦清掉就
+                // 时灵时不灵。move 只更新位置，到点按「总位移 <12px」判。
+                el.addEventListener('touchstart', event => {
+                    if (this.toolbarEdit) {
+                        event.preventDefault();
+                        event.stopImmediatePropagation();
+                        el._editStart = { x: event.touches[0].clientX, y: event.touches[0].clientY };
+                        this.beginToolbarDrag(id, el, event);
+                        return;
+                    }
+                    if (el.closest('#toolbarEditorGrid')) return;
+                    const start = { x: event.touches[0].clientX, y: event.touches[0].clientY };
+                    el._editHoldPos = start;
+                    el._editHold = setTimeout(() => {
+                        const pos = el._editHoldPos || start;
+                        if (Math.abs(pos.x - start.x) < 12
+                            && Math.abs(pos.y - start.y) < 12) {
+                            this.enterToolbarEdit();
+                        }
+                    }, EDIT_HOLD_MS);
+                }, { passive: true });
+                el.addEventListener('touchmove', event => {
+                    const t = event.touches[0];
+                    if (t && el._editHoldPos) {
+                        el._editHoldPos = { x: t.clientX, y: t.clientY };
+                    }
+                }, { passive: true });
+                // 编辑态点击（位移 <12px）：仓库按钮 = 添加。触摸链上
+                // bindTouch 已被 immediateStop 压掉，合成 click 不会发生，
+                // 添加语义只能在这里兜（拖动落点由 beginToolbarDrag 的
+                // window touchend 处理，两路按位移分流不打架）。
+                el.addEventListener('touchend', event => {
+                    clearTimeout(el._editHold);
+                    el._editHoldPos = null;
+                    if (!this.toolbarEdit || !el._editStart) return;
+                    const t = event.changedTouches[0];
+                    const moved = Math.hypot(t.clientX - el._editStart.x,
+                        t.clientY - el._editStart.y) >= 12;
+                    el._editStart = null;
+                    if (moved) return;
+                    if (el.closest('#toolbarEditorGrid')) {
+                        this.addToToolbar(id);
+                    }
+                }, { passive: true });
+                ['touchend', 'touchcancel'].forEach(name =>
+                    el.addEventListener(name, () => {
+                        clearTimeout(el._editHold);
+                        el._editHoldPos = null;
+                    }, { passive: true }));
+            });
+            // 编辑态吞掉工具原功能（capture 阶段拦在 candidateBar 上）；
+            // × 的移除也在这里做——capture 先于 target，若在按钮上
+            // stopPropagation 会把 × 自身的 listener 一并吞掉。
+            if (!bar) throw new Error('TBE-REG-NOBAR');
+            bar.addEventListener('click', event => {
+                if (!this.toolbarEdit) return;
+                const tool = event.target.closest('.tool');
+                if (!tool || !tool.dataset.tool) return;
+                event.stopPropagation();
+                if (event.target.classList.contains('tool-x')) {
+                    this.removeFromToolbar(tool.dataset.tool);
+                }
+            }, true);
+            // 仓库（grid）同理：capture 拦原功能。
+            const grid = document.getElementById('toolbarEditorGrid');
+            if (grid) {
+                grid.addEventListener('click', event => {
+                    if (!this.toolbarEdit) return;
+                    // 编辑态点仓库按钮只做「上工具栏」（touchend 通道）。
+                    // 剪贴板/常用语等静态按钮的 click 直连 openPanel 且
+                    // 不在 candidateBar 拦截范围内——按钮进仓库后点按会
+                    // 上栏 + 弹面板同时发生。capture 阶段拦：事件到不了
+                    // target，按钮自己的 click listener 不跑。
+                    if (event.target.closest('[data-tool]')) event.stopPropagation();
+                }, true);
+            }
+            // 仓库的「点按添加」只走 editor touchend 这一条通道——
+            // 不要再挂 click 委托：合成 click 在部分 WebView（ColorOS
+            // 实测）拦不干净，且按钮上栏后相邻按钮补位到点击坐标，
+            // 委托会再命中下一颗，一次点击带上两颗（真机实测两次）。
+            doneBtn.addEventListener('click', () => this.exitToolbarEdit());
+            const cancelBtn = document.getElementById('toolbarEditCancel');
+            if (cancelBtn) cancelBtn.addEventListener('click', () => this.cancelToolbarEdit());
+            // 长按候选条空白（target 是 bar 本身，即按钮之外的空隙）也能
+            // 进编辑——工具栏按钮全被移除后，这里和快捷设置的「编辑工具
+            // 栏」tile 是仅存的入口。计时同样抗微动（见上）。
+            bar.addEventListener('touchstart', event => {
+                if (this.toolbarEdit || event.target !== bar) return;
+                const start = { x: event.touches[0].clientX, y: event.touches[0].clientY };
+                bar._barHoldPos = start;
+                bar._barHold = setTimeout(() => {
+                    const pos = bar._barHoldPos || start;
+                    if (Math.abs(pos.x - start.x) < 12
+                        && Math.abs(pos.y - start.y) < 12) {
+                        this.enterToolbarEdit();
+                    }
+                }, EDIT_HOLD_MS);
+            }, { passive: true });
+            bar.addEventListener('touchmove', event => {
+                const t = event.touches[0];
+                if (t && bar._barHoldPos) {
+                    bar._barHoldPos = { x: t.clientX, y: t.clientY };
+                }
+            }, { passive: true });
+            ['touchend', 'touchcancel'].forEach(name =>
+                bar.addEventListener(name, () => {
+                    clearTimeout(bar._barHold);
+                    bar._barHoldPos = null;
+                }, { passive: true }));
+        }
+
+        /** 编辑态拖拽：ghost（44px 圆钮，见 .toolbar-drag-ghost）跟手，
+         *  松手按落点 x 定组（candidateBar 中点分左右）与组内索引（各
+         *  按钮中点比较），中间候选区不放按钮。 */
+        beginToolbarDrag(id, el, event) {
+            const SIZE = 44;
+            const ghost = el.cloneNode(true);
+            ghost.classList.remove('toolbar-dragging');
+            ghost.classList.add('toolbar-drag-ghost');
+            ghost.style.left = (event.touches[0].clientX - SIZE / 2) + 'px';
+            ghost.style.top = (event.touches[0].clientY - SIZE / 2) + 'px';
+            ghost.style.width = SIZE + 'px';
+            ghost.style.height = SIZE + 'px';
+            document.body.append(ghost);
+            el.classList.add('toolbar-dragging');
+            const move = ev => {
+                const t = ev.touches[0];
+                ghost.style.left = (t.clientX - SIZE / 2) + 'px';
+                ghost.style.top = (t.clientY - SIZE / 2) + 'px';
+            };
+            const up = ev => {
+                window.removeEventListener('touchmove', move);
+                window.removeEventListener('touchend', up);
+                window.removeEventListener('touchcancel', up);
+                ghost.remove();
+                el.classList.remove('toolbar-dragging');
+                if (!ev.changedTouches.length) return;
+                const t = ev.changedTouches[0];
+                const barEl = document.getElementById('candidateBar');
+                const barRect = barEl.getBoundingClientRect();
+                if (t.clientY < barRect.top || t.clientY > barRect.bottom) return;
+                const group = t.clientX < barRect.left + barRect.width / 2 ? 'left' : 'right';
+                const arr = group === 'left'
+                    ? this.toolbarLeft.filter(x => x !== id)
+                    : this.toolbarRight.filter(x => x !== id);
+                let index = arr.length;
+                for (let i = 0; i < arr.length; i++) {
+                    const other = document.getElementById(TOOL_CATALOG[arr[i]]);
+                    if (!other) continue;
+                    const r = other.getBoundingClientRect();
+                    if (t.clientX < r.left + r.width / 2) { index = i; break; }
+                }
+                this.moveInToolbar(id, group, index);
+            };
+            window.addEventListener('touchmove', move, { passive: true });
+            window.addEventListener('touchend', up);
+            window.addEventListener('touchcancel', up);
+        }
+
         applyHeight() {
             const view = document.getElementById('softKeyboard');
             const total = (view && view.clientHeight) || window.innerHeight;
@@ -3800,6 +4455,9 @@
             if (document.getElementById('heightCard').classList.contains('open')) {
                 this.placeHeightCard();
             }
+            // native show/resize 必经 applyHeightNow→这里：工具栏对账的
+            // 兜底触发点（同输入框收起再弹不走 onStartInputView/resetToHome）。
+            this.auditToolbarTools();
         }
 
         /** Push a new CONTENT height to the native side. Old bridges (and the
@@ -4187,12 +4845,84 @@
             wrap.className = 'qs-wrap';
             const pages = document.createElement('div');
             pages.className = 'qs-pages';
-            this.quickTileDefs().forEach(tiles => {
+            // 严格 2×4：.qs-page 的 grid 是 4 列 × 2 行，第 9 个 tile 会
+            // 溢出成隐式第三行（真机翻车）。分页在这里硬切，页大小是
+            // 结构保证——新增 tile 只会多一页，永远挤不爆网格。
+            const defs = this.quickTileDefs();
+            for (let i = 0; i < defs.length; i += 8) {
                 const page = document.createElement('div');
                 page.className = 'qs-page';
-                tiles.forEach(def => page.append(this.qsTile(def)));
+                defs.slice(i, i + 8).forEach(def => page.append(this.qsTile(def)));
                 pages.append(page);
+            }
+            // 翻页手势完全接管（硬限制）：Android WebView 的 fling 惯性
+            // 会连跨两页，事后钳制在真机上拦不住（合成器惯性不经过
+            // DOM）。改为 preventDefault 吃掉原生滚动、自己跟手，手指
+            // 抬起按位移+速度算目标页——目标页被硬限制在起点 ±1 页，
+            // 甩得再快也只翻一屏。
+            let drag = null;
+            const pageW = () =>
+                pages.firstElementChild ? pages.firstElementChild.offsetWidth : 0;
+            pages.addEventListener('touchstart', e => {
+                // Mock/旧 WebView 的合成事件可能没有 touches：此处抛错
+                // 会打断 tap→click 链，一排面板测试跟着挂。
+                const t = e.touches && e.touches[0];
+                if (!t) return;
+                drag = {
+                    startX: t.clientX,
+                    startY: t.clientY,
+                    startLeft: pages.scrollLeft,
+                    lastX: t.clientX,
+                    lastT: Date.now(),
+                    v: 0,
+                    axis: null,
+                };
+            }, { passive: true });
+            pages.addEventListener('touchmove', e => {
+                if (!drag) return;
+                const t0 = e.touches && e.touches[0];
+                if (!t0) return;
+                const x = t0.clientX;
+                const y = t0.clientY;
+                if (drag.axis === null) {
+                    const dx = Math.abs(x - drag.startX);
+                    const dy = Math.abs(y - drag.startY);
+                    if (dx < 8 && dy < 8) return; // 位移死区，防误判
+                    drag.axis = dx > dy ? 'x' : 'y';
+                }
+                if (drag.axis !== 'x') { drag = null; return; } // 纵向放行
+                const now = Date.now();
+                drag.v = (x - drag.lastX) / Math.max(1, now - drag.lastT);
+                drag.lastX = x;
+                drag.lastT = now;
+                e.preventDefault(); // 惯性滚动的源头在这里掐断
+                const pw = pageW();
+                if (!pw) return;
+                const max = (pages.children.length - 1) * pw;
+                let left = drag.startLeft - (x - drag.startX);
+                if (left < 0) left /= 3; // 越界阻尼（第一页往右拖）
+                if (left > max) left = max + (left - max) / 3;
+                pages.scrollLeft = left;
+            }, { passive: false });
+            pages.addEventListener('touchend', () => {
+                if (!drag) return;
+                const pw = pageW();
+                if (drag.axis === 'x' && pw) {
+                    const startPage = Math.round(drag.startLeft / pw);
+                    const moved = drag.startLeft - pages.scrollLeft;
+                    let page = Math.round(pages.scrollLeft / pw);
+                    if (Math.abs(drag.v) > 0.3 && Math.abs(moved) > pw * 0.12) {
+                        // 快速轻扫：位移不及半页也翻页
+                        page = startPage - Math.sign(drag.v);
+                    }
+                    // 硬限制：一次操作最多翻一屏
+                    page = Math.max(startPage - 1, Math.min(page, startPage + 1));
+                    page = Math.max(0, Math.min(page, pages.children.length - 1));
+                    pages.scrollTo({ left: page * pw, behavior: 'smooth' });
+                }
+                drag = null;
             });
+            // 圆点/qsPage 记录仍由 scroll 事件驱动（跟手过程实时亮点）。
             pages.addEventListener('scroll', () => this.qsSyncDots(pages), { passive: true });
             const dots = document.createElement('div');
             dots.className = 'qs-dots';
@@ -4288,27 +5018,19 @@
             const localeText = { auto: t("跟随系统"), zh: t("中文"), en: t("English") };
             const snapText = { 0: t("松"), 1: t("标准"), 2: t("紧") };
             const fontText = { 0: t("标准"), 1: t("大"), 2: t("更大") };
+            const oneHandText = { 0: t("关"), 1: t("左手"), 2: t("右手") };
             const dpText = { ziranma: t("自然码"), flypy: t("小鹤双拼"), sogou: t("搜狗双拼") };
-            const themeTheme = () => {
-                try { return localStorage.getItem('feelime_theme') || 'auto'; } catch (_) { return 'auto'; }
-            };
+            const themeTheme = () => this.themeMode || 'auto';
             const rehome = () => {
                 if (this.settingsPage === null) this.renderSettingsPanel();
             };
             const customRows = this.customKeys();
             return [
-                [
                     {
                         icon: ICONS.theme, label: t("色彩模式"),
                         state: () => themeText[themeTheme()] || themeText.auto,
                         tap: () => {
-                            let next;
-                            try {
-                                next = cycle(['auto', 'light', 'dark'], themeTheme());
-                                localStorage.setItem('feelime_theme', next);
-                            } catch (_) { return; }
-                            applyTheme();
-                            pushStores();
+                            this.cycleThemeNative();
                             rehome();
                         },
                     },
@@ -4378,8 +5100,20 @@
                             rehome();
                         },
                     },
-                ],
-                [
+                    {
+                        // 单手模式（issue #15）：关 → 左手 → 右手循环；
+                        // tile 状态行常显当前模式（qRead 回读，含未决意图）。
+                        icon: ICONS.onehand, label: t("单手模式"),
+                        state: () => oneHandText[this.qRead('oneHand', this.oneHand)] || oneHandText[0],
+                        on: () => (this.qRead('oneHand', this.oneHand) || 0) !== 0,
+                        tap: () => {
+                            if (typeof Native.setQuickPref !== 'function') return;
+                            this.oneHand = this.qStep('oneHand', [0, 1, 2], this.oneHand);
+                            this.applyOneHand();
+                            quickPref('oneHand', this.oneHand);
+                            rehome();
+                        },
+                    },
                     {
                         icon: ICONS.pad, label: t("底部留白"),
                         state: () => {
@@ -4436,13 +5170,19 @@
                         },
                     },
                     {
+                        icon: ICONS.swap, label: t("编辑工具栏"),
+                        tap: () => {
+                            this.closeSettingsPanel();
+                            this.enterToolbarEdit();
+                        },
+                    },
+                    {
                         icon: ICONS.gear, label: t("完整设置"), big: true,
                         tap: () => {
                             this.closeSettingsPanel();
                             this.call(() => Native.openSetup(this.token));
                         },
                     },
-                ],
             ];
         }
 
@@ -5288,6 +6028,15 @@
             if (ctrlToolEl) ctrlToolEl.hidden = this.composing;
             const imeSwitchButtonEl = document.getElementById('imeSwitchButton');
             if (imeSwitchButtonEl) imeSwitchButtonEl.hidden = this.composing;
+            // 编辑模式可添加的工具（issue #15）随输入统一隐藏——composing
+            // 时候选区空间宝贵；mic 例外（语音 stop 入口必须存活）。
+            // 溢出集（单手等窄布局放不下的）在非 composing 时也保持隐藏。
+            Object.values(TOOL_CATALOG).forEach(dom => {
+                if (dom === 'mic') return;
+                const el = document.getElementById(dom);
+                if (el) el.hidden = this.composing
+                    || (this._overflowTools && this._overflowTools.has(dom));
+            });
             if (this.composing && this.ctrlView) this.suspendCtrlView();
             else if (!this.composing) this.maybeResumeCtrlView();
             // Keep the quick panel open while the user is typing
@@ -5982,7 +6731,7 @@
                     localStorage.setItem(key, String(incoming[key]));
                 }
             } catch (_) { /* storage unavailable */ }
-            applyTheme();
+            applyTheme(this.themeMode || 'auto');
             // 构造时缓存的运行时值一并刷新，否则恢复值只在下次冷启动生效。
             // Native 值到达后（hello 的 scrubSpeed）镜像是纯兼容遗留：运行值
             // 以原生为准，旧镜像（如恢复备份刚写入的 rev）不得回写覆盖。
@@ -6069,6 +6818,56 @@
                 this.preeditBold = payload.preeditBold;
             }
             document.body.dataset.preeditBold = this.preeditBold ? '1' : '0';
+            // 单手模式（issue #15）：0=关 1=左手 2=右手；旧 APK 不带字段不覆盖。
+            if (Number(payload.oneHand) in { 0: 1, 1: 1, 2: 1 }) {
+                this.oneHand = Number(payload.oneHand);
+            }
+            // 2 是废除的「自定义侧边图」档，按空白处理（防旧 pref 直漏）。
+            const side = Number(payload.sideContent);
+            if (side === 0 || side === 1) this.sideContent = side;
+            else if (side === 2) this.sideContent = 1;
+            if (typeof payload.bgImageLight === 'string') this.bgImageLight = payload.bgImageLight;
+            if (typeof payload.bgImageDark === 'string') this.bgImageDark = payload.bgImageDark;
+            const opacity = Number(payload.keyOpacity);
+            if (opacity >= 0 && opacity <= 100) this.keyOpacity = opacity;
+            this.applyOneHand();
+            this.applyBackground();
+            this.applyKeyOpacity();
+            // 主题真相源是 native pref（外观页 select / tile 循环都写它）：
+            // 与本地不同才覆盖。tile 连点的未决意图在途时不覆盖，只确认
+            // 撤签——否则连点后先发的旧快照会把新意图洗掉。
+            const themeMode = payload.themeMode;
+            if (themeMode === 'auto' || themeMode === 'light' || themeMode === 'dark') {
+                this.qConfirm('themeMode', themeMode);
+                try { localStorage.removeItem('feelime_theme'); } catch (_) {}
+                if (this.quickPending.themeMode === undefined && themeMode !== this.themeMode) {
+                    this.themeMode = themeMode;
+                    applyTheme(themeMode);
+                }
+            } else {
+                // 迁移窗口：老版本把主题存在 localStorage（3.45.1 前）。
+                // pref 为空而本地有合法遗留值时上报一次并沿用，升级不丢主题。
+                let legacy = null;
+                try {
+                    const saved = localStorage.getItem('feelime_theme');
+                    if (saved === 'auto' || saved === 'light' || saved === 'dark') legacy = saved;
+                    localStorage.removeItem('feelime_theme');
+                } catch (_) {}
+                if (legacy !== null) {
+                    this.themeMode = legacy;
+                    applyTheme(legacy);
+                    // hello 前段 this.ready 还没置位，this.call 会静默丢——
+                    // token 已就绪，直调（同 pushStores 的旧原生守卫）。
+                    if (typeof Native.setQuickPref === 'function' && this.token) {
+                        Native.setQuickPref('themeMode', legacy, this.token);
+                    }
+                }
+            }
+            // 工具栏布局（issue #15 编辑模式）：非法串整体回退默认。
+            if (typeof payload.toolbarLayout === 'string' && payload.toolbarLayout) {
+                this.applyToolbarLayoutValue(payload.toolbarLayout);
+            }
+            this.applyToolbarLayout();
             this.associationOn = !!payload.associationOn;
             if (!this.associationOn) this.assocWords = [];
             if (payload.uiLanguage === 'auto' || payload.uiLanguage === 'zh' || payload.uiLanguage === 'en') {
@@ -6085,6 +6884,11 @@
             this.qConfirm('uiLocale', this.uiLanguageChoice);
             this.qConfirm('candidateFont', this.candidateFont);
             this.qConfirm('preeditFont', this.preeditFont);
+            this.qConfirm('oneHand', this.oneHand);
+            // 开关型工具 icon 的 on 底色跟随 hello 快照。
+            this.syncToolStates();
+            this.auditToolbarTools();
+            this.qConfirm('sideContent', this.sideContent);
             this.qConfirm('bottomPad', this.bottomPad);
             this.qConfirm('holdMs', this.holdMs);
             this.qConfirm('popupSnap', this.popupSnap);
@@ -6171,7 +6975,7 @@
                 systemTheme = payload.theme;
                 systemThemeKnown = true;
                 try { localStorage.setItem('feelime_system_theme', payload.theme); } catch (_) {}
-                applyTheme();
+                applyTheme(this.themeMode || 'auto');
             }
             const nextMode = MODES[payload.mode] ? payload.mode : 'direct';
             const modeChanged = nextMode !== this.mode;
@@ -6546,27 +7350,36 @@
             systemThemeKnown = true;
         }
     } catch (_) { /* storage unavailable */ }
-    function applyTheme() {
-        let theme = 'auto';
-        try {
-            theme = localStorage.getItem('feelime_theme') || 'auto';
-        } catch (_) { /* stay auto */ }
+    function applyTheme(theme) {
+        // theme 缺省/非法按 auto：auto 跟壳下发的系统主题（systemTheme），
+        // 壳没说话前留空类让 CSS media-query 兜底画。
+        if (theme !== 'auto' && theme !== 'light' && theme !== 'dark') theme = 'auto';
         const root = document.documentElement;
         if (theme !== 'auto') {
             root.className = `theme-${theme}`;
-            return;
+        } else {
+            // auto follows the native system theme (WebView builds differ in
+            // whether prefers-color-scheme ever flips). Until the bridge told
+            // us once, leave the class unset so the CSS media-query fallback
+            // paints.
+            root.className = systemThemeKnown ? `theme-${systemTheme}` : '';
         }
-        // auto follows the native system theme (WebView builds differ in
-        // whether prefers-color-scheme ever flips). Until the bridge told us
-        // once, leave the class unset so the CSS media-query fallback paints.
-        root.className = systemThemeKnown ? `theme-${systemTheme}` : '';
+        // 主题切换即换对应组的背景图与工具栏图形（两组拆分后这里必须
+        // 跟；真机翻车：非 auto 分支提前 return，手动切深色后背景停在
+        // 另一组的图上）。hello 首轮走构造路径时 keyboard 还在 TDZ
+        // （typeof 也会抛 ReferenceError），吞掉即可——hello 尾部自己的
+        // applyBackground/syncToolStates 会铺。
+        try {
+            keyboard.swapThemeGlyph(theme);
+            keyboard.applyBackground();
+        } catch (_) { /* pre-init */ }
     }
     function cycleTheme() {
         try {
             const current = localStorage.getItem('feelime_theme') || 'auto';
             const next = THEMES[(THEMES.indexOf(current) + 1) % THEMES.length];
             localStorage.setItem('feelime_theme', next);
-            applyTheme();
+            applyTheme(next);
             return next;
         } catch (_) {
             return 'auto';
@@ -6593,14 +7406,8 @@
     }
     defocusButtons();
     keyboard.cycleTheme = cycleTheme;
-    keyboard.themeLabel = () => {
-        try {
-            const theme = localStorage.getItem('feelime_theme') || 'auto';
-            return t(THEME_LABELS[theme]);
-        } catch (_) {
-            return t(THEME_LABELS.auto);
-        }
-    };
+    keyboard.themeLabel = () => t(THEME_LABELS[keyboard.themeMode] || THEME_LABELS.auto);
+
     window.Feelime = {
         onBridgeHello: payload => keyboard.onBridgeHello(payload),
         onEngineState: payload => keyboard.onEngineState(payload),
@@ -6608,6 +7415,7 @@
         onNativeState: payload => keyboard.onNativeState(payload),
         onEditorInfo: payload => keyboard.onEditorInfo(payload),
         cancelTouches: () => keyboard.cancelTouches(),
+        cancelToolbarEdit: () => keyboard.cancelToolbarEdit(),
         onClipboard: payload => keyboard.onClipboard(payload),
         onFavorites: payload => keyboard.onFavorites(payload),
         onStoresRestored: stores => keyboard.onStoresRestored(stores),
@@ -6643,6 +7451,10 @@
             // live degrade state (active=false left a stale badge).
             degraded: keyboard.degrade ? { ...keyboard.degrade } : null,
             warming: keyboard.warming,
+            // 工具栏编辑模式（issue #15）：编辑态 + 左右分组只读快照。
+            toolbarEdit: keyboard.toolbarEdit,
+            toolbarLeft: keyboard.toolbarLeft.slice(),
+            toolbarRight: keyboard.toolbarRight.slice(),
             // Automation gates drive setComposition (T9 音节条引擎验证等)；
             // DevTools 已是调试构建的完整控制面，token 不放大攻击面。
             token: keyboard.token,
@@ -6663,6 +7475,45 @@
         setPreeditFont: level => {
             keyboard.preeditFont = Number(level) || 0;
             keyboard.applyPreeditFont();
+        },
+        // Preview/suite hook (issue #15): drive one-handed mode and the
+        // side-strip content without a native hello round-trip.
+        // Suite hook (issue #15): drive the toolbar drag landing directly
+        // (mock cannot synthesize window-level touchmove/touchend).
+        toolbarMove: (id, group, index) => keyboard.moveInToolbar(id, group, index),
+        // Suite hook (issue #15): run the toolbar audit on demand.
+        toolbarAudit: () => keyboard.auditToolbarTools(),
+        // Suite hook (issue #15): add from the pool directly (idempotency
+        // assertions).
+        toolbarAdd: id => keyboard.addToToolbar(id),
+        // Suite hook (issue #15): overwrite both groups (audit-scenario
+        // setup: ghost array entries / orphans cannot be built otherwise).
+        toolbarSet: (left, right) => {
+            keyboard.toolbarLeft = [...left];
+            keyboard.toolbarRight = [...right];
+            keyboard.applyToolbarLayout();
+        },
+        setOneHand: level => {
+            keyboard.oneHand = Number(level) || 0;
+            keyboard.applyOneHand();
+        },
+        setSideContent: mode => {
+            const n = Number(mode) || 0;
+            keyboard.sideContent = n === 2 ? 1 : n;
+            keyboard.applyOneHand();
+        },
+        // Suite hook: the real theme-switch entry (toolbar tool / quick
+        // tile route through it too).
+        cycleTheme: () => keyboard.cycleTheme(),
+        // Suite/preview hook: re-evaluate the theme→image mapping after
+        // switching html theme classes directly (applyTheme does this in
+        // real flows).
+        refreshBackground: () => keyboard.applyBackground(),
+        // Suite/preview hook: drive the background image without a hello.
+        setBgImage: (variant, base64) => {
+            if (variant === 'light') keyboard.bgImageLight = base64 || '';
+            else if (variant === 'dark') keyboard.bgImageDark = base64 || '';
+            keyboard.applyBackground();
         },
         // Device-suite hook: driving the newer bridge methods (height/key
         // events) from automation needs the live page token.

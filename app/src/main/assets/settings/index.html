@@ -15,7 +15,7 @@
 <div class="page" data-page="home">
   <header class="hero">
     <div class="hero-mark">
-      <span class="hero-logo" aria-hidden="true">F.</span>
+      <span class="hero-logo" id="heroLogo" aria-hidden="true">F.</span>
       <div class="hero-titles">
         <h1>Feelime</h1>
         <p class="hero-tag" data-i18n="hero.tag">离线中英混合语音输入法</p>
@@ -70,6 +70,10 @@
     </section>
 
     <nav class="card entries" id="entries" aria-label="设置分组" data-i18n-aria="nav.groups">
+      <button class="entry" type="button" data-target="appearance">
+        <span class="entry-label"><span data-i18n="entry.appearance.title">外观</span><small data-i18n="entry.appearance.subtitle">色彩模式 · 背景图片 · 透明度</small></span>
+        <span class="entry-chevron" aria-hidden="true">›</span>
+      </button>
       <button class="entry" type="button" data-target="input">
         <span class="entry-label"><span data-i18n="entry.input.title">键盘与输入</span><small data-i18n="entry.input.subtitle">双拼 · 定制键盘</small></span>
         <span class="entry-chevron" aria-hidden="true">›</span>
@@ -99,6 +103,100 @@
 </div>
 
 <!-- Keyboard and input. -->
+<div class="page" data-page="appearance" hidden>
+  <header class="page-head">
+    <button class="page-back" type="button" data-back data-i18n-aria="nav.back" aria-label="返回首页">‹</button>
+    <h2 class="page-title" data-i18n="page.appearance">外观</h2>
+  </header>
+  <main>
+  <section class="card" aria-labelledby="appearanceTitle">
+    <div class="section-heading"><h2 id="appearanceTitle" data-i18n="input.appearance.title">外观</h2><span class="eyebrow" data-i18n="input.appearance.badge">主题</span></div>
+    <div class="row language-row">
+      <span class="row-label">
+        <span data-i18n="input.feel.themeMode">色彩模式</span>
+        <small data-i18n="input.feel.themeModeHint">跟随系统，或固定浅色/深色。</small>
+      </span>
+      <select id="themeMode" class="select" aria-label="色彩模式" data-i18n-aria="input.feel.themeMode">
+        <option value="auto" data-i18n="themeMode.auto">跟随系统</option>
+        <option value="light" data-i18n="themeMode.light">浅色</option>
+        <option value="dark" data-i18n="themeMode.dark">深色</option>
+      </select>
+    </div>
+    <div class="row language-row">
+      <span class="row-label">
+        <span data-i18n="input.feel.bgImageLight">亮色背景</span>
+        <small data-i18n="input.feel.bgImageHint">铺满整个键盘区域（工具条到底部留白），压缩到 720px 宽存储，只在本机生效。</small>
+      </span>
+      <select id="bgImageLight" class="select" aria-label="亮色背景" data-i18n-aria="input.feel.bgImageLight">
+        <option value="none" data-i18n="无">无</option>
+        <option value="builtin" data-i18n="内置">内置</option>
+        <option value="pick" data-i18n="选择图片">选择图片…</option>
+      </select>
+    </div>
+    <div class="row language-row">
+      <span class="row-label">
+        <span data-i18n="input.feel.bgImageDark">暗色背景</span>
+        <small data-i18n="input.feel.bgImageHintDark">亮暗切换时各自使用对应组的图片。</small>
+      </span>
+      <select id="bgImageDark" class="select" aria-label="暗色背景" data-i18n-aria="input.feel.bgImageDark">
+        <option value="none" data-i18n="无">无</option>
+        <option value="builtin" data-i18n="内置">内置</option>
+        <option value="pick" data-i18n="选择图片">选择图片…</option>
+      </select>
+    </div>
+    <div class="row language-row">
+      <span class="row-label">
+        <span data-i18n="input.feel.keyOpacity">按键不透明度</span>
+        <small data-i18n="input.feel.keyOpacityHint">键帽在背景图上的透明程度，文字始终实色。</small>
+      </span>
+      <input type="range" id="keyOpacity" class="slider" min="5" max="100" step="5" aria-label="按键不透明度" data-i18n-aria="input.feel.keyOpacity">
+    </div>
+    <div class="row language-row">
+      <span class="row-label">
+        <span data-i18n="input.feel.kbHeight">键盘高度</span>
+        <small data-i18n="input.feel.kbHeightHint">竖屏键盘的高度；键盘上拖拽调节与此处等效。</small>
+      </span>
+      <span class="slider-with-action">
+        <input type="range" id="kbHeight" class="slider" aria-label="键盘高度" data-i18n-aria="input.feel.kbHeight">
+        <button type="button" id="kbHeightReset" class="ghost-btn" data-i18n="input.feel.kbHeightReset">恢复默认</button>
+      </span>
+    </div>
+    <div class="row language-row">
+      <span class="row-label">
+        <span data-i18n="input.feel.padPortrait">底部留白 · 竖屏</span>
+        <small data-i18n="input.feel.padHint">键盘下方的空白高度，0 保持贴底（终端场景），补偿全面屏手势条或系统元素。</small>
+      </span>
+      <select id="bottomPadPortrait" class="select" aria-label="底部留白 · 竖屏" data-i18n-aria="input.feel.padPortrait">
+        <option value="0">0 dp</option>
+        <option value="12">12 dp</option>
+        <option value="24">24 dp</option>
+        <option value="36">36 dp</option>
+        <option value="48">48 dp</option>
+      </select>
+    </div>
+    <div class="row language-row">
+      <span class="row-label">
+        <span data-i18n="input.feel.padLandscape">底部留白 · 横屏</span>
+        <small data-i18n="input.feel.padLandscapeHint">横屏单独保存，互不影响。</small>
+      </span>
+      <select id="bottomPadLandscape" class="select" aria-label="底部留白 · 横屏" data-i18n-aria="input.feel.padLandscape">
+        <option value="0">0 dp</option>
+        <option value="12">12 dp</option>
+        <option value="24">24 dp</option>
+        <option value="36">36 dp</option>
+        <option value="48">48 dp</option>
+      </select>
+    </div>
+    <div class="row block" id="kbPreviewRow">
+      <span class="row-label">
+        <span data-i18n="input.appearance.preview">预览</span>
+        <small data-i18n="input.appearance.previewHint">进入本页时，真实键盘会在屏幕底部弹出（本页自动让位），上面的设置实时生效，直接在这里打字试。</small>
+      </span>
+      <input type="text" id="previewEditor" class="text-input" data-i18n-placeholder="input.appearance.previewPlaceholder" placeholder="直接在这里打字试试" autocomplete="off">
+    </div>
+  </section>
+  </main>
+</div>
 <div class="page" data-page="input" hidden>
   <header class="page-head">
     <button class="page-back" type="button" data-back data-i18n-aria="nav.back" aria-label="返回首页">‹</button>
@@ -158,26 +256,6 @@
       <div class="section-heading"><h2 id="feelTitle" data-i18n="input.feel.title">键盘手感</h2><span class="eyebrow" data-i18n="input.feel.badge">微调</span></div>
       <div class="row language-row">
         <span class="row-label">
-          <span data-i18n="input.feel.pad">底部留白</span>
-          <small data-i18n="input.feel.padHint">键盘下方的空白高度，0 保持贴底（终端场景）。横竖屏分开保存，补偿全面屏手势条或 ColorOS 收起键等系统元素。</small>
-        </span>
-        <select id="bottomPadPortrait" class="select" aria-label="底部留白 · 竖屏" data-i18n-aria="input.feel.padPortrait">
-          <option value="0">0 dp</option>
-          <option value="12">12 dp</option>
-          <option value="24">24 dp</option>
-          <option value="36">36 dp</option>
-          <option value="48">48 dp</option>
-        </select>
-        <select id="bottomPadLandscape" class="select" aria-label="底部留白 · 横屏" data-i18n-aria="input.feel.padLandscape">
-          <option value="0">0 dp</option>
-          <option value="12">12 dp</option>
-          <option value="24">24 dp</option>
-          <option value="36">36 dp</option>
-          <option value="48">48 dp</option>
-        </select>
-      </div>
-      <div class="row language-row">
-        <span class="row-label">
           <span data-i18n="input.feel.hold">长按触发时长</span>
           <small data-i18n="input.feel.holdHint">长按弹出选字、锁定大写、打开模式菜单的等待时间。</small>
         </span>
@@ -215,6 +293,28 @@
         <span class="row-label"><span data-i18n="input.feel.preeditBold">拼音加粗</span><small data-i18n="input.feel.preeditBoldHint">打字时的拼音字母用粗体显示，默认关。</small></span>
         <input type="checkbox" id="preeditBold" class="toggle">
       </label>
+      <div class="row language-row">
+        <span class="row-label">
+          <span data-i18n="input.feel.oneHand">单手模式</span>
+          <small data-i18n="input.feel.oneHandHint">键盘贴左或贴右，空出的侧边条放光标与编辑操作。</small>
+        </span>
+        <select id="oneHand" class="select" aria-label="单手模式" data-i18n-aria="input.feel.oneHand">
+          <option value="0" data-i18n="关">关</option>
+          <option value="1" data-i18n="左手">左手</option>
+          <option value="2" data-i18n="右手">右手</option>
+        </select>
+      </div>
+      <div class="row language-row">
+        <span class="row-label">
+          <span data-i18n="input.feel.sideContent">侧边条内容</span>
+          <small data-i18n="input.feel.sideContentHint">单手模式下空出区域的内容。</small>
+        </span>
+        <select id="sideContent" class="select" aria-label="侧边条内容" data-i18n-aria="input.feel.sideContent">
+          <option value="0" data-i18n="光标控制">光标控制</option>
+          <option value="1" data-i18n="空白">空白</option>
+        </select>
+      </div>
+
       <div class="row language-row">
         <span class="row-label">
           <span data-i18n="input.feel.scrub">光标移动速度</span>

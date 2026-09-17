@@ -113,6 +113,12 @@ textarea:focus-visible, summary:focus-visible {
     font: 700 20px/44px var(--mono);
     text-align: center;
 }
+.hero-logo img {
+    width: 100%;
+    height: 100%;
+    display: block;
+    border-radius: 10px;
+}
 
 .hero-titles h1 {
     margin: 0;
@@ -550,3 +556,34 @@ details summary {
 #dpKeymap .kmap-key b { display: block; font-size: 13px; font-weight: 600; color: var(--text); }
 #dpKeymap .kmap-key span { display: block; font-size: 9px; color: var(--muted); white-space: nowrap; }
 #dpKeymap .kmap-key i { font-style: normal; font-size: 9px; color: var(--accent-text); }
+
+
+/* 外观页滑块（按键不透明度 / 键盘高度）。 */
+.slider { flex: none; width: 150px; accent-color: var(--accent, #18ad7c); }
+.slider-with-action { display: flex; align-items: center; gap: 8px; flex: none; }
+.slider-with-action .slider { width: 120px; }
+.ghost-btn {
+    border: 1px solid var(--line, #d8d8d8);
+    background: transparent;
+    color: inherit;
+    border-radius: 8px;
+    padding: 4px 10px;
+    font-size: 12px;
+    cursor: pointer;
+}
+
+/* 外观页演示输入框：进入本页时桥接层让 IME 弹出真实键盘，本页窗口
+   被 adjustResize 压缩到键盘上方，设置调整实时反映在真键盘上。
+   预览行纵排（label 在上、输入框在下），别在 flex 行里被挤成竖条。 */
+#kbPreviewRow { display: block; }
+#previewEditor {
+    width: 100%;
+    margin-top: 10px;
+    padding: 10px 12px;
+    border: 1px solid var(--line, #d8d8d8);
+    border-radius: 10px;
+    background: transparent;
+    color: inherit;
+    font-size: 14px;
+    box-sizing: border-box;
+}

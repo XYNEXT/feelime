@@ -1674,6 +1674,28 @@ test('resetToHome lands on the letters with every layer closed ',  ()=> {
     assert(!world.$('modeMenu').classList.contains('open'), 'mode menu closed');
 });
 
+test('resetToHome cancels toolbar edit (hide-path rollback, nothing saved)', () => {
+    const w = fresh();
+    w.hello({});
+    const state = w.context.window.Feelime.debugState;
+    // 进编辑态（长按 mic 入口），× 掉 favorites。
+    w.touchDown(w.$('mic'));
+    w.clock.advance(400);
+    assert(w.document.body.classList.contains('toolbar-edit'), 'edit mode on');
+    const fav = w.$('favoritesButton');
+    const x = fav.children.find(c => c.className === 'tool-x');
+    w.touchDown(x);
+    w.touchUp(x);
+    equal(state().toolbarRight.join(','), 'clipboard,mic', 'favorites removed');
+    // 收起键盘等价路径：resetToHome 必须按「取消」回退，不落盘。
+    w.context.window.Feelime.resetToHome();
+    assert(!w.document.body.classList.contains('toolbar-edit'), 'edit class gone');
+    equal(state().toolbarRight.join(','), 'clipboard,favorites,mic',
+        'snapshot restored');
+    equal(w.native.of('setQuickPref').filter(c => c.args[0] === 'toolbarLayout').length,
+        0, 'nothing saved on rollback');
+});
+
 test('float band rides hello; band popups flip the native touch region', () => {
     const world = fresh({ floatBand: 200 });
     equal(world.document.documentElement.style.getPropertyValue('--band'),
@@ -2184,13 +2206,18 @@ test('setup button opens the quick settings panel; full settings entry calls ope
     assert(panel.classList.contains('open'), 'settings panel open');
     // 3.38.0 tile grid (wechat-style): both pages render into the DOM.
     // Complex features are sub-page nav tiles; tools stay on the toolbar.
+    // 3.43.0 adds 单手模式 — pages stay strictly 2×4 (8 tiles each).
     equal(JSON.stringify(world.tileNames()),
         JSON.stringify([
             '色彩模式', '中文联想', '按键声音', '按键振动',
             '键盘高度', '快捷切换', '候选字号', '界面语言',
+            ...(verAtLeast(KEYBOARD_VERSION, '3.43.0') ? ['单手模式'] : []),
             '底部留白', '长按时长', '滑动选字', '长按菜单',
-            '定制键盘', '双拼方案', '完整设置',
-        ]),
+            '定制键盘', '双拼方案',
+            ...(verAtLeast(KEYBOARD_VERSION, '3.44.0') ? ['编辑工具栏'] : []),
+            '完整设置',
+        ].slice(0, verAtLeast(KEYBOARD_VERSION, '3.44.0') ? 17
+            : verAtLeast(KEYBOARD_VERSION, '3.43.0') ? 16 : 15)),
         'quick-settings tiles present (2 pages, voice/clipboard stay on the main keyboard)');
     equal(world.native.of('openSetup').length, 0, 'no openSetup until the full-settings entry');
     // The full-settings entry is a toolbar button next to the
@@ -2381,6 +2408,324 @@ test('candidate font scale rides hello into the body dataset', {since: '3.30.0'}
     equal(world.document.body.dataset.candFont, 'xlarge', 'xlarge tier applied');
     world.hello({candidateFont: 9});
     equal(world.document.body.dataset.candFont, 'xlarge', 'off-whitelist ignored (keeps last)');
+});
+
+test('one-handed mode rides hello into the side pad (issue #15)', {since: '3.43.0'}, () => {
+    const world = fresh();
+    world.hello({});
+    equal(world.document.body.dataset.oneHand, 'off', 'default off');
+    equal(world.document.body.dataset.sideContent, 'cursor', 'default cursor strip');
+    world.hello({oneHand: 1});
+    equal(world.document.body.dataset.oneHand, 'left', 'left tier applied');
+    const pad = world.document.getElementById('sidePad');
+    assert(pad, 'side pad exists');
+    equal(world.document.querySelectorAll('#sideGrid .side-key').length, 8,
+        'cursor cluster has 8 keys (4 arrows + selectAll/paste/copy/cut)');
+    world.hello({oneHand: 2});
+    equal(world.document.body.dataset.oneHand, 'right', 'right tier applied');
+    world.hello({oneHand: 0, sideContent: 1});
+    equal(world.document.body.dataset.oneHand, 'off', 'off applied');
+    equal(world.document.body.dataset.sideContent, 'blank', 'blank strip applied');
+    // 旧 pref 的 2（自定义侧边图档已废除）折算成 blank。
+    world.hello({sideContent: 2});
+    equal(world.document.body.dataset.sideContent, 'blank', 'legacy image tier folds to blank');
+    world.hello({oneHand: 7, sideContent: 9});
+    equal(world.document.body.dataset.oneHand, 'off', 'off-whitelist oneHand ignored');
+    equal(world.document.body.dataset.sideContent, 'blank', 'off-whitelist sideContent ignored');
+});
+
+test('key opacity: --key-alpha is a 0..1 fraction floored at 5%', {since: '3.45.1'}, () => {
+    const alpha = world => world.document.documentElement.style.getPropertyValue('--key-alpha');
+    const world = fresh();
+    equal(alpha(world), '1', 'default (no hello field) stays fully opaque');
+    world.hello({keyOpacity: 100});
+    equal(alpha(world), '1', '100% -> 1');
+    world.hello({keyOpacity: 50});
+    equal(alpha(world), '0.5', '50% -> 0.5');
+    world.hello({keyOpacity: 0});
+    equal(alpha(world), '0.05', 'floor at 5% so keys never vanish');
+    // hello 通道对越界值是「忽略并保留原值」（clamp 由设置页/原生层负责）。
+    world.hello({keyOpacity: 999});
+    equal(alpha(world), '0.05', 'above 100 ignored, keeps previous');
+    world.hello({keyOpacity: 60});
+    equal(alpha(world), '0.6', '60% -> 0.6');
+    world.hello({keyOpacity: -3});
+    equal(alpha(world), '0.6', 'negative ignored, keeps previous');
+});
+
+test('background images: light and dark groups render per theme', {since: '3.45.0'}, () => {
+    const world = fresh();
+    world.hello({});
+    world.document.documentElement.className = 'theme-light';
+    equal(world.document.body.dataset.bgImage, 'off', 'no image by default');
+    // 只有暗色组有图：亮色主题不铺，暗色主题铺。
+    world.hello({bgImageDark: 'REFDQUs='});
+    const refresh = () => world.context.window.Feelime.refreshBackground();
+    world.document.documentElement.className = 'theme-light';
+    refresh();
+    equal(world.document.body.dataset.bgImage, 'off', 'dark-only image hides in light theme');
+    world.document.documentElement.className = 'theme-dark';
+    refresh();
+    equal(world.document.body.dataset.bgImage, 'on', 'dark-only image shows in dark theme');
+    assert(world.document.getElementById('bgImage').style.backgroundImage.includes('REFDQUs='),
+        'dark group base64 lands as background');
+    // 两组都有：切主题即换图。
+    world.hello({bgImageDark: 'REFDQUs=', bgImageLight: 'TElHSFQ='});
+    world.document.documentElement.className = 'theme-dark';
+    refresh();
+    assert(world.document.getElementById('bgImage').style.backgroundImage.includes('REFDQUs='),
+        'dark theme uses the dark group');
+    world.document.documentElement.className = 'theme-light';
+    refresh();
+    assert(world.document.getElementById('bgImage').style.backgroundImage.includes('TElHSFQ='),
+        'light theme uses the light group');
+    // 亮色组清空 → 亮色主题回纯色，暗色组不受影响。
+    world.context.window.Feelime.setBgImage('light', '');
+    equal(world.document.body.dataset.bgImage, 'off', 'clearing light group hides it');
+    world.document.documentElement.className = 'theme-dark';
+    refresh();
+    equal(world.document.body.dataset.bgImage, 'on', 'dark group unaffected');
+    // 该组无图必须清掉层上的旧背景（真机翻车：暗色主题铺着亮色组的老图）。
+    world.document.documentElement.className = 'theme-light';
+    refresh();
+    equal(world.document.getElementById('bgImage').style.backgroundImage, '',
+        'empty group clears the layer background');
+    // 主题切换必须换图（applyTheme 的非 auto 分支真机翻车：提前 return
+    // 不刷新背景，手动切深色后停在亮色组的图上）。cycleTheme 走真实入口。
+    world.context.window.Feelime.setBgImage('dark', 'REFDQUs=');
+    world.document.documentElement.className = 'theme-dark';
+    refresh();
+    const before = world.document.getElementById('bgImage').style.backgroundImage;
+    assert(before.includes('REFDQUs='), 'dark group active before cycle');
+    world.context.window.Feelime.cycleTheme();
+    equal(world.document.body.dataset.bgImage, 'off',
+        'cycling to auto (no light img) clears the layer');
+});
+
+test('toolbar edit mode: long-press enters, × removes to pool, tap adds back, done saves (issue #15)', {since: '3.44.0'}, () => {
+    const w = fresh();
+    w.hello({});
+    const kb = () => w.context.window.Feelime.debugState();
+
+    // 左组必须落在候选条行内（candidates 之前）——锚到 preeditLine 会把
+    // 按钮插成键盘顶部的全宽行，把键盘顶出一屏（真机回归）。
+    const inBar = [...w.$('candidateBar').children];
+    const candIdx = inBar.indexOf(w.$('candidates'));
+    assert(candIdx > 0, 'candidates lives in the bar');
+    ['ctrlTool', 'imeSwitchButton'].forEach(id => {
+        const idx = inBar.indexOf(w.$(id));
+        assert(idx > 0 && idx < candIdx, id + ' sits in the bar before candidates');
+    });
+
+    // 即点即抬不进编辑态；长按 ≥280ms 才进。
+    w.tap(w.$('mic'));
+    equal(kb().toolbarEdit, false, 'quick tap stays out of edit mode');
+    const holdBefore = w.native.of('startVoice').length;
+    w.touchDown(w.$('mic'));
+    w.clock.advance(400);
+    equal(kb().toolbarEdit, true, 'long-press enters edit mode');
+    equal(w.native.of('startVoice').length, holdBefore,
+        'edit-mode long-press never fires the voice hold');
+    equal(w.document.body.className.includes('toolbar-edit'), true, 'body edit class');
+    equal(w.$('toolbarEditor').hidden, false, 'editor section visible');
+
+    // 默认 5 个工具全在栏上（left=[ctrl,ime] right=[clipboard,favorites,mic]）；
+    // 仓库里是 5 个默认不上栏的开关型工具（动态创建）。
+    equal(w.$('toolbarEditorGrid').children.length, 5, 'pool starts with the 5 toggle tools');
+    ['toolTheme', 'toolVibrate', 'toolSound', 'toolAssoc', 'toolOneHand'].forEach(id => {
+        assert(w.$(id), id + ' created');
+    });
+
+    // 编辑态点栏上工具不触发原功能（mic 不进入语音）。
+    const voiceBefore = w.native.of('startVoice').length;
+    w.tap(w.$('mic'));
+    equal(w.native.of('startVoice').length, voiceBefore, 'edit mode swallows tool taps');
+
+    // × 移除：favorites 从栏上掉进仓库。
+    const fav = w.$('favoritesButton');
+    const x = fav.children.find(c => c.className === 'tool-x');
+    assert(x, '× badge exists on tool');
+    w.touchDown(x);
+    w.touchUp(x);
+    equal(kb().toolbarRight.join(','), 'clipboard,mic', '× removes favorites from right group');
+    equal(w.$('toolbarEditorGrid').children.length, 6, 'removed tool joins the 5 toggle tools');
+
+    // 点仓库里的 favorites 加回（right 组未满 → 追加到队尾）。
+    // 编辑态点仓库只做「上工具栏」：favorites 的 click 直连
+    // openPanel。标准浏览器在 touchstart preventDefault 后不合成
+    // click，但 ColorOS WebView 违规双发（真机实测面板被弹开）——
+    // 直接 fav.click() 模拟违规合成 click，仓库 capture 必须拦掉。
+    fav.click();
+    equal(w.$('panelLayer').hidden, true, 'pool click never opens the panel');
+    // touchend 通道（添加）必须继续工作。
+    w.touchDown(fav);
+    w.touchUp(fav);
+    equal(kb().toolbarRight.join(','), 'clipboard,mic,favorites', 'pool tap appends to right group');
+    equal(w.$('toolbarEditorGrid').children.length, 5, 'pool back to the 5 toggle tools');
+
+    // 「完成」退出并持久化。
+    w.tap(w.$('toolbarEditDone'));
+    equal(kb().toolbarEdit, false, 'done exits edit mode');
+    const saved = w.native.of('setQuickPref').filter(c => c.args[0] === 'toolbarLayout');
+    equal(saved.length, 1, 'layout saved once on done');
+    equal(saved[0].args[1], JSON.stringify({ left: ['ctrl', 'ime'], right: ['clipboard', 'mic', 'favorites'] }),
+        'layout payload matches groups');
+
+    // 退出后原功能恢复。
+    w.tap(w.$('mic'));
+    equal(w.native.of('startVoice').length, voiceBefore + 1, 'tool works again after exit');
+
+    // 取消：连 × 两个再取消，布局整体回退且不落盘（两按钮都在 pool）。
+    w.touchDown(w.$('mic'));
+    w.clock.advance(400);
+    w.touchUp(w.$('mic'));
+    const xOf = id => w.$(id).children.find(c => c.className === 'tool-x');
+    w.touchDown(xOf('favoritesButton'));
+    w.touchUp(xOf('favoritesButton'));
+    w.touchDown(xOf('mic'));
+    w.touchUp(xOf('mic'));
+    equal(kb().toolbarRight.join(','), 'clipboard', 'two removals land both in the pool');
+    equal(w.$('toolbarEditorGrid').children.length, 7,
+        'pool holds both removed tools + 5 toggle tools (no innerHTML wipe)');
+    w.tap(w.$('toolbarEditCancel'));
+    equal(kb().toolbarLeft.join(','), 'ctrl,ime', 'cancel restores left snapshot');
+    equal(kb().toolbarRight.join(','), 'clipboard,mic,favorites', 'cancel restores right snapshot');
+    equal(w.$('toolbarEditorGrid').children.length, 5,
+        'pool drains back to the 5 toggle tools after cancel');
+    equal(w.native.of('setQuickPref').filter(c => c.args[0] === 'toolbarLayout').length, 1,
+        'cancel never saves');
+
+    // 死锁保护靠两个入口：快捷设置 tile + 长按候选条空白。全移除并保存
+    // 后，长按 bar 本身（空白）仍能进编辑；tile 同样直达。
+    w.touchDown(w.$('mic'));
+    w.clock.advance(400);
+    w.touchUp(w.$('mic'));
+    ['favoritesButton', 'mic', 'clipboardButton', 'ctrlTool', 'imeSwitchButton']
+        .forEach(id => {
+            const x = xOf(id);
+            assert(x, '× exists on ' + id);
+            w.touchDown(x);
+            w.touchUp(x);
+        });
+    equal(kb().toolbarLeft.length + kb().toolbarRight.length, 0, 'bar fully stripped');
+    equal(w.$('toolbarEditorGrid').children.length, 10, 'all ten tools in the pool');
+    w.tap(w.$('toolbarEditDone'));
+    equal(kb().toolbarEdit, false, 'empty layout saves fine');
+    w.touchDown(w.$('candidateBar'));
+    w.clock.advance(400);
+    w.touchUp(w.$('candidateBar'));
+    equal(kb().toolbarEdit, true, 'long-press on bare bar re-enters edit mode');
+    w.tap(w.$('toolbarEditCancel'));
+    w.tap(w.$('setupButton')); // 面板懒渲染,先打开才有 tile
+    w.tap(w.tile('编辑工具栏'));
+    equal(kb().toolbarEdit, true, 'quick-settings tile opens the editor');
+
+    // 开关型工具（动态创建，默认待在仓库）：tap 加回后点击即 toggle。
+    const soundTool = w.document.getElementById('toolSound');
+    assert(soundTool, 'toggle tool is created');
+    w.touchDown(soundTool);
+    w.touchUp(soundTool);
+    equal(w.native.of('setQuickPref').filter(c => c.args[0] === 'keySound').length, 0,
+        'edit mode swallows toggle tools too');
+    equal(kb().toolbarRight.includes('sound'), true, 'sound tool joins the right group');
+    w.tap(w.$('toolbarEditDone'));
+    w.tap(soundTool);
+    equal(w.native.of('setQuickPref').filter(c => c.args[0] === 'keySound').length, 1,
+        'tap flips keySound through the bridge');
+    equal(soundTool.className.includes('state-on'), true, 'on state lights the button');
+
+    // 幂等：同一颗重复 addToToolbar（合成 click 双发）不产生重复项。
+    const kbf = w.context.window.Feelime;
+    kbf.toolbarAdd('mic');
+    kbf.toolbarAdd('mic');
+    const stDup = kbf.debugState();
+    equal(stDup.toolbarLeft.filter(x => x === 'mic').length
+        + stDup.toolbarRight.filter(x => x === 'mic').length, 1,
+        'duplicate addToToolbar is a no-op');
+
+    // 满组交换：右组 4 颗时把左组工具挪过去，落点按钮换回来，不丢。
+    // 当前布局：right=[sound]，其余都在仓库——重新进编辑态凑出左 1 右 4。
+    const poolNow = w.$('toolbarEditorGrid');
+    w.touchDown(w.$('candidateBar'));
+    w.clock.advance(400);
+    w.touchUp(w.$('candidateBar'));
+    equal(kb().toolbarEdit, true, 're-enter edit mode');
+    ['clipboardButton', 'favoritesButton', 'mic', 'imeSwitchButton']
+        .forEach(id => w.tap(w.$(id)));
+    equal(kb().toolbarRight.length, 4, 'right group filled to 4');
+    equal(kb().toolbarLeft.join(','), 'ime', 'right full: ime overflows into the left group');
+    const kbi = w.context.window.Feelime;
+    kbi.toolbarMove('ime', 'right', 1);
+    const st = kb();
+    equal(st.toolbarRight.length, 4, 'right group stays at 4 after swap');
+    equal(st.toolbarRight.includes('ime'), true, 'ime lands in the right group');
+    equal(st.toolbarLeft.length, 1, 'left group keeps one (the displaced tool)');
+    equal(st.toolbarLeft.length + st.toolbarRight.length, 5, 'no tool lost in the swap');
+    equal(poolNow.children.length, 5, 'pool back to the toggle tools only');
+    w.tap(w.$('toolbarEditCancel'));
+});
+
+test('toolbar audit: a lost tool is forced back into the pool (issue #15)', () => {
+    const w = fresh();
+    w.hello({});
+    const kb = w.context.window.Feelime;
+
+    // 场景 A:配置在栏上、DOM 被摘掉 → audit 重新插桩回栏上。
+    const fav = w.$('favoritesButton');
+    fav.remove();
+    kb.toolbarAudit();
+    equal(!!w.$('favoritesButton').closest('#candidateBar'), true,
+        'listed tool is re-anchored into the bar');
+
+    // 场景 B:DOM 在条上、数组没有(孤儿)→ 回仓库。
+    const st1 = kb.debugState();
+    kb.toolbarSet(st1.toolbarLeft,
+                  st1.toolbarRight.filter(x => x !== 'clipboard'));
+    kb.toolbarAudit();
+    equal(!!w.$('clipboardButton').closest('#toolbarEditorGrid'), true,
+        'orphan tool returns to the pool');
+
+    // 场景 C:仓库里的按钮被误写 hidden(历史残留路径)→ audit 恢复可见;
+    // 「栏上没有的都在下面完整展示」。
+    const theme = w.$('toolTheme');
+    theme.hidden = true;
+    kb.toolbarAudit();
+    equal(theme.hidden, false, 'pool tools are always visible');
+
+    // 兜底完整性:10 颗工具此刻都能在 bar 或 pool 找到。
+    const all = ['ctrlTool','imeSwitchButton','clipboardButton','favoritesButton','mic',
+        'toolTheme','toolVibrate','toolSound','toolAssoc','toolOneHand'];
+    const lost = all.filter(id => {
+        const el = w.$(id);
+        return !el || (!el.closest('#candidateBar') && !el.closest('#toolbarEditorGrid'));
+    });
+    equal(lost.length, 0, 'no tool is unreachable after audit: ' + lost.join(','));
+});
+
+test('added toolbar tools hide while composing in every mode (issue #15)', () => {
+    // 全拼/双拼/T9/日语/法语/俄语：隐藏逻辑在共用的 updateComposing 里，
+    // 每种模式的 composing 都必须点亮；mic 是语音 stop 入口，必须保留。
+    const modes = ['pinyin', 'double-pinyin', 't9', 'japanese', 'french', 'russian'];
+    const toggleTools = ['toolTheme', 'toolVibrate', 'toolSound', 'toolAssoc', 'toolOneHand'];
+    let rev = 100;
+    modes.forEach(mode => {
+        const w = fresh();
+        w.hello({});
+        // 把 sound 上栏（编辑态 × 掉一个再退，保证 hidden 属性切换发生在栏上）。
+        w.engineState({ mode, revision: ++rev, candidates: [], composing: 'abc' });
+        toggleTools.forEach(id => {
+            equal(w.$(id).hidden, true, mode + ' composing hides ' + id);
+        });
+        // 组合中（无语音会话）mic 同样让位：右侧只留 ×（现有规则
+        // mic.hidden = composing && !recording）。
+        equal(w.$('mic').hidden, true, mode + ' composing hides the mic too');
+        equal(w.$('hide').hidden, true, mode + ' composing hides the chevron');
+        // 退出 composing：按钮回来。
+        w.engineState({ mode, revision: ++rev, candidates: [], composing: '' });
+        toggleTools.forEach(id => {
+            equal(w.$(id).hidden, false, mode + ' idle restores ' + id);
+        });
+    });
 });
 
 test('quick-pair editor: tick 双拼 relabels the toggle and flips the pair', () => {
@@ -2680,6 +3025,34 @@ test('quick tiles: toggles write setQuickPref, hello echo re-reads state', {sinc
     assert(calls.every(tok => tok === world.tokenValue), 'every write carries the page token');
 });
 
+test('theme tile writes theme_mode pref; in-flight intent survives stale hello', {since: '3.45.1'}, () => {
+    const world = fresh();
+    world.hello({ themeMode: 'auto' });
+    world.tap(world.$('setupButton'));
+    const lastPref = () => {
+        const call = world.native.of('setQuickPref').slice(-1)[0];
+        return `${call.args[0]}=${call.args[1]}`;
+    };
+    // 连点：auto → light → dark，每次都落 native pref（真相源）。
+    world.tap(world.tile('色彩模式'));
+    equal(lastPref(), 'themeMode=light', 'tile cycle writes the native pref');
+    world.tap(world.tile('色彩模式'));
+    equal(lastPref(), 'themeMode=dark', 'second tap lands dark');
+    equal(world.document.documentElement.className, 'theme-dark', 'keyboard is dark now');
+
+    // 先发的旧快照（上一档的广播回来）不许把新意图洗掉——真机实录：
+    // 暗色下调不透明度滑块，hello 按旧 pref 把键盘弹回系统亮色。
+    world.hello({ themeMode: 'light' });
+    equal(world.document.documentElement.className, 'theme-dark',
+        'stale hello cannot wash the in-flight intent');
+
+    // 匹配意图的快照撤签；此后不同值照常单向推送（外观页 select 路径）。
+    world.hello({ themeMode: 'dark' });
+    world.hello({ themeMode: 'light' });
+    equal(world.document.documentElement.className, 'theme-light',
+        'after confirm, native push applies again');
+});
+
 test('quick tiles: cycle tiles rotate steps and apply locally', {since: '3.38.0'}, () => {
     const world = fresh();
     world.hello({ candidateFont: 0, holdMs: 350, popupSnap: 1, bottomPad: 0, dpScheme: 'ziranma' });
@@ -2730,6 +3103,25 @@ test('quick tiles: re-render keeps the current page (no jump to page 1)', {since
     assert(dots[1] && dots[1].classList.contains('cur'), 'second dot active');
 });
 
+test('quick tiles grid is strictly 2x4 (no third row, ever)', {since: '3.44.0'}, () => {
+    const world = fresh();
+    world.hello();
+    world.tap(world.$('setupButton'));
+    const pages = [...world.document.querySelectorAll('.qs-page')];
+    // 每页硬上限 8 个 tile：.qs-page 的 grid 是 4 列 × 2 行，第 9 个
+    // 会溢出成隐式第三行（真机翻车）。渲染层按 8 个一页硬切，新增
+    // tile 只会多一页，永远挤不爆网格。
+    pages.forEach((page, i) => {
+        assert(page.children.length <= 8,
+            `page ${i + 1} holds ${page.children.length} tiles (max 8)`);
+    });
+    // 没有 tile 在分页时被丢掉。
+    const total = pages.reduce((n, p) => n + p.children.length, 0);
+    equal(total, world.tileNames().length, 'no tile dropped by paging');
+    assert(total > 8 && pages.length >= 2,
+        'overflow spills to a new page, never a new row');
+});
+
 test('quick tiles: gear tile opens full settings; old APKs never fake state', {since: '3.38.0'}, () => {
     const world = fresh();
     world.hello({ keySound: false });
@@ -2757,15 +3149,15 @@ test('first paint: never guess a system theme before the bridge speaks', () => {
     equal(warm.document.documentElement.className, 'theme-dark', 'persisted system theme paints on load');
 });
 
-test('auto theme follows hello payload; explicit storage wins', () => {
+test('auto theme follows system payload; themeMode from the shell wins', () => {
     const dark = new KeyboardWorld().build();
     dark.hello({ theme: 'dark' });
     equal(dark.document.documentElement.className, 'theme-dark', 'auto adopts system dark');
 
     const pinned = new KeyboardWorld().build();
-    pinned.storage.set('feelime_theme', 'light');
-    pinned.hello({ theme: 'dark' });
-    equal(pinned.document.documentElement.className, 'theme-light', 'explicit light beats system dark');
+    pinned.hello({ themeMode: 'light', theme: 'dark' });
+    equal(pinned.document.documentElement.className, 'theme-light',
+        'shell themeMode beats the system payload');
 
     const again = new KeyboardWorld().build();
     again.hello({ theme: 'dark' });
@@ -2773,14 +3165,27 @@ test('auto theme follows hello payload; explicit storage wins', () => {
     equal(again.document.documentElement.className, 'theme-light', 'config change repushes theme');
 });
 
-test('theme preference survives a reload', () => {
-    const first = new KeyboardWorld().build();
-    first.hello();
-    first.storage.set('feelime_theme', 'light');
-    const secondWorld = new KeyboardWorld();
-    secondWorld.storage.set('feelime_theme', 'light');
-    const second = secondWorld.build();
-    equal(second.document.documentElement.className, 'theme-light', 'pinned light reapplies on load');
+test('theme comes from the shell; legacy localStorage migrates once', () => {
+    // 重载后主题由壳 hello 重放（localStorage 不再是真相源）。
+    const second = new KeyboardWorld().build();
+    equal(second.document.documentElement.className, '', 'pre-hello paint stays on the CSS fallback');
+    second.hello({ themeMode: 'light' });
+    equal(second.document.documentElement.className, 'theme-light', 'hello replays the shell pref');
+
+    // 老版本遗留的 localStorage 值：首次 hello 上报一次并沿用，升级不丢主题。
+    const legacy = new KeyboardWorld();
+    legacy.storage.set('feelime_theme', 'dark');
+    const world = legacy.build();
+    world.hello({ theme: 'light' });
+    equal(world.document.documentElement.className, 'theme-dark', 'legacy value applies');
+    const up = world.native.of('setQuickPref').filter(c => c.args[0] === 'themeMode');
+    equal(up.length, 1, 'legacy value reported to the shell once');
+    equal(up[0].args[1], 'dark', 'reported value is the legacy theme');
+    equal(world.storage.get('feelime_theme'), undefined, 'legacy key cleared after migration');
+
+    // 迁移完成后 localStorage 残留值被无视。
+    world.hello({ themeMode: 'light' });
+    equal(world.document.documentElement.className, 'theme-light', 'shell pref wins after migration');
 });
 
 // ------------------------------------------------- userdata stores mirror
@@ -2794,15 +3199,15 @@ test('stores mirror: hello pushes localStorage settings to native; onStoresResto
     const pushes = world.native.of('pushStores');
     equal(pushes.length, 1, 'one mirror push per hello');
     const payload = JSON.parse(pushes[0].args[0]);
-    equal(payload.feelime_theme, 'dark', 'theme rides the mirror');
+    // 色彩模式已迁 theme_mode（feelime_keyboard.xml 备份打包），镜像不再带。
+    equal(payload.feelime_theme, undefined, 'theme left the mirror (native pref is the source)');
     equal(payload.feelime_scrub_speed, '5', 'scrub speed rides the mirror');
     equal(payload.feelime_symbol_recent, undefined, 'usage traces stay out of the backup');
 
-    // 导入恢复：原生把镜像推回来，主题当场生效、白名单外键被忽略。
+    // 导入恢复：白名单外键（含迁走的 theme）被忽略。
     world.context.window.Feelime.onStoresRestored({ feelime_theme: 'light', feelime_evil_key: '1' });
-    equal(world.document.documentElement.className, 'theme-light', 'restored theme applies');
     equal(world.storage.get('feelime_evil_key'), undefined, 'non-whitelisted keys are dropped');
-    equal(world.storage.get('feelime_theme'), 'light', 'restored theme is persisted');
+    equal(world.storage.get('feelime_theme'), undefined, 'restored theme stays out of storage');
 });
 
 test('stores rev: a newer native mirror (settings import) wins the next hello', {since: '3.28.0'}, () => {
@@ -2814,33 +3219,32 @@ test('stores rev: a newer native mirror (settings import) wins the next hello', 
     world.native.storesRev = 7;
     world.native.storesPayload = JSON.stringify({
         rev: 7,
-        values: { feelime_theme: 'light', feelime_scrub_speed: '5', feelime_evil: 'x' },
+        values: { feelime_scrub_speed: '5', feelime_evil: 'x' },
     });
     world.hello();
-    equal(world.storage.get('feelime_theme'), 'light', 'hello pulls the restored values');
+    equal(world.storage.get('feelime_scrub_speed'), '5', 'hello pulls the restored values');
     // 拉取(7)之后 hello 收尾的 push 把 rev 推到 8——值已收敛，只是计号前进。
     equal(parseInt(world.storage.get('feelime_stores_rev'), 10) >= 7, true,
         'rev recorded after pull');
     equal(world.storage.get('feelime_evil'), undefined, 'non-whitelisted values are dropped');
-    equal(world.document.documentElement.className, 'theme-light', 'restored theme applies');
-    equal(JSON.parse(world.native.of('pushStores').slice(-1)[0].args[0]).feelime_theme,
-        'light', 'the follow-up push carries the restored values, not the stale ones');
+    equal(JSON.parse(world.native.of('pushStores').slice(-1)[0].args[0]).feelime_scrub_speed,
+        '5', 'the follow-up push carries the restored values, not the stale ones');
 });
 
 test('stores restore is authoritative: keys absent from the backup are removed locally', {since: '3.28.0'}, () => {
     const world = new KeyboardWorld().build();
-    world.storage.set('feelime_theme', 'dark');
+    world.storage.set('feelime_ui_locale', 'en');
     world.storage.set('feelime_scrub_speed', '5');
     world.storage.set('feelime_quick_pair', JSON.stringify(['direct', 'double']));
     world.hello();
-    // 导入的备份只带 theme（scrub/quick_pair 是导出方没有的键）。
+    // 导入的备份只带 locale（scrub/quick_pair 是导出方没有的键）。
     world.native.storesRev = 9;
     world.native.storesPayload = JSON.stringify({
         rev: 9,
-        values: { feelime_theme: 'light' },
+        values: { feelime_ui_locale: 'en' },
     });
     world.hello();
-    equal(world.storage.get('feelime_theme'), 'light', 'restored value lands');
+    equal(world.storage.get('feelime_ui_locale'), 'en', 'restored value lands');
     equal(world.storage.get('feelime_scrub_speed'), undefined,
         'key absent from the backup is removed (overwrite semantics)');
     equal(world.storage.get('feelime_quick_pair'), undefined,
@@ -2868,12 +3272,12 @@ test('hello locale change defers its push until after the pull (restore survives
 
 test('stores pull ignores malformed mirror payloads', {since: '3.28.0'}, () => {
     const world = new KeyboardWorld().build();
-    world.storage.set('feelime_theme', 'dark');
+    world.storage.set('feelime_scrub_speed', '3');
     world.hello();
     // rev 跳号但 values 是数组：异常镜像不能当成「空备份」触发全量删除。
     world.native.storesPayload = JSON.stringify({ rev: 12, values: [] });
     world.hello();
-    equal(world.storage.get('feelime_theme'), 'dark',
+    equal(world.storage.get('feelime_scrub_speed'), '3',
         'array payload is not an empty backup');
 });
 

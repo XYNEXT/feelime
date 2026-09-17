@@ -131,6 +131,21 @@ class SetupActivity : AppCompatActivity() {
         if (uri != null) bridge.restoreUserdataBackupFromUri(uri)
     }
 
+    /** Background-image picker (WebView <input type=file>). Without this
+     * override the settings page's input.click() is a silent no-op - the
+     * stock WebChromeClient never shows anything (真机: 点击无效果). */
+    private var pendingFileChooser: android.webkit.ValueCallback<
+        Array<android.net.Uri>>? = null
+
+    private val imagePickLauncher = registerForActivityResult(
+        ActivityResultContracts.GetContent(),
+    ) { uri: Uri? ->
+        pendingFileChooser?.onReceiveValue(
+            uri?.let { arrayOf(it) }
+        )
+        pendingFileChooser = null
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         destroyed = false
@@ -164,19 +179,53 @@ class SetupActivity : AppCompatActivity() {
             settings.javaScriptEnabled = true
             // Settings content is local-only; never let the page wander off.
             settings.allowContentAccess = false
+            // 外观预览把真键盘页面嵌成 iframe（file:///android_asset/...）。
+            // API 30+ 默认 false 会把子 frame 的 file URL 整个拒成空文档
+            // （主 frame 的 android_asset 不受此开关影响）；导航仍被
+            // shouldOverrideUrlLoading 锁死，FromFileURLs 保持 false。
+            settings.allowFileAccess = true
             settings.allowFileAccessFromFileURLs = false
             webViewClient = object : WebViewClient() {
-                override fun shouldOverrideUrlLoading(view: WebView?, url: String?): Boolean = true
+                // 外观预览的键盘 iframe（?preview=1）是唯一放行的子 frame；
+                // 其余一切导航（主 frame 含内）全部拒绝，设置页不允许漂移。
+                override fun shouldOverrideUrlLoading(
+                    view: WebView?,
+                    request: android.webkit.WebResourceRequest?,
+                ): Boolean {
+                    val url = request?.url ?: return true
+                    return !(request.isForMainFrame == false
+                        && url.scheme == "file"
+                        && url.path?.startsWith("/android_asset/keyboard/") == true)
+                }
                 override fun onPageFinished(view: WebView?, url: String?) {
                     Log.i(TAG, "settings page finished: $url")
                     pushHello()
                 }
             }
             webChromeClient = object : android.webkit.WebChromeClient() {
+                // FileChooserParams is an inner class of WebChromeClient -
+                // referencing it as android.webkit.FileChooserParams does
+                // not resolve (compileDirectDebugKotlin).
                 // Settings-page JS errors surface as logs ( 探针教训:
                 // 无日志的前台调试 = 猜谜).
                 override fun onConsoleMessage(message: android.webkit.ConsoleMessage?): Boolean {
                     Log.w(TAG, "console: ${message?.message() ?: "?"} @${message?.lineNumber() ?: "?"}")
+                    return true
+                }
+
+                /** <input type=file> 落到这里;不覆写时选择器永远不弹,
+                 *  页面的 input.click() 静默无效(背景图片入口)。 */
+                override fun onShowFileChooser(
+                    webView: WebView?,
+                    callback: android.webkit.ValueCallback<Array<android.net.Uri>>,
+                    params: android.webkit.WebChromeClient.FileChooserParams,
+                ): Boolean {
+                    if (pendingFileChooser != null) {
+                        callback.onReceiveValue(null)
+                        return true
+                    }
+                    pendingFileChooser = callback
+                    imagePickLauncher.launch("image/*")
                     return true
                 }
             }
@@ -242,6 +291,7 @@ class SetupActivity : AppCompatActivity() {
             .put("theme", themeName())
             .put("uiLanguage", UiLanguage.choice(this))
             .put("uiLocale", UiLanguage.locale(this))
+            .put("appIcon", com.feelime.ime.appIconDataUri(this))
         bridge.evaluate("window.FeelimeSettings && window.FeelimeSettings.onBridgeHello($payload)")
     }
 

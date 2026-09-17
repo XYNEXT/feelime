@@ -4,13 +4,17 @@ import android.Manifest
 import android.content.Context
 import android.content.Intent
 import android.media.AudioManager
+import android.media.ToneGenerator
 import android.provider.Settings
-import android.view.HapticFeedbackConstants
 import android.content.pm.PackageManager
 import android.graphics.Color
 import android.inputmethodservice.InputMethodService
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
 import android.text.InputType
 import android.view.KeyEvent
 import android.view.View
@@ -49,6 +53,9 @@ class FeelimeService : InputMethodService(), AsrEngine.Listener {
     private lateinit var clipboardStore: com.feelime.ime.panel.ClipboardStore
     private lateinit var favoritesStore: com.feelime.ime.panel.FavoritesStore
     private var keyboardView: WebView? = null
+    /** 按键音（issue #5 问题 2）合成器：实例化开销高，懒加载复用，
+     *  onDestroy 释放。 */
+    private var keyTone: ToneGenerator? = null
     /** Host of [keyboardView]; re-measured when keyboard-side prefs change
      *  while the keyboard is already visible (bottom pad, mode-fallback §3). */
     private var inputViewHost: FixedHeightInputView? = null
@@ -205,8 +212,28 @@ class FeelimeService : InputMethodService(), AsrEngine.Listener {
      *  现有总高扣掉 pad，键行先缩、总高却没变。 */
     private val keyboardPrefsReceiver = object : android.content.BroadcastReceiver() {
         override fun onReceive(context: android.content.Context?, intent: android.content.Intent?) {
+            if (intent?.action == ACTION_PREVIEW_KEYBOARD) {
+                // 外观页预览：设置页请求弹出/收起真实键盘。IME 自己 show
+                // self 不依赖编辑焦点（requestShowSelf，API 28+）。
+                val show = intent.getBooleanExtra("show", false)
+                android.util.Log.i("FeelimeBridge", "previewKeyboard show=$show")
+                onMain {
+                    if (show && android.os.Build.VERSION.SDK_INT >= 28) {
+                        val shown = requestShowSelf(0)
+                        android.util.Log.i("FeelimeBridge", "requestShowSelf -> $shown")
+                    } else {
+                        requestHideSelf(0)
+                    }
+                }
+                return
+            }
             if (intent?.action != ACTION_KEYBOARD_PREFS_CHANGED) return
             onMain {
+                // 键盘高度也走这份 pref 文件（设置页滑块直接写 pref）：
+                // override 是内存态，广播时统一重读，否则写完不生效——
+                // 内存 override 只有旋转/启动才重读。
+                keyboardHeightOverride = storedKeyboardHeight()
+                (keyboardView?.parent as? View)?.requestLayout()
                 pushBridgeHello()
                 if (readAssociation(this@FeelimeService)) {
                     com.feelime.ime.engine.AssociationStore.prewarm(this@FeelimeService)
@@ -295,6 +322,16 @@ class FeelimeService : InputMethodService(), AsrEngine.Listener {
 
     override fun onCreate() {
         super.onCreate()
+        // 手势导航条区域：窗口是 bottom-anchored 到屏幕的（高度含
+        // navBottomInset），系统默认的 navigationBarColor 黑色对比保护层
+        // 会把最底 24dp 涂黑——背景图开启后键盘要一路铺到屏幕底，必须
+        // 透明并关掉对比强制，否则图和屏幕底之间隔着一条黑带（真机截图
+        // 定罪）。
+        // SoftInputWindow is a Dialog: the Window hangs off .window.
+        getWindow()?.window?.let { w ->
+            w.navigationBarColor = Color.TRANSPARENT
+            if (Build.VERSION.SDK_INT >= 29) w.isNavigationBarContrastEnforced = false
+        }
         Diagnostics.refresh(this)
         UiLanguage.preferences(this)
             .registerOnSharedPreferenceChangeListener(uiLanguageListener)
@@ -332,7 +369,9 @@ class FeelimeService : InputMethodService(), AsrEngine.Listener {
         )
         registerReceiver(
             keyboardPrefsReceiver,
-            android.content.IntentFilter(ACTION_KEYBOARD_PREFS_CHANGED),
+            android.content.IntentFilter(ACTION_KEYBOARD_PREFS_CHANGED).apply {
+                addAction(ACTION_PREVIEW_KEYBOARD)
+            },
             androidx.core.content.ContextCompat.RECEIVER_NOT_EXPORTED,
         )
         registerReceiver(
@@ -678,7 +717,11 @@ class FeelimeService : InputMethodService(), AsrEngine.Listener {
         // the WebView. Clear its gesture-owned visual/timer state while the
         // page is still alive; the JS hook is optional for older keyboard
         // assets and the next show path still resets home as before.
+        // Toolbar edit is modal: hiding the keyboard cancels it (snapshot
+        // rollback, nothing saved). Same-editor re-shows skip onStartInput
+        // /resetToHome, so this hide path is the only reliable hook.
         evaluate("window.Feelime && window.Feelime.cancelTouches && window.Feelime.cancelTouches()")
+        evaluate("window.Feelime && window.Feelime.cancelToolbarEdit && window.Feelime.cancelToolbarEdit()")
         super.onFinishInputView(finishingInput)
     }
 
@@ -723,6 +766,8 @@ class FeelimeService : InputMethodService(), AsrEngine.Listener {
         pendingCursorDeltas.clear()
         cursorQueryActive = false
         cursorSnapshotSupport.reset()
+        runCatching { keyTone?.release() }
+        keyTone = null
         clipboardStore.stop()
         unregisterReceiver(updateReceiver)
         unregisterReceiver(userdataReceiver)
@@ -1338,6 +1383,15 @@ class FeelimeService : InputMethodService(), AsrEngine.Listener {
             .put("candidateFont", candidateFont())
             .put("preeditFont", preeditFont())
             .put("preeditBold", readPreeditBold(this))
+            .put("oneHand", readOneHand(this))
+            .put("sideContent", readSideContent(this))
+            .put("bgImageLight", readBgImageBase64(this, "light"))
+            .put("bgImageDark", readBgImageBase64(this, "dark"))
+            .put("bgImageLightSource", readBgImageSource(this, "light"))
+            .put("bgImageDarkSource", readBgImageSource(this, "dark"))
+            .put("keyOpacity", readKeyOpacity(this))
+            .put("themeMode", readThemeMode(this))
+            .put("toolbarLayout", readToolbarLayout(this))
             .put("associationOn", readAssociation(this))
             // 按键反馈开关（issue #5 问题 2）也进 hello：快捷设置方块的
             // 开/关状态要跟原生偏好走（设置页改动同样经这里回读）。
@@ -1652,6 +1706,40 @@ class FeelimeService : InputMethodService(), AsrEngine.Listener {
             coordinator.key(char.codePointAt(0))
         }
 
+        /** 单手模式侧边条的光标键（issue #15）：直接发 DPAD 键事件，
+         *  跟物理方向键同一通道（终端的 cursor 语义天然兼容）。 */
+        @JavascriptInterface
+        fun editorCursor(dir: String, token: String) = guarded(token, limited = false) {
+            val code = when (dir) {
+                "left" -> KeyEvent.KEYCODE_DPAD_LEFT
+                "right" -> KeyEvent.KEYCODE_DPAD_RIGHT
+                "up" -> KeyEvent.KEYCODE_DPAD_UP
+                "down" -> KeyEvent.KEYCODE_DPAD_DOWN
+                else -> {
+                    rejectedCalls += 1
+                    return@guarded
+                }
+            }
+            sendKey(code)
+        }
+
+        /** 单手模式侧边条的全选/剪切/复制/粘贴（issue #15）：走宿主
+         *  TextView 的 context menu action 通道，与系统编辑菜单同源。 */
+        @JavascriptInterface
+        fun editorAction(action: String, token: String) = guarded(token, limited = false) {
+            val id = when (action) {
+                "selectAll" -> android.R.id.selectAll
+                "cut" -> android.R.id.cut
+                "copy" -> android.R.id.copy
+                "paste" -> android.R.id.paste
+                else -> {
+                    rejectedCalls += 1
+                    return@guarded
+                }
+            }
+            onMain { currentInputConnection?.performContextMenuAction(id) }
+        }
+
         @JavascriptInterface
         fun setComposition(keys: String, token: String) = guarded(token, limited = false) {
             // Variant parses are short key sequences ('xc'an').  Unicode
@@ -1673,19 +1761,40 @@ class FeelimeService : InputMethodService(), AsrEngine.Listener {
          * 触感 KEYBOARD_TAP（跟随机型调校；FLAG_IGNORE_GLOBAL_SETTING
          * 让本开关成为唯一权威，避免「开了没反应」），声音
          * FX_KEY_CLICK（跟随系统音量与静音，与 WeType 行为一致）。 */
+        /** 按键声音/触感（issue #5 问题 2；issue #15 真机返工）：直接走
+         *  Vibrator/ToneGenerator。原先 performHapticFeedback(
+         *  FLAG_IGNORE_GLOBAL_SETTING) 在 Android 14+（ColorOS 实测）不再
+         *  被尊重——系统「触摸振动」总开关一关整条通道静默，开关形同虚设；
+         *  playSoundEffect 同样受系统「触摸提示音」开关拦截。自播通道只
+         *  摆脱这两个总开关，音量仍跟系统。 */
         @JavascriptInterface
         fun keyFeedback(token: String) = guarded(token, limited = false) {
-            val view = keyboardView
-            if (readKeyHapticEnabled(this@FeelimeService) && view != null) {
-                view.performHapticFeedback(
-                    HapticFeedbackConstants.KEYBOARD_TAP,
-                    HapticFeedbackConstants.FLAG_IGNORE_GLOBAL_SETTING,
-                )
+            if (readKeyHapticEnabled(this@FeelimeService)) playKeyHaptic()
+            if (readKeySoundEnabled(this@FeelimeService)) playKeySound()
+        }
+
+        private fun playKeyHaptic() {
+            runCatching {
+                val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    (getSystemService(VibratorManager::class.java))?.defaultVibrator
+                } else {
+                    @Suppress("DEPRECATION")
+                    (getSystemService(VIBRATOR_SERVICE) as? Vibrator)
+                }
+                if (vibrator == null || !vibrator.hasVibrator()) return
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    vibrator.vibrate(VibrationEffect.createPredefined(VibrationEffect.EFFECT_CLICK))
+                } else {
+                    vibrator.vibrate(VibrationEffect.createWaveform(longArrayOf(0, 20), -1))
+                }
             }
-            if (readKeySoundEnabled(this@FeelimeService)) {
-                (getSystemService(Context.AUDIO_SERVICE) as? AudioManager)
-                    ?.playSoundEffect(AudioManager.FX_KEY_CLICK)
-            }
+        }
+
+        private fun playKeySound() {
+            val tone = keyTone ?: runCatching {
+                ToneGenerator(AudioManager.STREAM_SYSTEM, 80)
+            }.getOrNull()?.also { keyTone = it } ?: return
+            runCatching { tone.startTone(ToneGenerator.TONE_PROP_BEEP, 40) }
         }
 
         /** 快捷设置方块面板的偏好写通道：与设置页写同一批偏好
@@ -1733,6 +1842,41 @@ class FeelimeService : InputMethodService(), AsrEngine.Listener {
                 "preeditBold" -> {
                     val on = boolArg() ?: return@guarded
                     keyboardPrefs.edit().putBoolean(PREF_PREEDIT_BOLD, on).apply()
+                    ACTION_KEYBOARD_PREFS_CHANGED
+                }
+                "keyOpacity" -> {
+                    val pct = value.toIntOrNull()
+                    if (pct == null || pct !in 0..100) return@guarded
+                    keyboardPrefs.edit().putInt(PREF_KEY_OPACITY, pct).apply()
+                    ACTION_KEYBOARD_PREFS_CHANGED
+                }
+                "themeMode" -> {
+                    // 外观页的三态主题（设置 app 写、键盘 hello 读回应用）；
+                    // 键盘侧 pushStores 会把 tile/工具的改动同步回这里。
+                    if (value !in listOf("auto", "light", "dark")) return@guarded
+                    keyboardPrefs.edit().putString(PREF_THEME_MODE, value).apply()
+                    ACTION_KEYBOARD_PREFS_CHANGED
+                }
+                "oneHand" -> {
+                    val mode = value.toIntOrNull()
+                    if (mode == null || mode !in 0..2) return@guarded
+                    keyboardPrefs.edit().putInt(PREF_ONE_HAND, mode).apply()
+                    ACTION_KEYBOARD_PREFS_CHANGED
+                }
+                "sideContent" -> {
+                    val mode = value.toIntOrNull()
+                    if (mode == null || mode !in 0..2) return@guarded
+                    keyboardPrefs.edit().putInt(PREF_SIDE_CONTENT, mode).apply()
+                    ACTION_KEYBOARD_PREFS_CHANGED
+                }
+                "toolbarLayout" -> {
+                    // 键盘侧已按目录/上限校验（applyToolbarLayoutValue），
+                    // 这里只验证是可解析的布局对象再落盘。
+                    val parsed = runCatching { JSONObject(value) }.getOrNull() ?: return@guarded
+                    val left = parsed.optJSONArray("left") ?: return@guarded
+                    val right = parsed.optJSONArray("right") ?: return@guarded
+                    if (left.length() > 4 || right.length() > 4) return@guarded
+                    keyboardPrefs.edit().putString(PREF_TOOLBAR_LAYOUT, value).apply()
                     ACTION_KEYBOARD_PREFS_CHANGED
                 }
                 "bottomPad" -> {
