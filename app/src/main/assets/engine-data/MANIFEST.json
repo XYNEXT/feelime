@@ -37,8 +37,8 @@
       "sha256": "f802f0f3d485e75bacc873cfd8601706cfbb186beddc9290869f8fbab7e0647b"
     },
     "rime/double_pinyin_flypy.schema.yaml": {
-      "bytes": 39028,
-      "sha256": "380ae29e4c6fc0f1deadc68d0fbf3c7f767a44972a0f544e973f9bd37e53fda3"
+      "bytes": 39220,
+      "sha256": "7850588e9495b50d2f88ad3c37cc83fce26be235858d326e2feba8c4731949be"
     },
     "rime/double_pinyin_sogou.prism.bin": {
       "bytes": 22128,
@@ -49,8 +49,8 @@
       "sha256": "2f96a013c1973b7710c79689d8c8b61fb01e7140fc0661bcd2ff15ee76a3fc59"
     },
     "rime/double_pinyin_sogou.schema.yaml": {
-      "bytes": 39089,
-      "sha256": "26526ff2b43bec41f817d32f4020b23ca71f82fb9c8a024f53891e5509c49c47"
+      "bytes": 39281,
+      "sha256": "e278729922814390775b8006eb7ffe2b08883ad76039537d3e47a80a1257b997"
     },
     "rime/double_pinyin_ziguang.prism.bin": {
       "bytes": 21656,
@@ -61,8 +61,8 @@
       "sha256": "b478e85276f4fd54409d48f821590d2a1d279f0b9b591bfa6f7f2965144628ae"
     },
     "rime/double_pinyin_ziguang.schema.yaml": {
-      "bytes": 38978,
-      "sha256": "d6e833ce3e7fa250fb9982fbd06ec38de3fe3607240a298ae1920ff1709f8d12"
+      "bytes": 39170,
+      "sha256": "6a139f79776718ddeeb1599810df2620d99c263a9149c6eb63ec09ff2ae3f59b"
     },
     "rime/luna_pinyin.prism.bin": {
       "bytes": 31728,
@@ -117,8 +117,8 @@
       "sha256": "9f7a15c1d38194250c0332bb9dd325e8d03a0280e15eb2db99bcd4b1ba0b5683"
     },
     "rime/ziranma_double_pinyin.schema.yaml": {
-      "bytes": 39293,
-      "sha256": "7d4f5c1e0beb8d7f9ff6c9ca70c29999f2ea9a33f6025c4d9665eb79bd97d2ab"
+      "bytes": 39485,
+      "sha256": "ac60c13a00eae405d57cb98cc7801d44c95865ccf76119390c7aa845c87ef6a5"
     },
     "rime/luna_pinyin_fuzzy_m1.prism.bin": {
       "bytes": 35448,

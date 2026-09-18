@@ -1,5 +1,12 @@
 # Feelime original double-pinyin schema (source of truth for the compiled
 # prism; golden test reads this file's algebra). No third-party schema bytes.
+custom_phrase:
+  db_class: stabledb
+  dictionary: ""
+  enable_completion: false
+  enable_sentence: false
+  initial_quality: 1
+  user_dict: custom_phrase
 engine:
   filters:
     # Simplified output runs through the simplifier FILTER: modern librime's
@@ -25,6 +32,7 @@ engine:
     - fallback_segmentor
   translators:
     - punct_translator
+    - "table_translator@custom_phrase"
     - script_translator
 # Uppercase/fallback patterns (same shape as luna_pinyin) so popup
 # uppercase picks build an English segment instead of being dropped.

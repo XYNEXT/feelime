@@ -44,6 +44,10 @@ const val ACTION_USERDATA_RESTORED = "com.feelime.ime.USERDATA_RESTORED"
 const val ACTION_DP_SCHEME_CHANGED = "com.feelime.ime.DP_SCHEME_CHANGED"
 const val ACTION_FUZZY_PINYIN_CHANGED = "com.feelime.ime.FUZZY_PINYIN_CHANGED"
 
+/** 自定义短语变更广播：设置页发（saveCustomPhrases 已落盘+派生 txt），
+ *  IME 收到后整引擎重载（stabledb 生命周期绑定引擎而非会话）。 */
+const val ACTION_CUSTOM_PHRASES_CHANGED = "com.feelime.ime.CUSTOM_PHRASES_CHANGED"
+
 /** 设置页改动键盘侧偏好（底部留白/手感参数）后通知 IME 重推 hello。 */
 const val ACTION_KEYBOARD_PREFS_CHANGED = "com.feelime.ime.KEYBOARD_PREFS_CHANGED"
 
@@ -312,6 +316,8 @@ class SettingsBridge(
      * shell's BACK callback returns home first instead of finishing
      * (design §6.2). */
     @Volatile var onSubPage: Boolean = false
+    /** 当前子页名（"home"/"input"/"phrases"/…），BACK 逐级返回用。 */
+    @Volatile var subPageName: String = "home"
 
     private val modelStore = ModelStore(context)
     private val customKeysStore = CustomKeysStore(context)
@@ -347,8 +353,24 @@ class SettingsBridge(
         }
     }
 
+    /** 词表被别的入口改写（备份恢复后的重派生广播）：设置页若开着，
+     *  重推 state——页面的 phraseItems 是全量重发语义的镜像副本，不刷
+     *  新的话下一次保存会把旧副本写回去（恢复竞态，review P1）。 */
+    private val customPhrasesListener = object : android.content.BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: android.content.Intent?) {
+            if (intent?.action != ACTION_CUSTOM_PHRASES_CHANGED || closed) return
+            pushState()
+        }
+    }
+
     init {
         uiPreferences.registerOnSharedPreferenceChangeListener(uiLanguageListener)
+        androidx.core.content.ContextCompat.registerReceiver(
+            context,
+            customPhrasesListener,
+            android.content.IntentFilter(ACTION_CUSTOM_PHRASES_CHANGED),
+            androidx.core.content.ContextCompat.RECEIVER_NOT_EXPORTED,
+        )
     }
 
     /** The store fires a callback per 64 KB chunk - forward only
@@ -400,6 +422,7 @@ class SettingsBridge(
         if (closed) return
         closed = true
         uiPreferences.unregisterOnSharedPreferenceChangeListener(uiLanguageListener)
+        runCatching { context.unregisterReceiver(customPhrasesListener) }
         modelDownloadGate.cancelPending()
         invalidatePendingInstall()
         modelDownloadNetwork?.close()
@@ -479,6 +502,15 @@ class SettingsBridge(
             .put("mic", JSONObject().put("granted", micGranted()))
             .put("dpScheme", com.feelime.ime.engine.DoublePinyinScheme.resolve(context))
             .put("fuzzyPinyinMask", com.feelime.ime.engine.FuzzyPinyin.mask(context))
+            .put("customPhrases", JSONObject().apply {
+                val state = com.feelime.ime.engine.CustomPhraseStore.load(context)
+                put("enabled", state.enabled)
+                put("items", JSONArray().apply {
+                    state.items.forEach { (text, code) ->
+                        put(JSONObject().put("text", text).put("code", code))
+                    }
+                })
+            })
             .put("associationOn", readAssociation(context))
             .put("keySound", readKeySoundEnabled(context))
             .put("keyHaptic", readKeyHapticEnabled(context))
@@ -1143,6 +1175,51 @@ class SettingsBridge(
         pushState()
     }
 
+    /** 自定义短语（issue #17）：itemsJson = [{text,code}] 全量保存。
+     * 壳侧落盘 json + 派生/删除 custom_phrase.txt，随后广播让 IME 整
+     * 引擎重载（stabledb 只在引擎生命周期加载一次）。词条校验：text
+     * 非空、code 为 1..16 位字母（大小写归一），上限 200 条。 */
+    @JavascriptInterface
+    fun saveCustomPhrases(itemsJson: String, enabled: Boolean, token: String) = guarded(token) {
+        val items = ArrayList<Pair<String, String>>()
+        val parseError = try {
+            val array = JSONArray(itemsJson)
+            for (i in 0 until array.length()) {
+                val item = array.getJSONObject(i)
+                val text = item.optString("text").trim()
+                val code = item.optString("code").trim().lowercase()
+                if (text.isEmpty()) continue
+                if (!Regex("^[a-z;]{1,16}$").matches(code)) {
+                    pushEvent(
+                        JSONObject()
+                            .put("type", "customPhrasesError")
+                            .put("code", "BAD_PHRASE_CODE")
+                            .put("message", t(context, "输入码需为 1-16 位字母", "Code must be 1-16 letters")),
+                    )
+                    return@guarded
+                }
+                items.add(text to code)
+            }
+            false
+        } catch (_: Exception) {
+            true
+        }
+        if (parseError || items.size > 200) {
+            pushEvent(
+                JSONObject()
+                    .put("type", "customPhrasesError")
+                    .put("code", "BAD_PHRASES_PAYLOAD")
+                    .put("message", t(context, "词表格式错误", "Invalid phrase list")),
+            )
+            return@guarded
+        }
+        com.feelime.ime.engine.CustomPhraseStore.save(context, enabled, items)
+        context.sendBroadcast(
+            Intent(ACTION_CUSTOM_PHRASES_CHANGED).setPackage(context.packageName),
+        )
+        pushState()
+    }
+
     /** 按键反馈开关（issue #5 问题 2）：落盘生效（键盘每次按键都调
      * keyFeedback，原生按当前偏好决定发声/振动）+ 广播重推 hello——
      * 快捷设置 tile 的开/关回读靠它。 */
@@ -1558,7 +1635,12 @@ class SettingsBridge(
 
     /** Sub-page presence for the shell's BACK callback. */
     @JavascriptInterface
-    fun reportPage(isSub: Boolean, token: String) = guarded(token) { onSubPage = isSub }
+    fun reportPage(page: String, token: String) = guarded(token) {
+        // 页名而非布尔（issue #17 三级页）：系统 BACK 按 phrases → input →
+        // home 逐级返回；旧页面布尔协议与壳同 APK 发布，无兼容窗口。
+        subPageName = page
+        onSubPage = page != "home" && page.isNotBlank()
+    }
 
     /** The about page's one-tap version report. The clip is
      * flagged sensitive on API 33+ so the keyboard's clipboard history does

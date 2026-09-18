@@ -259,6 +259,45 @@ update/），完整设置页在 `app/src/main/assets/settings/`。
   置灰不可点，标注「内容过长」——存得下≠贴得出。
 - 常用语单条 ≤200 字、≤200 条；输入码 ≤12 字符、位次 1–99。
 
+## 3a. 候选符号词（issue #17）
+
+打 shang 出 ↑、dui 出 ✓ 这类符号/emoji 词，排在候选第 3 格附近；带开关，
+词条在设置「键盘与输入 → 候选符号词」三级页增删改查（种子 27 条：箭头/
+对错/心星手势/动物/天象/性别符号）。
+
+- **词条通道**：rime 原生 `table_translator@custom_phrase`（stabledb，
+  `user_dict: custom_phrase`），luna 与四个双拼 schema 全挂。码列匹配的是
+  用户**实际按键序列的字面**（composition raw input）——不是音节形态：
+  全拼码 `shang` 在双拼模式不命中，双拼按 u+h 命中 `uh` 行。因此真相源
+  `files/rime-user/custom-phrases.json`（{text, code}，code=全拼串）派生
+  custom_phrase.txt 时每词条写多行：原码一行 + code 是合法单音节时补四
+  方案全部规范拼式行（拼式并集来自生成器产出的 APK 资产
+  custom-phrase-codes.json，音节集合取 luna prism 第二列，424 个规范音节
+  ——第一列混有简拼/纠错拼式，不能当音节）。跨方案码行字面共存=「别的
+  按键序列也能打出该词」的附加候选，不会错词。
+- **第 3 格**：引擎侧 custom_phrase 组受 initial_quality 0/1 悬崖支配
+  （≥0.9 恒第 1、≤0.5 沉底，weight 不影响跨流位置），精确位次不可达。
+  位置控制在 keyboard.js `injectFavoriteCandidates` 的**引擎池内**先排
+  （纯符号词——无字母无数字——挪到 index 2），再走常用语/变体 overlay
+  组装：常用语 rank 位次与空格确认的池头语义不被符号挪动二次改写；中文
+  自定义词（含汉字/字母）保持引擎排位（quality=1 组第 1）。池前缀（前
+  3 项 id 签名）变化时展开层全量重绘——增量水位线只认追加，不认前缀改写。
+- **热生效**：stabledb 只在引擎生命周期加载一次（切 schema 重建会话不重
+  读）。任何词条/开关变更走 `RimeTextEngine.reloadGlobal`（finalize +
+  重新 init，synchronized(gate) 串行；换代 epoch 防 closeNative 对悬垂
+  handle 误 destroy）+ `recreateEngineSession`。开关关闭或词条清空=删
+  custom_phrase.txt（json 保留，用户数据不因开关丢失）。
+- **恢复联动**：userdata 恢复换入 rime-user 后，按恢复的 json 幂等重派生
+  txt 并广播 `CUSTOM_PHRASES_CHANGED`——设置页的 phraseItems 是全量重发
+  语义的镜像副本，不刷新的话下一次保存会把旧副本写回（恢复竞态）。
+- **页面防覆盖**：settings.js 的 phraseItems 初始为 null，state 未推送到
+  前一切 CRUD/开关操作被拒（全量重发语义下空表会覆盖种子）。上限 200 条
+  前后端同值。
+- 备份：custom-phrases.json 与 custom_phrase.txt 都在 rime-user 下，随
+  整目录进出备份。
+
+
+
 ### 3.6 剪贴板采集生命周期
 
 - `onStartInput` 按 `!isSensitiveEditor()` 置位采集 flag；`onFinishInputView`

@@ -587,3 +587,55 @@ details summary {
     font-size: 14px;
     box-sizing: border-box;
 }
+
+/* --- custom phrases (issue #17) ----------------------------------------- */
+
+.phrase-form {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 12px;
+}
+.phrase-form .input { flex: 1 1 140px; min-width: 0; }
+.phrase-form .actions { display: flex; gap: 8px; }
+
+.phrase-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+.phrase-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 2px 0;
+}
+.phrase-row + .phrase-row { border-top: 1px solid var(--card-line); }
+.phrase-edit {
+    flex: 1 1 auto;
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    min-height: 40px;
+    padding: 6px 4px;
+    border: 0;
+    background: transparent;
+    text-align: left;
+}
+.phrase-edit:active { background: var(--pressed); }
+.phrase-text { font-size: 16px; }
+.phrase-row code {
+    color: var(--card-sub);
+    font-family: var(--mono);
+    font-size: 12.5px;
+}
+.phrase-del {
+    flex: 0 0 auto;
+    min-width: 36px;
+    min-height: 36px;
+    border: 0;
+    background: transparent;
+    color: var(--card-sub);
+    font-size: 14px;
+}
+.phrase-del:active { background: var(--pressed); border-radius: 8px; }

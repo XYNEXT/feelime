@@ -206,6 +206,22 @@ class FeelimeService : InputMethodService(), AsrEngine.Listener {
         }
     }
 
+    /** 设置页保存自定义短语（issue #17）：txt 已落盘，stabledb 只在引擎
+     *  生命周期加载一次（session 重建不重读），先整引擎 finalize+init
+     *  再重建会话。引擎未起（如刚装完直接进设置页）时只留会话重建。 */
+    private val customPhrasesReceiver = object : android.content.BroadcastReceiver() {
+        override fun onReceive(context: android.content.Context?, intent: android.content.Intent?) {
+            if (intent?.action != ACTION_CUSTOM_PHRASES_CHANGED) return
+            onMain {
+                runCatching {
+                    com.feelime.ime.engine.RimeTextEngine.reloadGlobal(applicationContext)
+                }
+                coordinator.recreateEngineSession { }
+                pushBridgeHello()
+            }
+        }
+    }
+
     /** 设置页改动键盘侧偏好（底部留白/手感参数，mode-fallback §3/§4）：
      *  值已由设置页落盘，这里重推 hello（运行中的键盘即时采用），并让
      *  FixedHeightInputView 按新留白重新测量——否则键盘可见时 JS 立刻把
@@ -281,7 +297,23 @@ class FeelimeService : InputMethodService(), AsrEngine.Listener {
         val appPrefs = com.feelime.ime.backup.AndroidPrefs(applicationContext)
         val backup = com.feelime.ime.backup.UserdataBackup(appPrefs, applicationContext.filesDir)
         if (backup.hasPendingUserdb()) {
-            coordinator.recreateEngineSession { backup.applyPendingUserdb() }
+            coordinator.recreateEngineSession {
+                backup.applyPendingUserdb()
+                // 恢复的 rime-user 已换入：custom_phrase.txt 按恢复后的
+                // json 幂等重派生（老备份可能只有 txt 无 json，或两者
+                // 错代），并广播让引擎重载 + 设置页重读 state——否则设置
+                // 页还持着恢复前的词表副本，下一次全量保存会把它写回去。
+                runCatching {
+                    val state = com.feelime.ime.engine.CustomPhraseStore.load(applicationContext)
+                    com.feelime.ime.engine.CustomPhraseStore.save(
+                        applicationContext, state.enabled, state.items,
+                    )
+                }
+                sendBroadcast(
+                    android.content.Intent(ACTION_CUSTOM_PHRASES_CHANGED)
+                        .setPackage(packageName),
+                )
+            }
         }
         val mirror = appPrefs.all(com.feelime.ime.backup.UserdataBackup.WEBVIEW_PREFS)
             .get(com.feelime.ime.backup.UserdataBackup.WEBVIEW_KEY) as? String
@@ -368,6 +400,11 @@ class FeelimeService : InputMethodService(), AsrEngine.Listener {
             androidx.core.content.ContextCompat.RECEIVER_NOT_EXPORTED,
         )
         registerReceiver(
+            customPhrasesReceiver,
+            android.content.IntentFilter(ACTION_CUSTOM_PHRASES_CHANGED),
+            androidx.core.content.ContextCompat.RECEIVER_NOT_EXPORTED,
+        )
+        registerReceiver(
             keyboardPrefsReceiver,
             android.content.IntentFilter(ACTION_KEYBOARD_PREFS_CHANGED).apply {
                 addAction(ACTION_PREVIEW_KEYBOARD)
@@ -391,6 +428,9 @@ class FeelimeService : InputMethodService(), AsrEngine.Listener {
                 ).applyPendingUserdb()
             }
         }
+        // 自定义短语种子（issue #17）：首装/升级后 json 与 custom_phrase.txt
+        // 必须在引擎 init 前就位（stabledb 只在引擎生命周期加载一次）。
+        runCatching { com.feelime.ime.engine.CustomPhraseStore.load(applicationContext) }
         com.feelime.ime.engine.EngineDataStore.ensureAsync(applicationContext) {
             main.post { pushBridgeHello() }
         }
@@ -788,6 +828,7 @@ class FeelimeService : InputMethodService(), AsrEngine.Listener {
         unregisterReceiver(userdataReceiver)
         unregisterReceiver(dpSchemeReceiver)
         unregisterReceiver(fuzzyPinyinReceiver)
+        unregisterReceiver(customPhrasesReceiver)
         unregisterReceiver(keyboardPrefsReceiver)
         unregisterReceiver(voicePermissionReceiver)
         UiLanguage.preferences(this)

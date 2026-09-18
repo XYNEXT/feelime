@@ -78,6 +78,26 @@ const I18N = {
         "input.assoc.badge": "输入",
         "input.assoc.enable": "选词后联想下一个词",
         "input.assoc.hint": "上屏后在候选条给出高频接续词，点击可连续联想；只在全拼/双拼生效。",
+        "input.phrases.title": "候选符号词",
+        "input.phrases.badge": "输入",
+        "input.phrases.enable": "附加符号/emoji 候选",
+        "input.phrases.hint": "打 shang 出 ↑、dui 出 ✓ 这类符号词，排在候选第 3 位附近；全拼和双拼通用。",
+        "input.phrases.manage": "管理词条",
+        "page.phrases": "候选符号词",
+        "nav.backInput": "返回键盘与输入",
+        "phrases.list.title": "词条",
+        "phrases.list.empty": "还没有词条，在下方添加。",
+        "phrases.list.note": "输入码用全拼（单个音节自动适配双拼按键）；点词条可修改，✕ 删除。改动即时生效。",
+        "phrases.form.text": "词条（如 ↑ 或 你好）",
+        "phrases.form.code": "输入码（如 shang）",
+        "phrases.form.add": "添加",
+        "phrases.form.save": "保存修改",
+        "phrases.form.cancel": "取消",
+        "phrases.note.saved": "已保存",
+        "phrases.note.deleted": "已删除",
+        "phrases.err.duplicate": "该输入码已有词条",
+        "phrases.err.notReady": "词表还在加载，稍等再试",
+        "phrases.err.limit": "最多 200 条，先删掉一些再添加",
         "input.double.title": "双拼方案",
         "input.double.badge": "输入",
         "input.double.scheme": "方案",
@@ -421,6 +441,26 @@ const I18N = {
         "input.assoc.badge": "Input",
         "input.assoc.enable": "Suggest the next word after a commit",
         "input.assoc.hint": "Shows frequent followers in the candidates bar after a word commits; tap to keep the chain going. Full/Double Pinyin only.",
+        "input.phrases.title": "Symbol candidates",
+        "input.phrases.badge": "Input",
+        "input.phrases.enable": "Symbol / emoji candidates",
+        "input.phrases.hint": "Adds words like ↑ for shang and ✓ for dui near candidate #3; works in full and double Pinyin.",
+        "input.phrases.manage": "Manage entries",
+        "page.phrases": "Symbol candidates",
+        "nav.backInput": "Back to Keyboard & input",
+        "phrases.list.title": "Entries",
+        "phrases.list.empty": "No entries yet — add one below.",
+        "phrases.list.note": "Codes use full Pinyin (single-syllable entries also match double-pinyin keys); tap an entry to edit, ✕ to delete. Changes apply immediately.",
+        "phrases.form.text": "Text (e.g. ↑ or a word)",
+        "phrases.form.code": "Code (e.g. shang)",
+        "phrases.form.add": "Add",
+        "phrases.form.save": "Save changes",
+        "phrases.form.cancel": "Cancel",
+        "phrases.note.saved": "Saved",
+        "phrases.note.deleted": "Deleted",
+        "phrases.err.duplicate": "An entry with this code already exists",
+        "phrases.err.notReady": "Entries are still loading — try again shortly",
+        "phrases.err.limit": "Limit is 200 entries — remove some first",
         "input.double.title": "Double-pinyin scheme",
         "input.double.badge": "Input",
         "input.double.scheme": "Scheme",
@@ -709,7 +749,7 @@ const I18N = {
     },
 };
 
-const PAGES = ["home", "appearance", "input", "voice", "update", "backup", "about", "test"];
+const PAGES = ["home", "appearance", "input", "phrases", "voice", "update", "backup", "about", "test"];
 const ERROR_KEYS = new Set(Object.keys(I18N.zh).filter(key => key.startsWith("error.")));
 const progressPercent = {};
 
@@ -892,6 +932,9 @@ window.FeelimeSettings = {
             case "customError":
                 setNote("customNote", eventText(event, "error.INVALID_CUSTOM_JSON"));
                 break;
+            case "customPhrasesError":
+                setNote("phrasesNote", eventText(event, "error.BAD_PHRASES_PAYLOAD"));
+                break;
             case "dpSchemeError":
                 setNote("dpNote", eventText(event, "error.INVALID_DP_SCHEME"));
                 break;
@@ -944,7 +987,7 @@ function showPage(name) {
     // 外观页预览：真实键盘在屏幕底部弹出、本页窗口被压缩；离开时收起。
     if (name === "appearance" && !wasAppearance) call("previewKeyboard", true);
     if (name !== "appearance" && wasAppearance) call("previewKeyboard", false);
-    call("reportPage", name !== "home");
+    call("reportPage", name);
 }
 
 /* --- render ------------------------------------------------------------ */
@@ -958,6 +1001,7 @@ function render(state) {
     renderVoice(state);
     renderAsr(state);
     renderCustom(state);
+    renderCustomPhrases(state);
     renderUpdate(state);
     renderAbout(state);
 }
@@ -1363,6 +1407,136 @@ function customSummary(summary) {
     return count ? t("custom.count", { count: count[1] || count[2] }) : raw;
 }
 
+/* --- custom phrases (issue #17) ----------------------------------------- */
+
+/** 桥侧真相源镜像：state.customPhrases = {enabled, items}。CRUD 都在
+ *  这份副本上全量重发（saveCustomPhrases），native 落盘+派生+引擎重载。
+ *  初始为 null（state 未到）：全量重发的语义下，拿空表当真相源会把
+ *  种子表覆盖清空，所以 CRUD 在 state 到达前一律拒绝。 */
+let phraseItems = null;
+let phraseEditing = -1;
+
+function phraseState() {
+    return { enabled: !!($("phrasesOn").checked), items: phraseItems };
+}
+
+function renderCustomPhrases(state) {
+    const phrases = state.customPhrases;
+    if (phrases) {
+        phraseItems = (phrases.items || []).map(item => ({
+            text: String(item.text || ""), code: String(item.code || ""),
+        }));
+        if (document.activeElement !== $("phrasesOn")) $("phrasesOn").checked = !!phrases.enabled;
+        renderPhraseList();
+    }
+}
+
+/** state 未到（bridge 慢/页面刚开）时 CRUD 一律不发——全量重发语义下
+ *  空表会覆盖种子。 */
+function phraseStateReady() {
+    if (phraseItems !== null) return true;
+    setNote("phrasesNote", t("phrases.err.notReady"));
+    return false;
+}
+
+function renderPhraseList() {
+    const list = $("phraseList");
+    list.textContent = "";
+    phraseItems.forEach((item, index) => {
+        const row = document.createElement("li");
+        row.className = "phrase-row";
+        const label = document.createElement("button");
+        label.type = "button";
+        label.className = "phrase-edit";
+        const text = document.createElement("span");
+        text.className = "phrase-text";
+        text.textContent = item.text;
+        const code = document.createElement("code");
+        code.textContent = item.code;
+        label.append(text, code);
+        label.addEventListener("click", () => startPhraseEdit(index));
+        const del = document.createElement("button");
+        del.type = "button";
+        del.className = "phrase-del";
+        del.textContent = "✕";
+        del.setAttribute("aria-label", t("phrases.note.deleted"));
+        del.addEventListener("click", () => {
+            if (!phraseStateReady()) return;
+            phraseItems.splice(index, 1);
+            if (phraseEditing === index) resetPhraseForm();
+            if (phraseEditing > index) phraseEditing -= 1;
+            savePhrases();
+            setNote("phrasesNote", t("phrases.note.deleted"));
+        });
+        row.append(label, del);
+        list.append(row);
+    });
+    $("phraseEmpty").hidden = phraseItems.length > 0;
+}
+
+function startPhraseEdit(index) {
+    phraseEditing = index;
+    $("phraseText").value = phraseItems[index].text;
+    $("phraseCode").value = phraseItems[index].code;
+    $("btnSavePhrase").textContent = t("phrases.form.save");
+    $("btnCancelPhraseEdit").hidden = false;
+}
+
+function resetPhraseForm() {
+    phraseEditing = -1;
+    $("phraseText").value = "";
+    $("phraseCode").value = "";
+    $("btnSavePhrase").textContent = t("phrases.form.add");
+    $("btnCancelPhraseEdit").hidden = true;
+}
+
+function savePhrases() {
+    const payload = phraseItems.map(item => ({ text: item.text, code: item.code }));
+    call("saveCustomPhrases", JSON.stringify(payload), phraseState().enabled);
+}
+
+$("phrasesOn").addEventListener("change", event => {
+    if (!phraseStateReady()) return;
+    call("saveCustomPhrases",
+        JSON.stringify(phraseItems.map(item => ({ text: item.text, code: item.code }))),
+        event.target.checked);
+    setNote("phrasesNote", t("phrases.note.saved"));
+});
+$("btnManagePhrases").addEventListener("click", () => showPage("phrases"));
+$("btnCancelPhraseEdit").addEventListener("click", resetPhraseForm);
+$("btnSavePhrase").addEventListener("click", () => {
+    if (!phraseStateReady()) return;
+    const text = $("phraseText").value.trim();
+    const code = $("phraseCode").value.trim().toLowerCase();
+    // 校验与壳侧 saveCustomPhrases 一致：词条非空 + 码 1-16 位字母。
+    if (!text) {
+        setNote("phrasesNote", t("phrases.form.text"));
+        return;
+    }
+    if (!/^[a-z;]{1,16}$/.test(code)) {
+        setNote("phrasesNote", t("phrases.form.code"));
+        return;
+    }
+    if (phraseEditing >= 0) {
+        phraseItems[phraseEditing] = { text, code };
+    } else {
+        if (phraseItems.some(item => item.code === code)) {
+            setNote("phrasesNote", t("phrases.err.duplicate"));
+            return;
+        }
+        // 与壳侧 saveCustomPhrases 同一条上限：先在本地拒绝，避免 push
+        // 后被 native 打回、页面副本却已带着第 201 条继续全量重发。
+        if (phraseItems.length >= 200) {
+            setNote("phrasesNote", t("phrases.err.limit"));
+            return;
+        }
+        phraseItems.push({ text, code });
+    }
+    savePhrases();
+    resetPhraseForm();
+    setNote("phrasesNote", t("phrases.note.saved"));
+});
+
 function updateStateLabel(value) {
     const key = `update.states.${String(value || "").toUpperCase()}`;
     return I18N[uiLocale][key] || I18N.zh[key] || String(value || "");
@@ -1677,7 +1851,7 @@ document.querySelectorAll("[data-target]").forEach(entry => {
 });
 
 document.querySelectorAll("[data-back]").forEach(back => {
-    back.addEventListener("click", () => showPage("home"));
+    back.addEventListener("click", () => showPage(back.dataset.back || "home"));
 });
 
 /* Apply browser fallback before the first bridge hello. Native state may

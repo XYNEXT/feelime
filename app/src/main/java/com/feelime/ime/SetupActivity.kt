@@ -267,10 +267,13 @@ class SetupActivity : AppCompatActivity() {
             // not finish the activity mid-navigation. The page re-reports
             // its state after showPage lands anyway.
             if (bridge.onSubPage) {
+                // 逐级返回（issue #17 三级页）：phrases → input → home；
+                // 其余子页与设计 §6.2 一律回 home。
+                val parent = if (bridge.subPageName == "phrases") "input" else "home"
                 bridge.onSubPage = false
                 bridge.evaluate(
                     "window.FeelimeSettings && window.FeelimeSettings.showPage" +
-                        " && window.FeelimeSettings.showPage('home')",
+                        " && window.FeelimeSettings.showPage('" + parent + "')",
                 )
             } else {
                 finish()

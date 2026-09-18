@@ -16,6 +16,9 @@ class RimeTextEngine(
 ) : NativeTextEngine() {
     private val appContext = context.applicationContext
     private var session = 0L
+    /** 本 session 所属引擎代数：reloadGlobal 换代后旧 handle 悬垂，
+     *  closeNative 不得再拿它调 librime（地址可能被新 session 复用）。 */
+    private var sessionEpoch = 0L
     private var page = 0
     private var lastState = EngineState("", "", emptyList(), false, false, null)
 
@@ -27,6 +30,7 @@ class RimeTextEngine(
         ensureGlobalInit(appContext)
         synchronized(gate) {
             android.util.Log.i("FeelimeEngine", "rime createSession $schemaId")
+            sessionEpoch = engineEpoch
             session = NativeSmoke.rimeCreateSession(schemaId)
             if (session == 0L) {
                 // 诊断埋点（issue #12）：createSession 失败走异常前先落诊断。
@@ -318,7 +322,9 @@ class RimeTextEngine(
 
     override fun closeNative() {
         synchronized(gate) {
-            if (session != 0L) NativeSmoke.rimeDestroySession(session)
+            if (session != 0L && sessionEpoch == engineEpoch) {
+                NativeSmoke.rimeDestroySession(session)
+            }
             session = 0
         }
     }
@@ -337,6 +343,8 @@ class RimeTextEngine(
         private const val SHIFT_MASK = 1 // kShiftMask
         private val gate = Any()
         @Volatile private var globallyInitialized = false
+        /** 引擎代数：reloadGlobal 递增，标记所有现存 session handle 失效。 */
+        @Volatile private var engineEpoch = 0L
 
         fun ensureGlobalInit(context: Context) = synchronized(gate) {
             if (globallyInitialized) return
@@ -354,6 +362,22 @@ class RimeTextEngine(
             }
             android.util.Log.i("FeelimeEngine", "rime global init done in ${android.os.SystemClock.elapsedRealtime() - startedAt}ms")
             globallyInitialized = true
+        }
+
+        /** custom_phrase 词表变更后整引擎重载。stabledb（custom_phrase
+         * 通道）只在引擎生命周期加载一次：session 级重建不重读文件
+         * （AVD 实测切 schema 仍出旧词），必须 finalize+init 才重开词
+         * 表。调用后引擎实例持有的旧 session handle 全部悬垂——
+         * librime 按句柄查表查不到只返回失败，配合调用方紧随其后的
+         * recreateEngineSession 重建即恢复。仅在设置页改词时调用
+         * （无活动组合的时机）。 */
+        fun reloadGlobal(context: Context) = synchronized(gate) {
+            if (!globallyInitialized) return
+            android.util.Log.i("FeelimeEngine", "rime reload: finalize + re-init")
+            NativeSmoke.rimeFinalize()
+            globallyInitialized = false
+            engineEpoch += 1
+            ensureGlobalInit(context)
         }
     }
 }

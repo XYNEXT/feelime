@@ -84,6 +84,7 @@ class MockSettingsNative {
     setCandidateFont(...a) { this._rec('setCandidateFont', a); }
     setFuzzyPinyinMask(...a) { this._rec('setFuzzyPinyinMask', a); }
     setAssociation(...a) { this._rec('setAssociation', a); }
+    saveCustomPhrases(...a) { this._rec('saveCustomPhrases', a); }
     setDiagnostics(...a) { this._rec('setDiagnostics', a); }
     exportDiagnostics(...a) { this._rec('exportDiagnostics', a); }
     setOneHandPad(...a) { this._rec('setOneHandPad', a); }
@@ -579,20 +580,20 @@ test('navigation: home starts as the only visible page; showPage swaps and repor
     const hiddenMap = () => Object.fromEntries(
         [...world.doc.querySelectorAll('[data-page]')].map(p => [p.dataset.page, p.hidden]));
     equal(hiddenMap(), {
-        home: false, appearance: true, input: true, voice: true, update: true, backup: true,
-        about: true, test: true,
+        home: false, appearance: true, input: true, phrases: true, voice: true, update: true,
+        backup: true, about: true, test: true,
     }, 'initial: home visible, sub-pages hidden');
 
     world.FeelimeSettings().showPage('voice');
     equal(hiddenMap(), {
-        home: true, appearance: true, input: true, voice: false, update: true, backup: true,
-        about: true, test: true,
+        home: true, appearance: true, input: true, phrases: true, voice: false, update: true,
+        backup: true, about: true, test: true,
     }, 'voice page visible, everything else hidden');
-    equal(world.lastCall('reportPage').args, [true, world.token], 'reportPage(true) on sub-page');
+    equal(world.lastCall('reportPage').args, ['voice', world.token], 'reportPage(page name) on sub-page');
 
     world.FeelimeSettings().showPage('home');
     equal(hiddenMap().home, false, 'home visible again');
-    equal(world.lastCall('reportPage').args, [false, world.token], 'reportPage(false) on home');
+    equal(world.lastCall('reportPage').args, ['home', world.token], 'reportPage(home) on home');
 
     // Unknown page names are a no-op (device gates probe with typos).
     world.FeelimeSettings().showPage('nosuch');
@@ -607,13 +608,13 @@ test('navigation: home entry buttons open their group; the sub-page back button 
     inputEntry.click();
     equal(world.doc.querySelector('[data-page="input"]').hidden, false, 'input page open');
     equal(world.doc.querySelector('[data-page="home"]').hidden, true, 'home hidden');
-    equal(world.lastCall('reportPage').args, [true, world.token], 'entry click reports sub-page');
+    equal(world.lastCall('reportPage').args, ['input', world.token], 'entry click reports the page name');
 
     const back = world.doc.querySelector('[data-page="input"] [data-back]');
     back.click();
     equal(world.doc.querySelector('[data-page="home"]').hidden, false, 'back returns home');
     equal(world.doc.querySelector('[data-page="input"]').hidden, true, 'input page hidden');
-    equal(world.lastCall('reportPage').args, [false, world.token], 'back reports home');
+    equal(world.lastCall('reportPage').args, ['home', world.token], 'back reports home');
 });
 
 test('hidden pages still render from state pushes (R7: render does not follow the page)', () => {
@@ -694,6 +695,111 @@ test('Play app updates have their own store action while keyboard ZIP controls r
     world.$('btnAppStore').listeners.find(l => l.type === 'click').handler();
     equal(world.native.of('openAppStore').slice(-1)[0].args, [world.token], 'store action authenticated');
     assert(!world.$('btnInstallZip').hidden, 'keyboard resource installation stays available');
+});
+
+// ------------------------------------------------- custom phrases (issue #17)
+
+test('custom phrases: state renders the list; CRUD resends the full payload with the token', () => {
+    const world = new SettingsWorld();
+    world.push({ ...BASE_STATE, customPhrases: {
+        enabled: true, items: [{ text: '↑', code: 'shang' }, { text: '✓', code: 'dui' }],
+    } });
+    equal(world.$('phrasesOn').checked, true, 'toggle on from state');
+    const rows = [...world.doc.querySelectorAll('#phraseList .phrase-row')];
+    equal(rows.length, 2, 'two rows rendered');
+    equal(rows[0].querySelector('.phrase-text').textContent, '↑', 'row text');
+    equal(rows[0].querySelector('code').textContent, 'shang', 'row code');
+
+    // 添加：新词条追加重发全量（text+code+enabled）。
+    world.$('phraseText').value = '🐱';
+    world.$('phraseCode').value = 'Mao';
+    world.$('btnSavePhrase').click();
+    const args = world.lastCall('saveCustomPhrases').args;
+    equal(args.length, 3, 'items + enabled + token');
+    equal(args[2], world.token, 'token');
+    equal(JSON.parse(args[0]).length, 3, 'full list resent');
+    equal(JSON.parse(args[0])[2], { text: '🐱', code: 'mao' }, 'code normalized to lowercase');
+    equal(args[1], true, 'enabled carried through');
+
+    // 重复码拒绝、且不发桥调用。
+    const calls = world.native.of('saveCustomPhrases').length;
+    world.$('phraseText').value = 'dup';
+    world.$('phraseCode').value = 'shang';
+    world.$('btnSavePhrase').click();
+    equal(world.native.of('saveCustomPhrases').length, calls, 'duplicate code not saved');
+
+    // 编辑：点行进入编辑态，保存改写该行。
+    world.push({ ...BASE_STATE, customPhrases: {
+        enabled: true, items: [{ text: '↑', code: 'shang' }, { text: '✓', code: 'dui' }],
+    } });
+    [...world.doc.querySelectorAll('#phraseList .phrase-edit')][1].click();
+    equal(world.$('btnSavePhrase').textContent, '保存修改', 'edit mode label');
+    equal(world.$('btnCancelPhraseEdit').hidden, false, 'cancel visible in edit mode');
+    world.$('phraseText').value = '✔';
+    world.$('btnSavePhrase').click();
+    const edited = JSON.parse(world.lastCall('saveCustomPhrases').args[0]);
+    equal(edited[1], { text: '✔', code: 'dui' }, 'edit rewrites the row');
+
+    // 删除：行内 ✕ 立即重发剩余表。
+    world.push({ ...BASE_STATE, customPhrases: {
+        enabled: true, items: [{ text: '↑', code: 'shang' }, { text: '✓', code: 'dui' }],
+    } });
+    [...world.doc.querySelectorAll('#phraseList .phrase-del')][0].click();
+    equal(JSON.parse(world.lastCall('saveCustomPhrases').args[0]).length, 1, 'delete resends the rest');
+
+    // 开关：只翻 enabled，词条表保持。
+    const box = world.$('phrasesOn');
+    box.checked = false;
+    box.listeners.find(l => l.type === 'change').handler({ target: box });
+    const offArgs = world.lastCall('saveCustomPhrases').args;
+    equal(offArgs[1], false, 'toggle off carried');
+    equal(JSON.parse(offArgs[0]).length, 1, 'items unchanged by the toggle');
+});
+
+test('custom phrases: the 200-entry cap is enforced locally before the bridge call', () => {
+    const world = new SettingsWorld();
+    const items = Array.from({ length: 200 }, (_, i) => ({ text: '词' + i, code: 'w' + i }));
+    world.push({ ...BASE_STATE, customPhrases: { enabled: true, items } });
+    world.$('phraseText').value = '多一条';
+    world.$('phraseCode').value = 'duo';
+    world.$('btnSavePhrase').click();
+    equal(world.native.of('saveCustomPhrases').length, 0, 'the 201st entry is refused locally');
+    // 删除一条后同一添加立即通过（200 上限是硬边界不是粘滞态）。
+    [...world.doc.querySelectorAll('#phraseList .phrase-del')][0].click();
+    const afterDelete = JSON.parse(world.lastCall('saveCustomPhrases').args[0]);
+    equal(afterDelete.length, 199, 'delete resends 199');
+    world.$('phraseText').value = '多一条';
+    world.$('phraseCode').value = 'duo';
+    world.$('btnSavePhrase').click();
+    equal(JSON.parse(world.lastCall('saveCustomPhrases').args[0]).length, 200, 'add passes at 200');
+});
+
+test('custom phrases: CRUD is refused before the first state push (no seed wipe)', () => {
+    const world = new SettingsWorld();
+    // Bridge hello only - no state push yet. phraseItems is still null.
+    world.$('phraseText').value = '瓢虫';
+    world.$('phraseCode').value = 'pichong';
+    world.$('btnSavePhrase').click();
+    equal(world.native.of('saveCustomPhrases').length, 0, 'add refused before state arrives');
+    const box = world.$('phrasesOn');
+    box.checked = false;
+    box.listeners.find(l => l.type === 'change').handler({ target: box });
+    equal(world.native.of('saveCustomPhrases').length, 0, 'toggle refused before state arrives');
+});
+
+test('custom phrases: empty list shows the hint; third-level page routes back to input', () => {
+    const world = new SettingsWorld();
+    world.push({ ...BASE_STATE, customPhrases: { enabled: false, items: [] } });
+    equal(world.$('phraseEmpty').hidden, false, 'empty hint visible');
+    equal(world.$('phrasesOn').checked, false, 'toggle off from state');
+
+    // 三级页：back 回 input，不回 home。
+    world.FeelimeSettings().showPage('input');
+    world.FeelimeSettings().showPage('phrases');
+    equal(world.doc.querySelector('[data-page="phrases"]').hidden, false, 'phrases page open');
+    world.doc.querySelector('[data-page="phrases"] [data-back]').click();
+    equal(world.doc.querySelector('[data-page="input"]').hidden, false, 'back lands on input');
+    equal(world.doc.querySelector('[data-page="phrases"]').hidden, true, 'phrases closed');
 });
 
 // ------------------------------------------------- double-pinyin scheme (§2)

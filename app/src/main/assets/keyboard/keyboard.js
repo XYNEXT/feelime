@@ -242,7 +242,15 @@
         });
     }
 
-    const KEYBOARD_VERSION = '3.46.0';
+    const KEYBOARD_VERSION = '3.47.0';
+
+    /** 纯符号词条判定（issue #17）：每个字符既不是字母（含汉字）也不是
+     *  数字——↑✓★🐱♂ 这类 custom_phrase 符号词。用于渲染层把它们重排
+     *  到候选第 3 格；含汉字/字母的词（正常词条）不在此列。 */
+    function isSymbolicText(text) {
+        if (!text) return false;
+        return [...String(text)].every(ch => !/\p{L}/u.test(ch) && !/\p{N}/u.test(ch));
+    }
 /** 工具栏可编辑 icon 目录（issue #15 编辑模式）：id → 按钮 DOM id。
  *  logo（左）与收起（右）固定不可编辑；组合态工具（清除/展开）与
  *  完整设置齿轮不参与编辑。 */
@@ -805,7 +813,7 @@ const TOOLBAR_DEFAULT = { left: ['ctrl', 'ime'], right: ['clipboard', 'favorites
     }
 
     // BEGIN GENERATED SCHEMA_MAP
-    // schema-sha256: ziranma=7d4f5c1e0beb8d7f flypy=380ae29e4c6fc0f1 sogou=26526ff2b43bec41 ziguang=d6e833ce3e7fa250
+    // schema-sha256: ziranma=ac60c13a00eae405 flypy=7850588e9495b50d sogou=e278729922814390 ziguang=6a139f79776718dd
     const DP_INITIAL_FINALS = {"ziranma":{"a":"ahijklno","b":"acdfghijklmnouxyz","c":"abefghijkloprsuvz","d":"abcefghijklmnopqrsuvwxyz","e":"efginrz","f":"abcfghjosuz","g":"abdefghjkloprsuvwyz","h":"abdefghjkloprsuvwyz","i":"abdefghijkloprsuvwy","j":"cdimnpqrstuvwxy","k":"abdefghjkloprsuvwyz","l":"abcdeghijklmnopqrstuvwxyz","m":"abcefghijklmnoquxyz","n":"abcdefghijklmnopqrstuvwxyz","o":"abefghjkloruz","p":"abcfghijklmnouwxyz","q":"cdimnpqrstuvwxy","r":"befghijkoprsuvw","s":"abefghijkloprsuvz","t":"abceghijklmoprsuvxyz","u":"abdefghijklopruvwyz","v":"abdefghijkloprsuvwyz","w":"afghjlosuz","x":"cdimnpqrstuvwxy","y":"abehijklnoprstuvy","z":"abefghijkloprsuvz"},"flypy":{"a":"acdhijno","b":"abcdfghijklmnopuw","c":"acdefghijorsuvwyz","d":"abcdefghijkmnopqrsuvwxyz","e":"efghinrw","f":"afghjnosuwz","g":"acdefghjklorsuvwxyz","h":"acdefghjklorsuvwxyz","i":"acdefghijklorsuvxyz","j":"biklmnpqrstuvxy","k":"acdefghjklorsuvwxyz","l":"abcdeghijklmnopqrstuvwxyz","m":"abcdefghijkmnopquwz","n":"abcdefghijklmnopqrstuvwxyz","o":"ouz","p":"abcdfghijkmnopuwxz","q":"biklmnpqrstuvxy","r":"cefghijorsuvxyz","s":"acdefghijorsuvwyz","t":"acdeghijkmnoprsuvwyz","u":"acdefghijkloruvwxyz","v":"acdefghijklorsuvwxyz","w":"adfghjosuw","x":"biklmnpqrstuvxy","y":"abcdehijkorstuvyz","z":"acdefghijorsuvwyz"},"sogou":{"a":"ahjkl","b":";acdfghijklmnouxz","c":"abefghijkloprsuvz","d":";abcefghijklmnopqrsuvwxz","e":"efgrz","f":"abcfghjosuz","g":"abdefghjkloprsuvwyz","h":"abdefghjkloprsuvwyz","i":"abdefghijkloprsuvwy","j":";cdimnpqrstuwxy","k":"abdefghjkloprsuvwyz","l":";abcdeghijklmnopqrstuwxyz","m":";abcefghijklmnoquxz","n":";abcdefghijklmnopqrstuwxyz","o":"abefghjkloruz","p":";abcfghijklmnouwxz","q":";cdimnpqrstuwxy","r":"befghijkoprsuvw","s":"abefghijkloprsuvz","t":";abceghijklmoprsuvxz","u":"abdefghijklopruvwyz","v":"abdefghijkloprsuvwyz","w":"afghjlosuz","x":";cdimnpqrstuwxy","y":";abehijklnoprstuy","z":"abefghijkloprsuvz"},"ziguang":{"a":"aeghilmnopqrstuwxyz","b":";abdfgikopqrstuwy","c":"aehiklmnopqrstuwz","d":";abdefhijklmnopqrstuwxyz","f":"abhkorstuwz","g":"aeghklmnopqrstuwxyz","h":"aeghklmnopqrstuwxyz","i":"aegiklmnopqrstuwxyz","j":";bdfghijlmnuvxy","k":"aeghklmnopqrstuwxyz","l":";abdefghijklmnopqrstuvxyz","m":";abdefijkopqrstuwyz","n":";abdefghijklmnopqrstuvwxyz","o":"aejkopqrstwz","p":";abdfikopqrstuwxyz","q":";bdfghijlmnuvxy","r":"ehilmnoqrstuwxz","s":"aehiklmnopqrstuwz","t":";abdefhiklmnopqrstuz","u":"aeghiklmnopqrstuwxyz","w":"ahkoprstuw","x":";bdfghijlmnuvxy","y":";aehilmnopqrsuvyz","z":"aehiklmnopqrstuwz"}};
     // END GENERATED SCHEMA_MAP
 
@@ -5539,6 +5547,14 @@ const TOOLBAR_DEFAULT = { left: ['ctrl', 'ime'], right: ['clipboard', 'favorites
             this.expandHasNext = !!state.hasNextPage;
             this.loadingMore = false;
             this.injectFavoriteCandidates();
+            // 符号重排（issue #17）可能改写池前缀：展开区的增量水位线
+            // （expandRendered 按旧索引跳过已绘制部分）与新顺序错位会漏项/
+            // 重复。前缀一变就全量重绘展开层（renderExpanded 自带水位线
+            // 重置与 DOM 清空）。
+            if (this.symbolicPrefixChanged) {
+                this.symbolicPrefixChanged = false;
+                this.renderExpanded();
+            }
         }
 
         /** 常用语注入 (design §7.4): favorites whose input code
@@ -5562,9 +5578,30 @@ const TOOLBAR_DEFAULT = { left: ['ctrl', 'ime'], right: ['clipboard', 'favorites
          * Only accented glyphs are taken - alts also carry digits/'-' which
          * must not surf in the word bar. */
         injectFavoriteCandidates() {
-            const engine = this.expandCandidates.filter(candidate =>
+            const rawEngine = this.expandCandidates.filter(candidate =>
                 !String(candidate.id).startsWith('fav:') &&
                 !String(candidate.id).startsWith('alt:'));
+            // 符号词条重排（issue #17）先于 overlay 组装：custom_phrase 通道
+            // 的符号/emoji 词在引擎侧受 initial_quality 的 0/1 悬崖支配（第
+            // 1 位或沉底，weight 无法跨流微调），在 ENGINE 池内把纯符号词
+            // 挪到 index 2（两个正常候选保持在最前）。先排引擎序、后插
+            // overlay，常用语 rank 位次与空格确认的池头语义不被符号挪动
+            // 二次改写；中文自定义词（含汉字/字母）不动。bar/展开层/选词
+            // 通道共用同一池，天然一致。
+            const symbolic = rawEngine.filter(candidate => isSymbolicText(candidate.text));
+            let engine = rawEngine;
+            if (symbolic.length) {
+                const rest = rawEngine.filter(candidate => !symbolic.includes(candidate));
+                engine = [...rest.slice(0, 2), ...symbolic, ...rest.slice(2)];
+            }
+            // 池前缀（前 3 项 id 签名）变了 → 展开区增量水位线与新顺序错位
+            // （会漏项/重复），标记让 accumulateCandidates 全量重绘；纯追加
+            // 不动前缀时不触发，保留拖动预载的增量渲染。
+            const prefixSig = engine.slice(0, 3).map(candidate => candidate.id).join('|');
+            if (prefixSig !== this.symbolicPrefixSig) {
+                this.symbolicPrefixSig = prefixSig;
+                this.symbolicPrefixChanged = true;
+            }
             const raw = (this.lastRawInput || '').replace(/ /g, '').toLowerCase();
             const engineTexts = new Set(engine.map(candidate => candidate.text));
             const exact = [];

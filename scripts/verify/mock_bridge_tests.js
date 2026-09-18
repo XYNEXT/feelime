@@ -249,6 +249,36 @@ test('composing space confirms the pool head, not the paged highlight', () => {
     equal(world.native.of('space').length, 1, 'idle space unchanged');
 });
 
+test('symbol custom phrases reorder to slot 3; CJK entries keep engine order (issue #17)', () => {
+    const world = fresh({ mode: 'pinyin' });
+    const bar = () => JSON.stringify([...world.$('candidates').querySelectorAll('.candidate')]
+        .map(node => node.textContent));
+    // custom_phrase 符号词在引擎侧排第 1（quality 悬崖）——渲染层必须
+    // 挪到第 3 格，前两格留给正常候选。
+    world.engineState({ mode: 'pinyin', revision: 3, composing: 'shang', rawInput: 'shang',
+        candidates: [
+            { id: 'p0', text: '↑' }, { id: 'c1', text: '上' },
+            { id: 'c2', text: '商' }, { id: 'c3', text: '伤' },
+        ], hasNextPage: false });
+    equal(bar(), JSON.stringify(['上', '商', '↑', '伤']), 'symbol rides slot 3, two real candidates ahead');
+    // 空格确认的是重排后的池头（上），不是引擎原第 1 位。
+    world.tap(world.$('spaceKey'));
+    const pick = world.native.of('chooseCandidate').slice(-1)[0];
+    equal(pick.args[1], 'c1', 'space confirms the reordered pool head by id');
+
+    // 中文自定义词（custom_phrase 但含汉字）不重排。
+    world.engineState({ mode: 'pinyin', revision: 5, composing: 'gzzl', rawInput: 'gzzl',
+        candidates: [
+            { id: 'p9', text: '工作顺利' }, { id: 'c4', text: '工作' },
+        ], hasNextPage: false });
+    equal(bar(), JSON.stringify(['工作顺利', '工作']), 'CJK phrase keeps its engine slot');
+
+    // 无符号词时池顺序原样。
+    world.engineState({ mode: 'pinyin', revision: 6, composing: 'ni', rawInput: 'ni',
+        candidates: [{ id: 'c7', text: '你' }, { id: 'c8', text: '妮' }], hasNextPage: false });
+    equal(bar(), JSON.stringify(['你', '妮']), 'plain pools untouched');
+});
+
 test('space hold 350ms starts voice once, release stops', () => {
     const world = fresh();
     const space = world.$('spaceKey');
@@ -1470,6 +1500,61 @@ test('rank slots: exact favorites splice into their 1-based candidate slot', {si
         candidates: [{ id: 'c1', text: '在' }], hasNextPage: false });
     equal(JSON.stringify(bar()), JSON.stringify(['在吗', '在', '咱', '祝福']),
         'rank 1 keeps the head; oversized ranks clamp to the tail');
+});
+
+test('symbol reorder stays stable under favorite overlays (issue #17, review P1)', () => {
+    const world = fresh({ mode: 'pinyin' });
+    world.hello();
+    const bar = () => JSON.stringify([...world.$('candidates').querySelectorAll('.candidate')]
+        .map(b => b.textContent));
+    // 符号重排发生在 ENGINE 池内、overlay 组装之前：常用语 rank 语义
+    // 基于重排后的池，不会因符号挪动被二次改写。
+    world.favorites([
+        { id: 'f1', time: 1, text: '上班', code: 'shang', rank: 2 },
+    ]);
+    world.engineState({ mode: 'pinyin', revision: 1, composing: 'shang', rawInput: 'shang',
+        candidates: [
+            { id: 'p0', text: '↑' }, { id: 'c1', text: '上' },
+            { id: 'c2', text: '商' }, { id: 'c3', text: '伤' },
+        ], hasNextPage: false });
+    // engine 重排 → [上, 商, ↑, 伤]；rank2 常用语插到第 2 格。
+    equal(bar(), JSON.stringify(['上', '上班', '商', '↑', '伤']),
+        'rank slots land on the reordered pool, not the raw engine order');
+    // 空格确认的仍是引擎首选（上），重排不得改写池头语义。
+    world.tap(world.$('spaceKey'));
+    const pick = world.native.of('chooseCandidate').slice(-1)[0];
+    equal(pick.args[1], 'c1', 'space confirms the engine head through the reorder');
+});
+
+test('symbol reorder keeps the expanded grid in sync across pages (issue #17, review P1)', () => {
+    const world = fresh({ mode: 'pinyin' });
+    world.hello();
+    // 第一页全是符号：重排后前缀稳定（符号占满前三格）。追加页带来普通
+    // 候选时前缀改写 → 展开区必须全量重绘（增量水位线会漏项/重复）。
+    world.engineState({ mode: 'pinyin', revision: 1, composing: 'sh', rawInput: 'sh',
+        candidates: [
+            { id: 's1', text: '↑' }, { id: 's2', text: '↓' },
+            { id: 's3', text: '←' }, { id: 's4', text: '→' },
+        ], hasNextPage: true });
+    world.$('composeExpand').click();
+    world.clock.advance(2);
+    let grid = [...world.$('expandGrid').querySelectorAll('.expand-candidate')]
+        .map(b => b.textContent);
+    equal(JSON.stringify(grid), JSON.stringify(['↑', '↓', '←', '→']),
+        'page 1 renders symbol-only in engine order');
+    // 第二页追加普通候选：重排把「上」顶进前两格，符号组后移。
+    world.engineState({ mode: 'pinyin', revision: 2, composing: 'sh', rawInput: 'sh',
+        candidates: [{ id: 'c1', text: '上' }, { id: 'c2', text: '商' }], hasNextPage: false });
+    grid = [...world.$('expandGrid').querySelectorAll('.expand-candidate')]
+        .map(b => b.textContent);
+    equal(JSON.stringify(grid), JSON.stringify(['上', '商', '↑', '↓', '←', '→']),
+        'grid fully repaints on prefix change - no missing, no duplicates');
+    const barTexts = [...world.$('candidates').querySelectorAll('.candidate')]
+        .map(b => b.textContent);
+    equal(JSON.stringify(barTexts.slice(0, 6)), JSON.stringify(grid),
+        'bar and expanded grid share one reordered pool');
+    world.$('expandCollapse').click();
+    world.clock.advance(2);
 });
 
 test('phrase card edits the rank with +/- steppers', {since: '3.25.0'}, () => {

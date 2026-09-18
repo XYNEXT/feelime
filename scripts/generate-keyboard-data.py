@@ -28,6 +28,11 @@ KEYBOARD = ROOT / 'app/src/main/assets/keyboard/keyboard.js'
 # The key map chart lives in the settings app (APK asset - the hot-updatable
 # keyboard package whitelist only serves index/keyboard.js/css/VERSION).
 SETTINGS_DATA = ROOT / 'app/src/main/assets/settings/dp-data.js'
+# Custom-phrase spelling variants (issue #17): every pinyin syllable mapped to
+# the union of its full spelling and every double-pinyin spelling across the
+# four schemes. The shell reads this APK asset to expand each phrase item into
+# multiple custom_phrase.txt rows, so one item matches in ALL input modes.
+PHRASE_CODES = ROOT / 'app/src/main/assets/custom-phrase-codes.json'
 FINALS = 'iu ua ia e uan er ue ve ing uai u i o uo un a ong iong iang uang en eng ang an ao ai ei ie iao ui v ou in ian'.split()
 # ';' rides the WIDE key (shift slot, left of Z on the keyboard) and carries
 # a final only in sogou - first cell of the last row keeps the chart honest
@@ -127,18 +132,42 @@ def variant_table(prism_id):
     return {k: ''.join(sorted(v)) for k, v in sorted(table.items())}
 
 
+def phrase_code_table(rules_by_scheme):
+    """pinyin syllable -> union of full spelling and every double-pinyin
+    spelling across schemes (issue #17 custom-phrase expansion). The
+    canonical syllable set is the prism's SECOND column (the syllable each
+    spelling maps to) - the first column also carries abbreviated and
+    typo-corrected spellings (sh -> sha, agn -> ang) which must never be
+    expanded as if they were syllables."""
+    syllables = set()
+    for line in (RIME_DIR / 'luna_pinyin.prism.txt').read_text().splitlines():
+        parts = line.split('\t')
+        if len(parts) >= 2 and parts[1] and re.fullmatch(r'[a-z]+', parts[1]):
+            syllables.add(parts[1])
+    table = {}
+    for syllable in sorted(syllables):
+        codes = {syllable}
+        for rules in rules_by_scheme.values():
+            codes.update(spell(syllable, rules))
+        table[syllable] = sorted(codes)
+    return table
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--check', action='store_true')
     args = parser.parse_args()
     maps = {}
     tables = {}
+    rules_by_scheme = {}
     digests = []
     for scheme, prism_id in SCHEMAS.items():
         rules = load_rules(RIME_DIR / f'{prism_id}.schema.yaml')
+        rules_by_scheme[scheme] = rules
         maps[scheme] = keymap_rows(rules)
         tables[scheme] = variant_table(prism_id)
         digests.append(f'{scheme}={hashlib.sha256((RIME_DIR / (prism_id + ".schema.yaml")).read_bytes()).hexdigest()[:16]}')
+    phrase_codes = phrase_code_table(rules_by_scheme)
     generated = ('    // BEGIN GENERATED SCHEMA_MAP\n    // schema-sha256: '
                  + ' '.join(digests) + '\n')
     generated += ('    const DP_INITIAL_FINALS = '
@@ -151,6 +180,8 @@ def main():
         'window.FeelimeDp = '
         + json.dumps({'schemes': list(SCHEMAS), 'maps': maps},
                      ensure_ascii=False, separators=(',', ':')) + ';\n')
+    phrase_codes_text = (
+        json.dumps(phrase_codes, ensure_ascii=False, separators=(',', ':'), sort_keys=True) + '\n')
     source = KEYBOARD.read_text()
     pattern = r'    // BEGIN GENERATED SCHEMA_MAP[\s\S]*?    // END GENERATED SCHEMA_MAP'
     if not re.search(pattern, source):
@@ -162,12 +193,15 @@ def main():
         # dp-data.js would otherwise blank the settings key map silently).
         if not SETTINGS_DATA.exists() or SETTINGS_DATA.read_text() != settings_data:
             bad = True
+        if not PHRASE_CODES.exists() or PHRASE_CODES.read_text() != phrase_codes_text:
+            bad = True
         if bad:
             raise SystemExit('Key map differs from schema. Run scripts/generate-keyboard-data.py')
         print('Displayed key map matches the shipped schemas.')
     else:
         KEYBOARD.write_text(expected)
         SETTINGS_DATA.write_text(settings_data)
+        PHRASE_CODES.write_text(phrase_codes_text)
 
 
 if __name__ == '__main__':

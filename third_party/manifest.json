@@ -189,9 +189,9 @@
     {
       "apkPath": "assets/engine-data/rime/ziranma_double_pinyin.schema.yaml",
       "buildRecipe": "cmake-native",
-      "bytes": 39293,
+      "bytes": 39485,
       "path": "app/src/main/assets/engine-data/rime/ziranma_double_pinyin.schema.yaml",
-      "sha256": "7d4f5c1e0beb8d7f9ff6c9ca70c29999f2ea9a33f6025c4d9665eb79bd97d2ab",
+      "sha256": "ac60c13a00eae405d57cb98cc7801d44c95865ccf76119390c7aa845c87ef6a5",
       "sources": [
         "feelime-original-schema"
       ]
