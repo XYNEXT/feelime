@@ -739,6 +739,7 @@ class TextInputCoordinator(
 
     private fun dispatch(command: EngineCommand): DispatchAck {
         if (closed && command != EngineCommand.Start) {
+            diag("dispatchRejected cmd=${command::class.simpleName} code=STALE_STAMP closed=true")
             return DispatchAck.Rejected(EngineCode.STALE_STAMP)
         }
         if (pendingEngine != null || replaying) {
@@ -747,8 +748,15 @@ class TextInputCoordinator(
         // Live events are posted too. Keep subsequent keys and mode/session
         // changes behind the applied event, just like warmup replay.
         replaying = true
-        return if (command == EngineCommand.EnterRaw) dispatchLiveEnter { replayWarmupQueue() }
-        else dispatchLive(command) { replayWarmupQueue() }
+        val ack = if (command == EngineCommand.EnterRaw) {
+            dispatchLiveEnter { replayWarmupQueue() }
+        } else {
+            dispatchLive(command) { replayWarmupQueue() }
+        }
+        if (ack is DispatchAck.Rejected) {
+            diag("dispatchRejected cmd=${command::class.simpleName} code=${ack.code.name}")
+        }
+        return ack
     }
 
     private fun dispatchLive(
@@ -1109,8 +1117,19 @@ class TextInputCoordinator(
             onPendingEvent(event)
             return
         }
-        if (event.stamp != stamp) return
-        if (event.revision <= lastAppliedRevision) return
+        if (event.stamp != stamp) {
+            // 诊断埋点（issue #12）：快速模式切换后键入无候选的排查——
+            // 迟到事件被 stamp 拦下在这里不可见。只记代际/模式/相位。
+            diag("eventDropped reason=stampMismatch phase=${event.phase.name} " +
+                "got=${event.stamp.engineSessionGeneration}/${event.stamp.mode.wireName} " +
+                "want=${stamp.engineSessionGeneration}/${stamp.mode.wireName}")
+            return
+        }
+        if (event.revision <= lastAppliedRevision) {
+            diag("eventDropped reason=revisionRegression phase=${event.phase.name} " +
+                "rev=${event.revision} applied=$lastAppliedRevision")
+            return
+        }
         lastAppliedRevision = event.revision
         when (event.phase) {
             Phase.CLOSED -> {
@@ -1163,6 +1182,14 @@ class TextInputCoordinator(
                 }
             }
             else -> {
+                // 诊断埋点（issue #12）：每次应用引擎状态记数量指纹
+                // （不含文本内容）。rime 收键但不产候选 / composing 置位
+                // 失败在这条上现形。
+                diag("stateApplied phase=${event.phase.name} " +
+                    "preedit=${event.state.composing.length} " +
+                    "raw=${event.state.rawInput.length} " +
+                    "cand=${event.state.candidates.size} " +
+                    "commit=${event.state.commit != null} rev=${event.revision}")
                 event.state.commit?.let { committed ->
                     // A commit changes the host editor even when the engine
                     // event itself is asynchronous. Start a new local
@@ -1221,7 +1248,11 @@ class TextInputCoordinator(
     }
 
     private fun onPendingEvent(event: EngineEvent) {
-        if (event.revision <= pendingLastRevision) return
+        if (event.revision <= pendingLastRevision) {
+            diag("eventDropped reason=pendingRevisionRegression phase=${event.phase.name} " +
+                "rev=${event.revision} applied=$pendingLastRevision")
+            return
+        }
         when (event.phase) {
             Phase.LOADING -> {
                 pendingLastRevision = event.revision

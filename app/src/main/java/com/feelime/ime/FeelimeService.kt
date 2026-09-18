@@ -469,6 +469,16 @@ class FeelimeService : InputMethodService(), AsrEngine.Listener {
                             "reason=${event.degrade.reason} seq=${event.degrade.seq}",
                     )
                 }
+                // 诊断埋点（issue #12）：keyboardView 为 null 时 composing/
+                // 候选推送被静默跳过 = 「引擎有产出但 UI 看不到」的直接形态。
+                if (keyboardView == null) {
+                    Diagnostics.log(
+                        "engine",
+                        "statePushSkipped reason=noWebView " +
+                            "preedit=${event.state.composing.length} " +
+                            "cand=${event.state.candidates.size}",
+                    )
+                }
                 evaluate("window.Feelime && window.Feelime.onEngineState && window.Feelime.onEngineState($payload)")
                 // 中文联想（docs/design/association.md §3）：只在 commit 事件
                 // 上计算并推送，键盘保留现有联想直到组合开始。
@@ -483,7 +493,12 @@ class FeelimeService : InputMethodService(), AsrEngine.Listener {
                     pushAssoc(com.feelime.ime.engine.AssociationStore.next(applicationContext, committed))
                 }
             },
-            engineFactory = { mode -> EngineFactory.create(applicationContext, mode) },
+            engineFactory = { mode ->
+                // 诊断埋点（issue #12）：会话生命周期起点，与 startEngine/
+                // engineReady 对账（快速切换后 schema 绑定错位的排查）。
+                Diagnostics.log("engine", "factory mode=${mode.wireName}")
+                EngineFactory.create(applicationContext, mode)
+            },
             asrGuard = { stopVoice(discardResults = true) },
             mainPoster = { block -> main.post(block) },
             background = background,

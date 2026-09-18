@@ -28,7 +28,14 @@ class RimeTextEngine(
         synchronized(gate) {
             android.util.Log.i("FeelimeEngine", "rime createSession $schemaId")
             session = NativeSmoke.rimeCreateSession(schemaId)
-            if (session == 0L) throw EngineFailure(EngineCode.ENGINE_INIT_FAILED)
+            if (session == 0L) {
+                // 诊断埋点（issue #12）：createSession 失败走异常前先落诊断。
+                com.feelime.ime.Diagnostics.log(
+                    "engine",
+                    "rime sessionCreateFailed schema=$schemaId",
+                )
+                throw EngineFailure(EngineCode.ENGINE_INIT_FAILED)
+            }
             android.util.Log.i("FeelimeEngine", "rime session ok $session")
         }
     }
@@ -36,6 +43,15 @@ class RimeTextEngine(
     override fun handle(request: EngineRequest, emit: (EngineEvent) -> Unit): DispatchAck {
         when (val command = request.command) {
             is EngineCommand.Key -> synchronized(gate) {
+                if (session == 0L) {
+                    // 诊断埋点（issue #12）：死会话收键 = 收键无候选/
+                    // composing 空的直接形态。rimeProcessKey(0,…) 不报错，
+                    // 靠这条现形。
+                    com.feelime.ime.Diagnostics.log(
+                        "engine",
+                        "rimeKeyOnDeadSession schema=$schemaId cmd=Key",
+                    )
+                }
                 NativeSmoke.rimeProcessKey(session, command.unicodeScalar, command.modifiers)
                 page = 0
                 emit(stateEvent())
