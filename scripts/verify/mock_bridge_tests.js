@@ -2096,6 +2096,11 @@ test('dp scheme switch: sep key and variant tables follow the hello', {since: '3
     equal(sepLabel(), 'ing', 'sogou sep key shows the ing final');
     world.tap(sepKey());
     equal(world.native.of('key').slice(-1)[0].args[0], ';', 'sogou sep key emits ;');
+    // Ziguang carries ing on ';' too (issue #16).
+    world.hello({ mode: 'double-pinyin', dpScheme: 'ziguang' });
+    equal(sepLabel(), 'ing', 'ziguang sep key shows the ing final');
+    world.tap(sepKey());
+    equal(world.native.of('key').slice(-1)[0].args[0], ';', 'ziguang sep key emits ;');
     // Flypy keeps the separator (its wide slot is still 分词).
     world.hello({ mode: 'double-pinyin', dpScheme: 'flypy' });
     equal(sepLabel(), '分词', 'flypy sep key is the separator');
@@ -2122,6 +2127,11 @@ test('dp scheme switch: single-key expansion uses the active scheme table', {sin
     world.hello({ mode: 'double-pinyin', dpScheme: 'sogou' });
     feed(5);
     assert(variants().some(keys => keys.startsWith("x;'")), 'sogou x expands with ; (xing)');
+    // Ziguang also carries ing on ';' (its table comes from the same
+    // generated map - see the prism golden test).
+    world.hello({ mode: 'double-pinyin', dpScheme: 'ziguang' });
+    feed(7);
+    assert(variants().some(keys => keys.startsWith("x;'")), 'ziguang x expands with ; (xing)');
     // Back to 自然码: the same input no longer offers ; expansions.
     world.hello({ mode: 'double-pinyin', dpScheme: 'ziranma' });
     feed(6);
@@ -3093,6 +3103,13 @@ test('quick tiles: cycle tiles rotate steps and apply locally', {since: '3.38.0'
         'pad applied to the view budget');
     world.tap(world.tile('双拼方案'));
     equal(lastPref(), 'dpScheme=flypy', 'dp scheme cycles 自然码 → 小鹤');
+    // 完整四方案循环（issue #16 加紫光）：小鹤 → 搜狗 → 紫光 → 回自然码。
+    world.tap(world.tile('双拼方案'));
+    equal(lastPref(), 'dpScheme=sogou', 'dp scheme cycles 小鹤 → 搜狗');
+    world.tap(world.tile('双拼方案'));
+    equal(lastPref(), 'dpScheme=ziguang', 'dp scheme cycles 搜狗 → 紫光');
+    world.tap(world.tile('双拼方案'));
+    equal(lastPref(), 'dpScheme=ziranma', 'dp scheme cycles 紫光 → back to 自然码');
     world.tap(world.tile('界面语言'));
     equal(lastPref(), 'uiLocale=en', 'locale cycles zh → en');
     // hello re-push with the new locale translates the whole grid.
@@ -4666,6 +4683,7 @@ test('DP_INITIAL_FINALS equals the prism spelling-pair derivation', () => {
         ziranma: 'ziranma_double_pinyin',
         flypy: 'double_pinyin_flypy',
         sogou: 'double_pinyin_sogou',
+        ziguang: 'double_pinyin_ziguang',
     };
     for (const [scheme, prismId] of Object.entries(prisms)) {
         const table = tables[scheme];

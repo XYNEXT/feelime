@@ -48,7 +48,16 @@ shipped 逐字节一致，两新方案源（original-schemas）重编也与 asse
 ### 2.3 引擎与设置
 
 - prefs `feelime_engine.dp_scheme`（DoublePinyinScheme 单例）：ziranma（默认）/
-  flypy / sogou；未知 id 回落 ziranma。
+  flypy / sogou / ziguang；未知 id 回落 ziranma。
+- 紫光（issue #16，1.0.18/键盘 3.46.0）：algebra 逐条转写自雾凇拼音
+  rime-frost 的 ziguang schema（圆圈中间字母→大写字母，等价性由 spell()
+  全音节对照自证 + 独立复核双重验证）。键位 en=W eng=T in/uai=Y zh=U sh=I
+  uo=O ai=P ch=A iang/uang=G ang=S ie=D ian=F ong/iong=H er/iu=J ei=K
+  uan=L ing=`;` ou=Z ia/ua=X iao=B ue/ui/üe=N un=M ao=Q an=R，零声母
+  =O+韵母键（xform，无全拼形态），ü 在 V。宽键形态与 sogou 同（ing 发 `;`）。
+  生成器边界：N 键三韵母折叠显示「ui üe」；C 键无韵母不出格。
+  微软双拼与搜狗键位一致（上游同为 mspy），不单独加方案：label 改
+  「搜狗 / 微软」。
 - EngineFactory.DOUBLE_PINYIN 按该 pref 选 schema id；
   isModeReady(DOUBLE_PINYIN) 按同一 schema 文件判断。
 - 设置页「键盘与输入 → 双拼方案」三选一（state.dpScheme +

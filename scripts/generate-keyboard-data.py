@@ -21,6 +21,7 @@ SCHEMAS = {
     'ziranma': 'ziranma_double_pinyin',
     'flypy': 'double_pinyin_flypy',
     'sogou': 'double_pinyin_sogou',
+    'ziguang': 'double_pinyin_ziguang',
 }
 RIME_DIR = ROOT / 'app/src/main/assets/engine-data/rime'
 KEYBOARD = ROOT / 'app/src/main/assets/keyboard/keyboard.js'
@@ -100,6 +101,11 @@ def keymap_rows(rules):
             display = ['ü' if f == 'v' else f for f in finals]
             if key == 'v' and finals == ['ui', 'v']:
                 display = ['ui ü']
+            # ziguang's N carries ue/ve/ui (ue and ve are spell variants of
+            # üe) - fold the trio into one honest cell, same as the v case.
+            if key == 'n' and sorted(finals) == ['ue', 'ui', 've']:
+                display = ['ui üe']
+                finals = ['ui üe']
             if not finals:
                 continue  # ';' carries a final only in sogou; row length varies.
             if len(finals) > 2:

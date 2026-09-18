@@ -734,6 +734,18 @@ test('double-pinyin key map renders the active scheme chart from dp-data.js', ()
     const zCells = [...world.doc.querySelectorAll('#dpKeymap .kmap-key')];
     const v = zCells.find(el => el.querySelector('b').textContent === 'V');
     assert(v && v.textContent.includes('ü'), 'ziranma V carries ui ü');
+    // 紫光（issue #16）：state 推送回显选中项（白名单），N 折叠 ui üe，
+    // C 无韵母不出格，; 键 ing。
+    world.push({ ...BASE_STATE, dpScheme: 'ziguang' });
+    equal(world.$('dpScheme').value, 'ziguang', 'ziguang state round-trips');
+    const gCells = [...world.doc.querySelectorAll('#dpKeymap .kmap-key')];
+    const n = gCells.find(el => el.querySelector('b').textContent === 'N');
+    assert(n && n.textContent.includes('ui') && n.textContent.includes('üe'),
+        'ziguang N folds ui üe');
+    const gSemi = gCells.find(el => el.querySelector('b').textContent === ';');
+    assert(gSemi && gSemi.textContent.includes('ing'), 'ziguang ; carries ing');
+    assert(!gCells.find(el => el.querySelector('b').textContent === 'C'),
+        'ziguang C (no final) is omitted from the chart');
 });
 
 // ------------------------------------------------- feel tuning card (UI-18/19)

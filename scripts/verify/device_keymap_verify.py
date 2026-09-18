@@ -291,7 +291,7 @@ def main():
         dp_dom = {}
     record("键盘与输入 page groups 双拼三方案 + 定制",
            dp_dom.get("title") is True and dp_dom.get("chart") == 3
-           and dp_options == "ziranma,flypy,sogou"
+           and dp_options == "ziranma,flypy,sogou,ziguang"
            and has_text(texts, "插入模板", "Insert template")
            and has_text(texts, "Takes effect when the keyboard", "切到「双拼」模式")
            and has_none(texts, "离线中英混合语音输入法", "Offline Chinese-English voice input"),
@@ -314,7 +314,10 @@ def main():
                     " const fin = c => c ? [...c.querySelectorAll('span')].map(s => s.textContent).join('/') : '';"
                     " return { rows: document.querySelectorAll('#dpKeymap .kmap-row').length,"
                     "          cells: cells.length, v: fin(find('V')), r: fin(find('R')),"
-                    "          semi: fin(find(';')), k: fin(find('K')) }; })()") or {}
+                    "          semi: fin(find(';')), k: fin(find('K')),"
+                    "          w: fin(find('W')), u: fin(find('U')), n: fin(find('N')),"
+                    "          c: fin(find('C')),"
+                    "          uInit: (c => c ? c.querySelector('i')?.textContent || '' : '')(find('U')) }; })()") or {}
         sep = ev("(() => { const s = document.querySelector('[data-role=sep]');"
                  " return s ? s.textContent.trim() : ''; })()") or ""
         return chart, sep
@@ -344,6 +347,15 @@ def main():
         'rows': (3, 3), 'cells': (26, 26),
         'fin': {'k': ['ing', 'uai'], 'r': ['uan', 'er']}, 'absent': ['semi'],
         'sep': ('分词', 'Split'),
+    })
+    # 紫光（issue #16）：C 键无韵母被键位图省略（26 格）；ing 在 ; 键；
+    # N 折叠显示 ui üe；U 键 = u 韵母 + zh 声母。
+    scheme_probe('ziguang', {
+        'rows': (3, 3), 'cells': (26, 26),
+        'fin': {'w': ['en'], 'u': ['u'], 'n': ['ui'], 'semi': ['ing']},
+        'uInit': 'zh',
+        'absent': ['c'],
+        'sep': ('ing',),
     })
     # restore the default so later suites start from a known state
     set_scheme(sev, 'ziranma')

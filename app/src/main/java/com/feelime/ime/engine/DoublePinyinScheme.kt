@@ -17,6 +17,8 @@ object DoublePinyinScheme {
         "ziranma" to "ziranma_double_pinyin",
         "flypy" to "double_pinyin_flypy",
         "sogou" to "double_pinyin_sogou",
+        // 紫光（issue #16）：algebra 转写自 rime-frost，见 schema 注释。
+        "ziguang" to "double_pinyin_ziguang",
     )
 
     fun resolve(context: Context): String {

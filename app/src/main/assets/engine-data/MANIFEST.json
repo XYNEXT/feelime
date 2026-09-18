@@ -52,6 +52,18 @@
       "bytes": 39089,
       "sha256": "26526ff2b43bec41f817d32f4020b23ca71f82fb9c8a024f53891e5509c49c47"
     },
+    "rime/double_pinyin_ziguang.prism.bin": {
+      "bytes": 21656,
+      "sha256": "ffd1dc1614dc4138d26c487b152e34639feac0706eb9bf7f0d08e7af0359ecbc"
+    },
+    "rime/double_pinyin_ziguang.prism.txt": {
+      "bytes": 12990,
+      "sha256": "b478e85276f4fd54409d48f821590d2a1d279f0b9b591bfa6f7f2965144628ae"
+    },
+    "rime/double_pinyin_ziguang.schema.yaml": {
+      "bytes": 38978,
+      "sha256": "d6e833ce3e7fa250fb9982fbd06ec38de3fe3607240a298ae1920ff1709f8d12"
+    },
     "rime/luna_pinyin.prism.bin": {
       "bytes": 31728,
       "sha256": "7d189de553bc37a6003cfff05c52d37a043095d2c79edea2f74a71e6cf016337"

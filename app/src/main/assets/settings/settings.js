@@ -84,10 +84,12 @@ const I18N = {
         "input.double.hint": "键盘切到「双拼」模式后按所选方案出字。",
         "input.double.ziranma": "自然码",
         "input.double.flypy": "小鹤双拼",
-        "input.double.sogou": "搜狗双拼",
+        "input.double.sogou": "搜狗 / 微软双拼",
+        "input.double.ziguang": "紫光双拼",
         "input.double.note.ziranma": "声母与全拼相同（zh=V、ch=I、sh=U 除外）。零声母（a/e 开头）直接打全拼：啊=aa、爱=ai、安=an、恩=en、二=er。",
         "input.double.note.flypy": "声母与全拼相同（zh=V、ch=I、sh=U 除外）。零声母（a/e/o 开头）双打首字母，也可打全拼：啊=aa、爱=ai、恩=ef、二=er。",
-        "input.double.note.sogou": "声母与全拼相同（zh=V、ch=I、sh=U 除外）；ing 在「;」键（键盘上即分词键位置），ü 在 Y。零声母固定先打 O：啊=oa、爱=ol、安=oj、恩=of、二=or。",
+        "input.double.note.sogou": "声母与全拼相同（zh=V、ch=I、sh=U 除外）；ing 在「;」键（键盘上即分词键位置），ü 在 Y。零声母固定先打 O：啊=oa、爱=ol、安=oj、恩=of、二=or。搜狗与微软双拼键位完全一致，用微软双拼习惯的选这项即可。",
+        "input.double.note.ziguang": "紫光华宇拼音的双拼键位。zh=U、ch=A、sh=I；ing 在「;」键，ü 在 V（ju/qu/xu 也可用 v 键）。零声母固定先打 O：啊=oa、爱=op、安=or。",
         "input.double.mapCaption": "韵母键位图（键名下方为该键韵母，右下为双声母）",
         "input.custom.title": "定制键盘",
         "input.custom.badge": "高级",
@@ -425,10 +427,12 @@ const I18N = {
         "input.double.hint": "Takes effect when the keyboard is in Double Pinyin mode.",
         "input.double.ziranma": "Ziranma",
         "input.double.flypy": "Flypy (小鹤)",
-        "input.double.sogou": "Sogou",
+        "input.double.sogou": "Sogou / MSPY",
+        "input.double.ziguang": "Ziguang (紫光)",
         "input.double.note.ziranma": "Initials match full Pinyin (except zh=V, ch=I, sh=U). Zero-initial syllables (a/e) use full Pinyin: 啊=aa、爱=ai、安=an、恩=en、二=er.",
         "input.double.note.flypy": "Initials match full Pinyin (except zh=V, ch=I, sh=U). Zero-initial syllables (a/e/o) double the first letter; full Pinyin also works: 啊=aa、爱=ai、恩=ef、二=er.",
-        "input.double.note.sogou": "Initials match full Pinyin (except zh=V, ch=I, sh=U); ing sits on the “;” key (the wide key on the keyboard), ü on Y. Zero-initial syllables always start with O: 啊=oa、爱=ol、安=oj、恩=of、二=or.",
+        "input.double.note.sogou": "Initials match full Pinyin (except zh=V, ch=I, sh=U); ing sits on the “;” key (the wide key on the keyboard), ü on Y. Zero-initial syllables always start with O: 啊=oa、爱=ol、安=oj、恩=of、二=or. Sogou and MSPY share the exact same layout.",
+        "input.double.note.ziguang": "The Ziguang (紫光) layout. zh=U、ch=A、sh=I; ing sits on the “;” key, ü on V (ju/qu/xu also take v). Zero-initial syllables always start with O: 啊=oa、爱=op、安=or.",
         "input.double.mapCaption": "Final key map (finals under each key, double initials bottom-right)",
         "input.custom.title": "Custom keyboard",
         "input.custom.badge": "Advanced",
@@ -1026,7 +1030,10 @@ function renderFeel(state) {
 function renderDoublePinyin(state) {
     const select = $("dpScheme");
     if (!select) return;
-    const scheme = ["ziranma", "flypy", "sogou"].includes(state.dpScheme)
+    // 白名单直接取生成数据（dp-data.js 随方案列表再生成，不重复维护）。
+    const known = (window.FeelimeDp && window.FeelimeDp.schemes)
+        || ["ziranma", "flypy", "sogou"];
+    const scheme = known.includes(state.dpScheme)
         ? state.dpScheme : "ziranma";
     if (document.activeElement !== select) select.value = scheme;
     // 模糊音分组开关：按位掩码勾选，焦点所在的组不回写（连续点按不被

@@ -77,11 +77,13 @@ cp -R "$work/src/rime-data/luna-pinyin/." "$rime_shared/"
 cp "$repo_root/spikes/native-engine-smoke/original-schemas/ziranma_double_pinyin.schema.yaml" "$rime_shared/"
 cp "$repo_root/spikes/native-engine-smoke/original-schemas/double_pinyin_flypy.schema.yaml" "$rime_shared/"
 cp "$repo_root/spikes/native-engine-smoke/original-schemas/double_pinyin_sogou.schema.yaml" "$rime_shared/"
+cp "$repo_root/spikes/native-engine-smoke/original-schemas/double_pinyin_ziguang.schema.yaml" "$rime_shared/"
 deployer="$work/build/rime-host/librime/bin/rime_deployer"
 "$deployer" --compile "$rime_shared/luna_pinyin.schema.yaml" "$rime_user" "$rime_shared" "$rime_build"
 "$deployer" --compile "$rime_shared/ziranma_double_pinyin.schema.yaml" "$rime_user" "$rime_shared" "$rime_build"
 "$deployer" --compile "$rime_shared/double_pinyin_flypy.schema.yaml" "$rime_user" "$rime_shared" "$rime_build"
 "$deployer" --compile "$rime_shared/double_pinyin_sogou.schema.yaml" "$rime_user" "$rime_shared" "$rime_build"
+"$deployer" --compile "$rime_shared/double_pinyin_ziguang.schema.yaml" "$rime_user" "$rime_shared" "$rime_build"
 mkdir -p "$work/artifacts/rime-data"
 for output in \
   luna_pinyin.table.bin luna_pinyin.prism.bin luna_pinyin.reverse.bin \
@@ -91,7 +93,9 @@ for output in \
   double_pinyin_flypy.prism.bin double_pinyin_flypy.prism.txt \
   double_pinyin_flypy.schema.yaml \
   double_pinyin_sogou.prism.bin double_pinyin_sogou.prism.txt \
-  double_pinyin_sogou.schema.yaml; do
+  double_pinyin_sogou.schema.yaml \
+  double_pinyin_ziguang.prism.bin double_pinyin_ziguang.prism.txt \
+  double_pinyin_ziguang.schema.yaml; do
   cp "$rime_build/$output" "$work/artifacts/rime-data/"
 done
 
