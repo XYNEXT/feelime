@@ -1216,7 +1216,12 @@ body.landscape .num-grid { gap: 3px; }
     display: flex;
     flex-direction: column;
     gap: 2px;
-    height: 57px;
+    /* 槽位守恒（2026-09-18 用户反馈：展开 ctrl 层主键盘高度会变）：
+     * 普通态槽位 = --preedit-band(padTop) + bar(2+40+10)；ctrl 态 =
+     * padTop 3 + margins 6 + height。height 随 band 走才能让 qwerty 的
+     * 起点与层高在两态完全一致（band 加大时 ctrlLayer 同步加高）。
+     * 默认 band 18 → 61px。 */
+    height: calc(var(--preedit-band, 18px) + 43px);
     margin-top: 3px;
     margin-bottom: 3px;
 }
@@ -1226,17 +1231,19 @@ body.landscape .num-grid { gap: 3px; }
  * applyHeight's chrome so the keyboard rows below keep their height) and
  * hand the space to the control keys. */
 body.ctrl-view #softKeyboard { padding-top: 3px; }
-/* Design §11: both landscape slots total 62px before the letter rows.
- * Candidate: 4 + 14 + 40 + 4. Control: 3 + (27 + 2 + 27) + 3. */
-body.landscape #ctrlLayer { height: 56px; margin-top: 0; margin-bottom: 3px; gap: 2px; }
+/* Design §11: both landscape slots total 62px before the letter rows
+ * (band 18). Candidate: band + 40 + 4. Control: 3 + H + 3 → H = band + 38. */
+body.landscape #ctrlLayer { height: calc(var(--preedit-band, 18px) + 38px); margin-top: 0; margin-bottom: 3px; gap: 2px; }
 #ctrlLayer .ctrl-row {
     display: grid;
     grid-template-columns: repeat(8, 1fr);
     gap: 2px;
     margin-bottom: 0;
-    height: 27px;
+    /* 弹性等分容器富余（band 加大时键面随之变高），min-height 保底。 */
+    flex: 1 1 0;
+    min-height: 27px;
 }
-body.landscape #ctrlLayer .ctrl-row { gap: 2px; height: 27px; }
+body.landscape #ctrlLayer .ctrl-row { gap: 2px; height: auto; }
 #ctrlLayer .ctrl-key {
     height: 100%;
     /* The rows borrow the MAIN keyboard's key language -
