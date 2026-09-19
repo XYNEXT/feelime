@@ -1,7 +1,7 @@
 name: Build Android APK
 
 on:
-  workflow_dispatch: # 允许你手动点击按钮随时触发打包
+  workflow_dispatch: # 允许手动触发
 
 jobs:
   build:
@@ -16,9 +16,6 @@ jobs:
         with:
           distribution: 'zulu'
           java-version: '17'
-
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
 
       - name: Initialize Assets and Models
         run: |
@@ -35,4 +32,3 @@ jobs:
         with:
           name: Feelime-Android-APK
           path: app/build/outputs/apk/debug/app-debug.apk
-
