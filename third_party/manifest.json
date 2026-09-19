@@ -41,10 +41,10 @@
     "toolchainManifestSha256": "bb38d0a3f1e92f5466f046e8c7653df2df2d7be6ea2056bc34d852d2e1607516"
   },
   "licenseBundle": {
-    "fileCount": 35,
+    "fileCount": 36,
     "root": "third_party/licenses",
     "treeDigestCommand": "find third_party/licenses -type f -print0 | sort -z | xargs -0 sha256sum | sha256sum",
-    "treeSha256": "e02b42335a24db7302c692b07ff43b1a58fe35520e2575347f187e221e8ff2b0",
+    "treeSha256": "8b96ea8bd39262e41187507695e0a8ed8c9d009feb3d1c8b51d897bb3453dada",
     "zlibLicenseSha256": "ee1e64c3fcad42e638318e43217d89791e1e61a50a1a2fa516ccee8725909d1e"
   },
   "originalComponents": [
@@ -391,6 +391,62 @@
         "protobuf",
         "zlib"
       ]
+    },
+    {
+      "apkPath": "assets/engine-data/rime/feelime_stroke.schema.yaml",
+      "buildRecipe": "cmake-native",
+      "bytes": 2467,
+      "path": "app/src/main/engine-data/rime/feelime_stroke.schema.yaml",
+      "sha256": "a53d3d24a683778a6f992db964b25c2f1c1859ff5b92ca9ff8fb373827cd8802",
+      "sources": [
+        "rime-prelude",
+        "rime-essay",
+        "rime-luna-pinyin",
+        "rime-stroke",
+        "feelime-original-schema"
+      ]
+    },
+    {
+      "apkPath": "assets/engine-data/rime/stroke.dict.yaml",
+      "buildRecipe": "cmake-native",
+      "bytes": 2448770,
+      "path": "app/src/main/engine-data/rime/stroke.dict.yaml",
+      "sha256": "2c8e681efe3e492f020534753b047d05d769cf7feaa28dace383efa68c1af3ba",
+      "sources": [
+        "rime-prelude",
+        "rime-essay",
+        "rime-luna-pinyin",
+        "rime-stroke",
+        "feelime-original-schema"
+      ]
+    },
+    {
+      "apkPath": "assets/engine-data/rime/stroke.prism.bin",
+      "buildRecipe": "cmake-native",
+      "bytes": 2285884,
+      "path": "app/src/main/engine-data/rime/stroke.prism.bin",
+      "sha256": "1f5ed4ecff70b27788b7167e691a5de06fa337c1b8d65d6da8877b623ca65072",
+      "sources": [
+        "rime-prelude",
+        "rime-essay",
+        "rime-luna-pinyin",
+        "rime-stroke",
+        "feelime-original-schema"
+      ]
+    },
+    {
+      "apkPath": "assets/engine-data/rime/stroke.table.bin",
+      "buildRecipe": "cmake-native",
+      "bytes": 3334340,
+      "path": "app/src/main/engine-data/rime/stroke.table.bin",
+      "sha256": "2936d4142c3d1db8039ba4211e7568e0a3695f15447e8a50a5148f0b025fc733",
+      "sources": [
+        "rime-prelude",
+        "rime-essay",
+        "rime-luna-pinyin",
+        "rime-stroke",
+        "feelime-original-schema"
+      ]
     }
   ],
   "schemaVersion": 2,
@@ -524,6 +580,27 @@
       "name": "rime-luna-pinyin",
       "origin": "https://github.com/rime/rime-luna-pinyin",
       "revision": "56b934b099dfbeab842320f13aa8b461a6ab3e42"
+    },
+    {
+      "apkPaths": [
+        "assets/engine-data/rime/feelime_stroke.schema.yaml",
+        "assets/engine-data/rime/stroke.dict.yaml",
+        "assets/engine-data/rime/stroke.prism.bin",
+        "assets/engine-data/rime/stroke.table.bin"
+      ],
+      "archive": "rime-stroke-1e8fff9b9494ddec23b0cbc526bcfd8171a6fd48.tar.gz",
+      "archiveBytes": 1068296,
+      "archiveSha256": "1347a57ab4cf269be9b1c49ce50facfe60617207f2780604fe82914070da8a80",
+      "buildRecipe": "cmake-native",
+      "correspondingSource": "verified input archive plus repo derivation script",
+      "license": "LGPL-3.0-only",
+      "licenseFiles": [
+        "third_party/licenses/rime-stroke/LICENSE"
+      ],
+      "modified": "host-compiled data only (GB2312 pruned, essay weights, single-wildcard derivation)",
+      "name": "rime-stroke",
+      "origin": "https://github.com/rime/rime-stroke",
+      "revision": "1e8fff9b9494ddec23b0cbc526bcfd8171a6fd48"
     },
     {
       "apkPaths": [

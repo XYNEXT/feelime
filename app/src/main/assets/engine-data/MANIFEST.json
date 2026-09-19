@@ -255,6 +255,22 @@
     "rime/luna_pinyin_t9.prism.bin": {
       "bytes": 142680,
       "sha256": "f7a3da313cea6ebc4bf9cfcef3a2d891d6ab8f4cd71cf59b5603b3fc80b4376e"
+    },
+    "rime/feelime_stroke.schema.yaml": {
+      "bytes": 2467,
+      "sha256": "a53d3d24a683778a6f992db964b25c2f1c1859ff5b92ca9ff8fb373827cd8802"
+    },
+    "rime/stroke.dict.yaml": {
+      "bytes": 2448770,
+      "sha256": "2c8e681efe3e492f020534753b047d05d769cf7feaa28dace383efa68c1af3ba"
+    },
+    "rime/stroke.prism.bin": {
+      "bytes": 2285884,
+      "sha256": "1f5ed4ecff70b27788b7167e691a5de06fa337c1b8d65d6da8877b623ca65072"
+    },
+    "rime/stroke.table.bin": {
+      "bytes": 3334340,
+      "sha256": "2936d4142c3d1db8039ba4211e7568e0a3695f15447e8a50a5148f0b025fc733"
     }
   },
   "formatVersion": 1

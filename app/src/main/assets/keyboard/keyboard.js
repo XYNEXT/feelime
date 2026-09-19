@@ -21,6 +21,10 @@
         "英文 Direct": "English",
         "全拼 Pinyin": "Pinyin",
         "双拼": "Double Pinyin",
+        "笔画 Stroke": "Stroke",
+        "重输": "Restart",
+        "该键盘还在准备中": "That keyboard is still preparing",
+        "通配符只能用一个": "Only one wildcard at a time",
         "日本語 Romaji": "Japanese",
         "常用": "Common",
         "定制": "Custom",
@@ -242,7 +246,7 @@
         });
     }
 
-    const KEYBOARD_VERSION = '3.47.0';
+    const KEYBOARD_VERSION = '3.48.0';
 
     /** 纯符号词条判定（issue #17）：每个字符既不是字母（含汉字）也不是
      *  数字——↑✓★🐱♂ 这类 custom_phrase 符号词。用于渲染层把它们重排
@@ -304,6 +308,11 @@ const TOOLBAR_DEFAULT = { left: ['ctrl', 'ime'], right: ['clipboard', 'favorites
         'double-pinyin': { label: '双', title: '双拼', layout: 'qwerty', engine: true },
         // 九宫格：键面是数字（schema 侧把音节表 xlit 成数字串），候选出词。
         't9': { label: '九', title: '九宫格 T9', layout: 't9', engine: true },
+        // 笔画（issue #18）：T9 网格骨架，键面是笔画部件（点按发 h/s/p/n/z
+        // 进引擎，preedit 由 schema xlit 成部件字形回显）。strictReady：旧
+        // APK 的 hello 不带 stroke 就绪字段，缺失必须当不可用——沿用
+        // !== false 的宽松判定会把缺键当可用，出现可点却无效的入口。
+        'stroke': { label: '笔', title: '笔画 Stroke', layout: 't9', engine: true, strictReady: true },
         'french': { label: 'FR', title: 'Français', layout: 'qwerty-fr', engine: true },
         'russian': { label: 'РУ', title: 'Русский', layout: 'cyrillic', engine: true },
         'japanese': { label: '日', title: '日本語 Romaji', layout: 'qwerty', engine: true },
@@ -484,6 +493,29 @@ const TOOLBAR_DEFAULT = { left: ['ctrl', 'ime'], right: ['clipboard', 'favorites
     // 下滑拆分浮层：7/9 是四个字母里唯二有两枚「下位」字母的键，
     // 下左/下右继续滑选中 q/r、x/y（用户定稿：不做子组通配拼写）。
     const T9_SPLIT = { '7': ['q', 'r'], '9': ['x', 'y'] };
+
+    // 笔画键位（issue #18）：1-5=横竖撇点折（发 h/s/p/n/z）、6=单通配 *、
+    // 8=逗号（发 ASCII ',' 走 punctuator——全角直发会被引擎丢弃，与
+    // qwerty 标点槽同一教训）、9=分词 '。7 键不在此表（@#. 符号组，与
+    // T9 的 1 键同款）。data-key 恒为数字：手势/浮层/套件按数字索引。
+    // syms=长按浮层中列数字左右的跟手符号（沿用 T9 的键位分配）。
+    const STROKE_KEYS = {
+        '1': { main: '一', code: 'h', syms: ['！', '？'] },
+        '2': { main: '丨', code: 's', syms: ['—', '&'] },
+        '3': { main: '丿', code: 'p', syms: ['（', '）'] },
+        '4': { main: '丶', code: 'n', syms: ['「', '」'] },
+        '5': { main: '乙', code: 'z', syms: ['、', '：'] },
+        '6': { main: '＊', code: '*', syms: ['；', '～'] },
+        '8': { main: '，', code: ',', syms: ['…', '·'] },
+        '9': { main: '分词', code: "'", syms: ['%', '/'] },
+    };
+
+    /** T9/笔画网格的坐标占位器（renderT9/renderStroke 共用）。 */
+    const t9Place = grid => (button, row, column) => {
+        button.style.gridRow = String(row);
+        button.style.gridColumn = String(column);
+        grid.append(button);
+    };
     // 字母 → 九宫格数字（与 schema xlit 同表）：音节点选后计算剩余
     // 数字段长度用（ni 消耗 "64"，剩余从第 3 位起）。
     const T9_XLIT = {
@@ -1298,7 +1330,7 @@ const TOOLBAR_DEFAULT = { left: ['ctrl', 'ime'], right: ['clipboard', 'favorites
 
         isChineseMode() {
             return this.mode === 'pinyin' || this.mode === 'double-pinyin' ||
-                this.mode === 't9';
+                this.mode === 't9' || this.mode === 'stroke';
         }
 
         sendKey(key) {
@@ -1465,7 +1497,7 @@ const TOOLBAR_DEFAULT = { left: ['ctrl', 'ime'], right: ['clipboard', 'favorites
                 // 换键面=离开符号行：工具栏让位必须解除，否则隐藏的快捷
                 // 按钮没有恢复入口（引擎事件只是兜底）。
                 if (!this.composing) this.setToolbarYield(this.assocWords.length > 0);
-                return this.renderT9();
+                return this.mode === 'stroke' ? this.renderStroke() : this.renderT9();
             }
             this.t9SymBar = false;
             if (!this.composing) this.setToolbarYield(this.assocWords.length > 0);
@@ -1523,26 +1555,10 @@ const TOOLBAR_DEFAULT = { left: ['ctrl', 'ime'], right: ['clipboard', 'favorites
             layer.replaceChildren();
             const grid = document.createElement('div');
             grid.className = 't9-grid';
-            // 左列：竖向滚动条（native scroll，无 bindTouch——preventDefault
-            // 杀拖动的既有教训）+ 底部符号键（面板入口，非 @#. 后选）。
-            const side = document.createElement('div');
-            side.className = 't9-side';
-            const strip = document.createElement('div');
-            strip.className = 't9-strip';
-            strip.id = 't9Strip';
-            side.append(strip);
-            const symBtn = this.specialKey('t9sym', t("符号"),
-                () => this.showSymbols(), 't9-sym-btn kb-special');
-            symBtn.setAttribute('aria-label', t("符号面板"));
-            side.append(symBtn);
-            grid.append(side);
+            this.t9GridSide(grid);
             // 3×3 字母组键（data-key=数字：几何/套件/长按弹层都认它）。
             // 显式坐标表——自动占位错一格就全盘漂移（renderNumpad 教训）。
-            const place = (button, row, column) => {
-                button.style.gridRow = String(row);
-                button.style.gridColumn = String(column);
-                grid.append(button);
-            };
+            const place = t9Place(grid);
             const coords = {
                 '1': [1, 2], '2': [1, 3], '3': [1, 4],
                 '4': [2, 2], '5': [2, 3], '6': [2, 4],
@@ -1563,7 +1579,36 @@ const TOOLBAR_DEFAULT = { left: ['ctrl', 'ime'], right: ['clipboard', 'favorites
                     place(this.t9LetterKey(digit), coords[digit][0], coords[digit][1]);
                 }
             });
-            // 右列功能键。
+            this.t9GridChrome(grid, place);
+            layer.append(grid);
+            this.t9SideSig = null;
+            // 确认边界跟随组合生命周期（updateComposing 管理），不随键面
+            // 重绘清零——横竖屏切换重建键面，清零会丢掉有效边界
+            // （codex round-2 P2-1）。
+            this.renderT9Side();
+            this.updateLabels();
+        }
+
+        /** T9 网格左列（笔画键面共用同一骨架）：竖向滚动条（native
+         * scroll，无 bindTouch——preventDefault 杀拖动的既有教训）+
+         * 底部符号键（面板入口，非 @#. 后选）。 */
+        t9GridSide(grid) {
+            const side = document.createElement('div');
+            side.className = 't9-side';
+            const strip = document.createElement('div');
+            strip.className = 't9-strip';
+            strip.id = 't9Strip';
+            side.append(strip);
+            const symBtn = this.specialKey('t9sym', t("符号"),
+                () => this.showSymbols(), 't9-sym-btn kb-special');
+            symBtn.setAttribute('aria-label', t("符号面板"));
+            side.append(symBtn);
+            grid.append(side);
+        }
+
+        /** T9 网格的功能列与底行（笔画键面共用同一骨架）：c5 退格/重输/
+         * emoji，底行 123(2/3) + mic 空格(5/3) + 中英(2/3) + 确认。 */
+        t9GridChrome(grid, place) {
             place(this.specialKey('backspace', ICONS.backspace,
                 () => this.call(() => Native.backspace(this.token)),
                 'kb-special', 'repeat'), 1, 5);
@@ -1573,7 +1618,6 @@ const TOOLBAR_DEFAULT = { left: ['ctrl', 'ime'], right: ['clipboard', 'favorites
             const emojiKey = this.specialKey('t9emoji', ICONS.smiley,
                 () => { this.emojiView = true; this.showNumpad(); }, 'kb-special');
             place(emojiKey, 3, 5);
-            // 底行：123(2/3) + mic/空格(5/3) + 中英(2/3)。
             const r4 = document.createElement('div');
             r4.className = 't9-r4';
             r4.append(this.specialKey('symbols', '123',
@@ -1604,13 +1648,98 @@ const TOOLBAR_DEFAULT = { left: ['ctrl', 'ime'], right: ['clipboard', 'favorites
             enter.style.gridRow = '4';
             enter.style.gridColumn = '5';
             grid.append(enter);
+        }
+
+        /* ===== 笔画键面（issue #18）：T9 五列网格骨架，3×3 换成笔画
+         * 部件键。左列无音节枚举（renderT9Side 的 stroke 分支恒出常用
+         * 字符），其余交互（退格/重输/emoji/底行/确认）与 T9 一致。 */
+        renderStroke() {
+            const layer = document.getElementById('qwertyLayer');
+            layer.replaceChildren();
+            const grid = document.createElement('div');
+            grid.className = 't9-grid';
+            this.t9GridSide(grid);
+            const place = t9Place(grid);
+            const coords = {
+                '1': [1, 2], '2': [1, 3], '3': [1, 4],
+                '4': [2, 2], '5': [2, 3], '6': [2, 4],
+                '7': [3, 2], '8': [3, 3], '9': [3, 4],
+            };
+            Object.keys(coords).forEach(digit => {
+                if (digit === '7') {
+                    // 7 键=@#. 符号组（issue #18：同 T9 符号组）：单击=
+                    // 符号行并让位工具栏，无长按态（与 T9 的 1 键同款）。
+                    const sym = document.createElement('button');
+                    sym.className = 'kb-key t9-key';
+                    sym.dataset.key = '7';
+                    sym.innerHTML = '<span class="t9-sup">7</span><span class="t9-group">@#.</span>';
+                    sym.addEventListener('click', () => this.t9SymbolBar());
+                    this.bindTouch(sym);
+                    place(sym, coords[digit][0], coords[digit][1]);
+                } else {
+                    place(this.strokeKey(digit), coords[digit][0], coords[digit][1]);
+                }
+            });
+            this.t9GridChrome(grid, place);
             layer.append(grid);
             this.t9SideSig = null;
-            // 确认边界跟随组合生命周期（updateComposing 管理），不随键面
-            // 重绘清零——横竖屏切换重建键面，清零会丢掉有效边界
-            // （codex round-2 P2-1）。
             this.renderT9Side();
             this.updateLabels();
+        }
+
+        /** 笔画键：主字形=笔画部件（一丨丿丶乙 / ＊ / ， / 分词），右上
+         * 角标=数字（上滑字面），左上小字=长按可出的两个符号。点按=
+         * 部件编码进引擎（8 键发 ASCII ',' 走 punctuator）；6 键的第二
+         * 个 * 在 JS 拦截（码表只派生了单通配行，** 无命中）。rawInput
+         * 是 schema xlit 后的部件字形，* 原样保留（probe 实测）。 */
+        strokeKey(digit) {
+            const def = STROKE_KEYS[digit];
+            const button = document.createElement('button');
+            button.className = 'kb-key t9-key';
+            button.dataset.key = digit;
+            button.dataset.lp = 'popup';
+            const hint = document.createElement('span');
+            hint.className = 't9-hint';
+            hint.textContent = (def.syms || []).join('');
+            const sup = document.createElement('span');
+            sup.className = 't9-sup';
+            sup.textContent = digit;
+            const group = document.createElement('span');
+            group.className = 't9-group';
+            // t() 过一遍让「分词」跟界面语言走（其余部件字形无翻译条目，
+            // 原样返回）；模块级表不能预求值，locale 切换后重渲染即更新。
+            group.textContent = t(def.main);
+            button.append(hint, sup, group);
+            button.addEventListener('click', () => this.strokeActivate(digit));
+            this.bindTouch(button);
+            return button;
+        }
+
+        /** 笔画键的统一激活入口（点按与长按中格共用——codex 评审 P1：
+         * closePopup 的引擎通道原先直发 send 绕过了这里的两个守卫）。
+         * 6 键=单通配（码表只派生单 * 行，第二个拦截：回显含 * 或上一
+         * 个 * 还在途）；8 键组合中=两步逗号（Android librime 组合中标点
+         * 路径异常，先按 id 确认池头，组合结束回声后 commitText 直发
+         * 全角 ，）。 */
+        strokeActivate(digit) {
+            const def = STROKE_KEYS[digit];
+            if (!def) return;
+            if (digit === '6' && this.composing &&
+                ((this.lastRawInput || '').includes('*') || this.wildcardInFlight)) {
+                this.showToast(t("通配符只能用一个"));
+                return;
+            }
+            if (digit === '8' && this.composing) {
+                const candidate = (this.expandCandidates || []).find(item =>
+                    !String(item.id).startsWith('alt:'));
+                if (candidate) {
+                    this.pendingPunct = { text: '，', raw: this.lastRawInput, at: Date.now() };
+                    this.choosePoolCandidate(candidate);
+                    return;
+                }
+            }
+            if (digit === '6') this.wildcardInFlight = true;
+            this.call(() => Native.key(def.code, this.token));
         }
 
         /** 字母组键：主字形=字母组（ABC），右上角标=数字，左上角小字=
@@ -1723,7 +1852,16 @@ const TOOLBAR_DEFAULT = { left: ['ctrl', 'ime'], right: ['clipboard', 'favorites
             内容签名不变不重建——滚动位置在竖拖时不被引擎事件打断。 */
         renderT9Side() {
             const strip = document.getElementById('t9Strip');
-            if (!strip || this.mode !== 't9') return;
+            if (!strip || (this.mode !== 't9' && this.mode !== 'stroke')) return;
+            if (this.mode === 'stroke') {
+                // 笔画左列（issue #18）：常用字符恒定——笔画无音节枚举
+                // 语义，组合中不变。
+                if (this.t9SideSig === 'sym') return;
+                this.t9SideSig = 'sym';
+                strip.replaceChildren();
+                T9_SIDE_CHARS.forEach(char => strip.append(this.t9SideCell(char)));
+                return;
+            }
             const seg = this.composing ? this.t9PendingSegment() : '';
             const sig = this.composing && seg ? `syl:${seg}` : 'sym';
             if (sig === this.t9SideSig) return;
@@ -1880,11 +2018,12 @@ const TOOLBAR_DEFAULT = { left: ['ctrl', 'ime'], right: ['clipboard', 'favorites
             button.setAttribute('aria-label', this.composing ? t("确定") : t("换行"));
             button.textContent = this.composing ? t("确定") : t("换行");
             button.addEventListener('click', () => {
-                // T9 组合中的确认键=提交高亮候选（用户定稿）。EnterRaw 会
-                // ESCAPE+把数字串原样上屏（RimeTextEngine），必须拦截。
-                // repeat 长按在 T9 关闭：确认后残留的 interval 点击会
-                // 落进非组合分支连发换行。
-                if (this.mode === 't9' && this.composing) {
+                // T9/笔画组合中的确认键=提交高亮候选（用户定稿）。EnterRaw
+                // 会 ESCAPE+把原始输入串原样上屏（RimeTextEngine）——笔画
+                // 的组合串是 schema xlit 后的部件字形（一丨丿…），落进
+                // 编辑器就是乱码，同样必须拦截。repeat 长按在 T9 关闭：
+                // 确认后残留的 interval 点击会落进非组合分支连发换行。
+                if ((this.mode === 't9' || this.mode === 'stroke') && this.composing) {
                     const candidate = (this.expandCandidates || []).find(item =>
                         !String(item.id).startsWith('alt:'));
                     if (candidate) {
@@ -1909,6 +2048,15 @@ const TOOLBAR_DEFAULT = { left: ['ctrl', 'ime'], right: ['clipboard', 'favorites
             }
             const pair = this.quickPair;
             const target = this.mode === pair[0] ? pair[1] : pair[0];
+            // 快捷对里的 strictReady 模式不可用时不出击（codex 评审 P2：
+            // 旧 APK 的 hello 不带 stroke 字段，直发 selectMode 只会被
+            // 原生拒绝，切换键看起来坏了）。
+            const targetConfig = MODES[target];
+            if (targetConfig && targetConfig.engine && targetConfig.strictReady &&
+                this.engineReady[target] !== true) {
+                this.showToast(t("该键盘还在准备中"));
+                return;
+            }
             this.call(() => Native.selectMode(target, this.token));
         }
 
@@ -2131,6 +2279,10 @@ const TOOLBAR_DEFAULT = { left: ['ctrl', 'ime'], right: ['clipboard', 'favorites
                             // 1 键没有长按态（单击即开符号行，用户定稿）；
                             // 其余数字键长按=数字+字母组全后选浮层。
                             this.openT9HoldPopup(button);
+                        } else if (this.mode === 'stroke') {
+                            // 笔画：三格浮层（符号·数字·符号）。7 键（符号
+                            // 组）不设 data-lp，不会走到这里。
+                            this.openStrokeHoldPopup(button);
                         } else this.openPopup(button);
                     }, this.holdMs);
                 } else if (button.dataset.lp === 'lock') {
@@ -2259,7 +2411,9 @@ const TOOLBAR_DEFAULT = { left: ['ctrl', 'ime'], right: ['clipboard', 'favorites
                     }
                     // T9 手势仲裁（t9.md §3）：字母键四向=引擎字母/字面
                     // 数字，mic 独占 scrub。false=落回通用分支（mic 横滑）。
-                    if (this.mode === 't9' && this.t9Flick(originButton, dx, dy)) return;
+                    // 笔画同走这里（只保留上滑=字面数字）。
+                    if ((this.mode === 't9' || this.mode === 'stroke') &&
+                        this.t9Flick(originButton, dx, dy)) return;
                     if (Math.abs(dy) >= Math.abs(dx) && button && button.dataset.key) {
                         const key = button.dataset.key;
                         // Chinese-mode punct slot : the main glyph is
@@ -2383,6 +2537,20 @@ const TOOLBAR_DEFAULT = { left: ['ctrl', 'ime'], right: ['clipboard', 'favorites
                 return true;
             }
             const key = button.dataset.key;
+            // 笔画（issue #18）：数字键只保留上滑=字面数字（sendSymbol
+            // 旁路——进引擎会成为候选选择器，字面数字上不了屏）；其余
+            // 方向无语义，返回 true 吞掉，不落回通用分支把 CN_ALTS 符号
+            // /大写发出去。空格（0）已被上面的 spaceKey 分支处理。
+            if (this.mode === 'stroke') {
+                if (/^[1-9]$/.test(key)) {
+                    if (vertical && dy < 0) {
+                        this.sendSymbol(key);
+                        this.showFlick(button, dy, dx);
+                    }
+                    return true;
+                }
+                return false;
+            }
             // 1 键（@#.）：上滑=字面 1；下滑/横滑无语义（符号行走点按/长按）。
             if (this.mode === 't9' && key === '1') {
                 if (vertical && dy < 0) {
@@ -2459,6 +2627,21 @@ const TOOLBAR_DEFAULT = { left: ['ctrl', 'ime'], right: ['clipboard', 'favorites
             this.openT9Popup(button, cells, { grid: true });
         }
 
+        /** 笔画长按（issue #18）：三格一行——左符号 · 数字 · 右符号。中格
+         * 预选=点按同义（发部件编码进引擎，不拖直接松手不改变输入，与
+         * T9 弹层惯例一致）；显示数字、提交编码（send 字段），左右符号
+         * literal 直上屏。无字母行/大写行（笔画无此语义）。 */
+        openStrokeHoldPopup(button) {
+            const def = STROKE_KEYS[button.dataset.key] || {};
+            const syms = def.syms || [];
+            const cells = [
+                { char: syms[0], literal: true },
+                { char: button.dataset.key, send: def.code },
+                { char: syms[1], literal: true },
+            ].filter(cell => cell.char);
+            this.openT9Popup(button, cells, { middle: true });
+        }
+
         /** T9 浮层：长按=三行大小写+符号弹层（opts.grid）；7/9 下滑=拆分
          * 字母（opts.split：按触点 x 半边判定下左/下右，不按格子距离——
          * 拖动方向与浮层位置相反，距离命中会立刻取消）。格子默认走引擎
@@ -2474,7 +2657,9 @@ const TOOLBAR_DEFAULT = { left: ['ctrl', 'ime'], right: ['clipboard', 'favorites
                 const item = document.createElement('div');
                 item.className = 'kp-item';
                 item.textContent = def.char;
-                return { item, char: def.char, literal: !!def.literal, cx: 0, cy: 0 };
+                // send：显示字符与提交值分离（笔画中格显示数字、发部件
+                // 编码）；缺省提交显示字符本身。
+                return { item, char: def.char, send: def.send, literal: !!def.literal, cx: 0, cy: 0 };
             };
             const items = [];
             if (opts.grid) {
@@ -2517,7 +2702,7 @@ const TOOLBAR_DEFAULT = { left: ['ctrl', 'ime'], right: ['clipboard', 'favorites
             if (opts.split && typeof opts.initialX === 'number') {
                 const mid = (items[0].cx + items[1].cx) / 2;
                 selected = opts.initialX < mid ? items[0] : items[1];
-            } else if (opts.grid) {
+            } else if (opts.grid || opts.middle) {
                 selected = items[Math.floor(items.length / 2)];
             } else {
                 selected = items[0];
@@ -2526,7 +2711,7 @@ const TOOLBAR_DEFAULT = { left: ['ctrl', 'ime'], right: ['clipboard', 'favorites
             this.popup = { key: button.dataset.key, cells: items,
                 selected, cancelled: false, enginePath: true };
             if (opts.split) this.popup.split = true;
-            if (opts.grid) this.attachRelativeTracking(popup, selected);
+            if (opts.grid || opts.middle) this.attachRelativeTracking(popup, selected);
         }
 
         /** 相对跟手选中（issue #9 定稿，qwerty accent 弹层同款）：高亮锚在
@@ -2693,8 +2878,15 @@ const TOOLBAR_DEFAULT = { left: ['ctrl', 'ime'], right: ['clipboard', 'favorites
             // 由滑动手势承担，不经弹层。
             if (popup?.enginePath) {
                 if (!popup.selected) return;
-                if (popup.selected.literal) this.sendSymbol(popup.selected.char);
-                else this.sendText(popup.selected.char);
+                if (popup.selected.literal) {
+                    this.sendSymbol(popup.selected.char);
+                } else if (this.mode === 'stroke' && popup.key !== '7') {
+                    // 笔画中格=点按同义：走统一入口（通配/逗号守卫不被
+                    // 长按绕过——codex 评审 P1）。7 键无弹层，防御性兜底。
+                    this.strokeActivate(popup.key);
+                } else {
+                    this.sendText(popup.selected.send || popup.selected.char);
+                }
                 return;
             }
             // the reference parity (soft_keyboard.js closePopup): the pre-selected
@@ -4691,7 +4883,12 @@ const TOOLBAR_DEFAULT = { left: ['ctrl', 'ime'], right: ['clipboard', 'favorites
             this.modeOrder().forEach(name => {
                 const config = MODES[name];
                 const button = document.createElement('button');
-                const ready = !config.engine || this.engineReady[name] !== false;
+                // strictReady（stroke）：只有 hello 明确给 true 才可点——
+                // 旧 APK 的 engineDataReady 不含 stroke 字段，宽松判定
+                // （!== false）会把缺键当可用，出现可点却无效的入口。
+                const ready = !config.engine || (config.strictReady
+                    ? this.engineReady[name] === true
+                    : this.engineReady[name] !== false);
                 const current = name === this.mode;
                 button.className = current ? 'current' : (ready ? '' : 'preparing');
                 // Compact rows - the shorthand leads, the full
@@ -5491,6 +5688,10 @@ const TOOLBAR_DEFAULT = { left: ['ctrl', 'ime'], right: ['clipboard', 'favorites
         /* ===== candidates ===== */
 
         clearComposing() {
+            // 重输=用户明确放弃当前组合：挂起的两步逗号一并作废（codex
+            // 评审 P1——clearComposing 本地合成 composing:false 事件，会
+            // 把 pendingPunct 提前补出去）。
+            this.pendingPunct = null;
             this.call(() => Native.clearComposing(this.token));
             // Optimistic local restore: the engine event roundtrip also clears
             // composing, but the toolbar must not lag a roundtrip behind the
@@ -5594,10 +5795,26 @@ const TOOLBAR_DEFAULT = { left: ['ctrl', 'ime'], right: ['clipboard', 'favorites
                 const rest = rawEngine.filter(candidate => !symbolic.includes(candidate));
                 engine = [...rest.slice(0, 2), ...symbolic, ...rest.slice(2)];
             }
-            // 池前缀（前 3 项 id 签名）变了 → 展开区增量水位线与新顺序错位
-            // （会漏项/重复），标记让 accumulateCandidates 全量重绘；纯追加
-            // 不动前缀时不触发，保留拖动预载的增量渲染。
-            const prefixSig = engine.slice(0, 3).map(candidate => candidate.id).join('|');
+            // 笔画句子候选压后（issue #18）：词典 max_phrase_length=1，
+            // 多字候选必来自 enable_sentence 造句（☯；comment 不在桥协议
+            // 里，按字长识别）。不压后的话 h'z 的句子「一乙」会顶掉首字
+            // 候选，空格确认整段上屏（probe 实测首格被句子占据）。
+            if (this.mode === 'stroke') {
+                const sentences = engine.filter(candidate =>
+                    [...candidate.text].length > 1);
+                if (sentences.length) {
+                    const rest = engine.filter(candidate => !sentences.includes(candidate));
+                    engine = [...rest, ...sentences];
+                }
+            }
+            // 池前缀 id 签名变了 → 展开区增量水位线与新顺序错位（会漏项/
+            // 重复），标记让 accumulateCandidates 全量重绘。签名必须覆盖
+            // 「已渲染」的整段前缀（取 max(expandRendered, 3)）——句子压后
+            // 发生在池中部时只看前 3 项发现不了（codex 评审 P1 复现：翻页
+            // 后「二」漏绘、「才丿」重复）；纯追加不动已有顺序时不触发，
+            // 保留拖动预载的增量渲染。
+            const prefixSig = engine.slice(0, Math.max(this.expandRendered, 3))
+                .map(candidate => candidate.id).join('|');
             if (prefixSig !== this.symbolicPrefixSig) {
                 this.symbolicPrefixSig = prefixSig;
                 this.symbolicPrefixChanged = true;
@@ -5968,7 +6185,7 @@ const TOOLBAR_DEFAULT = { left: ['ctrl', 'ime'], right: ['clipboard', 'favorites
             // T9：1 键展开的西文/技术符号行。引擎候选/联想/组合任一
             // 出现即让位（符号行是暂态选择面，不与候选池共存）。
             if (this.t9SymBar) {
-                if (state.composing || this.mode !== 't9' ||
+                if (state.composing || (this.mode !== 't9' && this.mode !== 'stroke') ||
                     (this.expandCandidates || []).length || this.assocWords.length) {
                     this.t9RestoreBarChrome(state.composing);
                 } else {
@@ -6049,6 +6266,25 @@ const TOOLBAR_DEFAULT = { left: ['ctrl', 'ime'], right: ['clipboard', 'favorites
             const wasComposing = this.composing;
             this.composing = !!state.composing;
             if (this.composing && rawInput !== undefined) this.lastRawInput = rawInput;
+            // 8 键组合中逗号的两步收尾（issue #18）：候选确认的回声把组合
+            // 收掉后，直发挂起的全角 ，；组合继续且 raw 变了（用户接着打）
+            // 或确认被拒超时（3s 无回声收尾）则作废——迟到的逗号比缺逗号
+            // 更糟。重输/切模式在各自入口显式作废。
+            if (this.pendingPunct) {
+                const pending = this.pendingPunct;
+                const rawChanged = pending.raw !== undefined &&
+                    pending.raw !== this.lastRawInput;
+                const stale = Date.now() - pending.at > 3000;
+                if (!this.composing) {
+                    this.pendingPunct = null;
+                    this.sendSymbol(pending.text);
+                } else if (rawChanged || stale) {
+                    this.pendingPunct = null;
+                }
+            }
+            // 通配在途标志随任一回声解除（codex 评审 P2：两个 6 连点、
+            // 回声未到时 raw 仍不含 *，会放进第二个 *）。
+            this.wildcardInFlight = false;
             document.body.classList.toggle('composing', this.composing);
             const preedit = document.getElementById('preeditLine');
             preedit.textContent = this.composing
@@ -6110,7 +6346,8 @@ const TOOLBAR_DEFAULT = { left: ['ctrl', 'ime'], right: ['clipboard', 'favorites
             // T9 符号行 chrome 态：空闲刷新（onNativeState 回声、空引擎事
             // 件）不得把工具栏翻回来——× 是唯一取消入口（codex round-2
             // P2-4）。组合/语音中的可见性仍由上面的通用规则管。
-            if (this.mode === 't9' && this.t9BarChrome && !this.composing && !voiceBusy) {
+            if ((this.mode === 't9' || this.mode === 'stroke') &&
+                this.t9BarChrome && !this.composing && !voiceBusy) {
                 this.setToolbarYield(true);
             } else if ((this.assocWords || []).length && !voiceBusy) {
                 // 中文联想（用户定稿）：有联想词时工具栏全部让位（含
@@ -7043,6 +7280,8 @@ const TOOLBAR_DEFAULT = { left: ['ctrl', 'ime'], right: ['clipboard', 'favorites
             const modeChanged = nextMode !== this.mode;
             this.mode = nextMode;
             this.ready = true;
+            // 模式切换=组合语境整体作废：挂起的两步逗号不跨模式补发。
+            if (modeChanged) this.pendingPunct = null;
             // Scheme switch re-renders the letter layer: the wide sep key
             // shows the sogou ing key instead of the 分词 label. Own-property
             // check: inherited names like "constructor" must not pass.

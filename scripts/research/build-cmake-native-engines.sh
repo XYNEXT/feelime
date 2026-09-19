@@ -38,6 +38,7 @@ done
 extract_into rime-prelude-082425ea0684bca36474415d4a0e8db9b016487e.tar.gz "$work/src/rime-data/prelude"
 extract_into rime-essay-e9b1a374a6ea015fca5bdd04318924b4483ac35a.tar.gz "$work/src/rime-data/essay"
 extract_into rime-luna-pinyin-56b934b099dfbeab842320f13aa8b461a6ab3e42.tar.gz "$work/src/rime-data/luna-pinyin"
+extract_into rime-stroke-1e8fff9b9494ddec23b0cbc526bcfd8171a6fd48.tar.gz "$work/src/rime-data/stroke"
 # See patches/luna-pinyin-zh-hans-reset.patch: simplified Chinese is the
 # session-start default, which upstream does not pin.
 patch --silent -d "$work/src/rime-data/luna-pinyin" -p1 \
@@ -78,12 +79,20 @@ cp "$repo_root/spikes/native-engine-smoke/original-schemas/ziranma_double_pinyin
 cp "$repo_root/spikes/native-engine-smoke/original-schemas/double_pinyin_flypy.schema.yaml" "$rime_shared/"
 cp "$repo_root/spikes/native-engine-smoke/original-schemas/double_pinyin_sogou.schema.yaml" "$rime_shared/"
 cp "$repo_root/spikes/native-engine-smoke/original-schemas/double_pinyin_ziguang.schema.yaml" "$rime_shared/"
+# 笔画（issue #18）：派生词典（上游 stroke.dict.yaml + essay 频次，仓库
+# 脚本裁剪/加权/单通配派生）与仓库原创 schema 进同一编译现场。
+python3 "$repo_root/scripts/generate-stroke-dict.py" \
+  --output "$rime_shared/stroke.dict.yaml" \
+  --src "$work/src/rime-data/stroke/stroke.dict.yaml" \
+  --essay "$work/src/rime-data/essay/essay.txt"
+cp "$repo_root/app/src/main/assets/engine-data/rime/feelime_stroke.schema.yaml" "$rime_shared/"
 deployer="$work/build/rime-host/librime/bin/rime_deployer"
 "$deployer" --compile "$rime_shared/luna_pinyin.schema.yaml" "$rime_user" "$rime_shared" "$rime_build"
 "$deployer" --compile "$rime_shared/ziranma_double_pinyin.schema.yaml" "$rime_user" "$rime_shared" "$rime_build"
 "$deployer" --compile "$rime_shared/double_pinyin_flypy.schema.yaml" "$rime_user" "$rime_shared" "$rime_build"
 "$deployer" --compile "$rime_shared/double_pinyin_sogou.schema.yaml" "$rime_user" "$rime_shared" "$rime_build"
 "$deployer" --compile "$rime_shared/double_pinyin_ziguang.schema.yaml" "$rime_user" "$rime_shared" "$rime_build"
+"$deployer" --compile "$rime_shared/feelime_stroke.schema.yaml" "$rime_user" "$rime_shared" "$rime_build"
 mkdir -p "$work/artifacts/rime-data"
 for output in \
   luna_pinyin.table.bin luna_pinyin.prism.bin luna_pinyin.reverse.bin \
@@ -95,8 +104,23 @@ for output in \
   double_pinyin_sogou.prism.bin double_pinyin_sogou.prism.txt \
   double_pinyin_sogou.schema.yaml \
   double_pinyin_ziguang.prism.bin double_pinyin_ziguang.prism.txt \
-  double_pinyin_ziguang.schema.yaml; do
+  double_pinyin_ziguang.schema.yaml \
+  stroke.prism.bin stroke.table.bin; do
   cp "$rime_build/$output" "$work/artifacts/rime-data/"
+done
+# 笔画四件与仓库登记资产逐字节比对——dict/schema 是仓库形态（生成器/
+# 原创源文件，部署直接读源码 yaml），prism/table 是编译产物；全部可再
+# 生成且必须就是被 third_party 清单审计的那几份字节。
+for asset in stroke.dict.yaml feelime_stroke.schema.yaml; do
+  cp "$rime_shared/$asset" "$work/artifacts/rime-data/"
+done
+for asset in stroke.dict.yaml stroke.prism.bin stroke.table.bin \
+  feelime_stroke.schema.yaml; do
+  cmp -s "$work/artifacts/rime-data/$asset" \
+    "$repo_root/app/src/main/assets/engine-data/rime/$asset" || {
+    echo "stroke artifact mismatch: $asset (rerun generate / audit manifests)" >&2
+    exit 2
+  }
 done
 
 toolchain="$ndk/build/cmake/android.toolchain.cmake"

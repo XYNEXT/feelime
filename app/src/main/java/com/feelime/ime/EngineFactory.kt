@@ -30,6 +30,9 @@ object EngineFactory {
         // 见 scripts/generate-t9-schema.py）；资产缺失时由引擎数据
         // 就绪判定挡在模式菜单，不会走到这里。
         InputMode.T9 -> RimeTextEngine(context, "luna_pinyin_t9")
+        // 笔画五键（issue #18）：GB2312 裁剪词典 + 单通配派生行，资产
+        // 缺失时由引擎数据就绪判定挡在模式菜单。
+        InputMode.STROKE -> RimeTextEngine(context, "feelime_stroke")
         InputMode.FRENCH -> HunspellTextEngine(context, "fr", "bonjour")
         InputMode.RUSSIAN -> HunspellTextEngine(context, "ru_RU", "ёлка")
         InputMode.JAPANESE -> MozcTextEngine(context)

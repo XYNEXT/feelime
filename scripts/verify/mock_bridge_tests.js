@@ -1291,7 +1291,7 @@ test('settings sub-pages: nav, key map, back (requirements 1+6)', {since: '3.33.
     assert(world.document.body.classList.contains('settings-page'),
         'settings-page hides the regular tools');
     // pair sub-page: still six keyboards, tick BEFORE the name .
-    equal(world.document.querySelectorAll('#pairEditor .pair-row').length, 7, 'pair page rows (t9 joined)');
+    equal(world.document.querySelectorAll('#pairEditor .pair-row').length, 8, 'pair page rows (t9+stroke joined)');
     const pairRow = world.document.querySelector('#pairEditor .pair-row');
     assert(pairRow.children[0].classList.contains('pair-tick'),
         'pair tick precedes the name');
@@ -1301,7 +1301,7 @@ test('settings sub-pages: nav, key map, back (requirements 1+6)', {since: '3.33.
     equal(world.document.querySelectorAll('#pairEditor').length, 0, 'back returns home');
     // menu sub-page: tick + name + drag handle LAST.
     world.tap(world.tile('长按菜单'));
-    equal(world.document.querySelectorAll('#menuEditor .pair-row').length, 7, 'menu page rows (t9 joined)');
+    equal(world.document.querySelectorAll('#menuEditor .pair-row').length, 8, 'menu page rows (t9+stroke joined)');
     const menuRow = world.document.querySelector('#menuEditor .pair-row');
     assert(menuRow.children[0].classList.contains('pair-tick'), 'menu tick first');
     assert(menuRow.children[menuRow.children.length - 1].classList.contains('pair-drag'),
@@ -1863,7 +1863,7 @@ test('long-press menu filters to the enabled keyboards', {since: '3.33.0'}, () =
     world.storage.set('feelime_menu_modes', JSON.stringify([]));
     world.context.window.Feelime.closeModeMenu();
     world.context.window.Feelime.toggleModeMenu();
-    equal(world.$('modeMenu').children.length, 7, 'empty set falls back to all (t9 joined)');
+    equal(world.$('modeMenu').children.length, 8, 'empty set falls back to all (t9+stroke joined)');
 });
 
 test('phrase editor strip + item menu hit the bridge', {since: '3.21.0'},  ()=> {
@@ -2267,7 +2267,7 @@ test('mode menu lists all modes; selecting emits selectMode', {since: '3.33.0'},
     world.touchUp(toggle);
     assert(world.$('modeMenu').classList.contains('open'), 'menu open');
     const items = [...world.$('modeMenu').children];
-    equal(items.length, 7, '7 modes (theme moved to the settings panel; t9 joined)');
+    equal(items.length, 8, '8 modes (theme moved to the settings panel; t9+stroke joined)');
     equal(items[0].textContent, 'En英文 Direct', 'first item: shorthand leads, title follows');
     world.tap(items[0]);
     equal(world.native.of('selectMode').length, 0, 'direct is current, no call');
@@ -5570,6 +5570,326 @@ test('t9 7/9 down-swipe opens the split popup (下左/下右)', {since: '3.35.0'
     world.touchUp(seven);
     world.clock.advance(2);
     equal(world.native.of('key').slice(-1)[0].args[0], 'r', 'drag to 下右 commits r');
+});
+
+// ------------------------------------------------ stroke (issue #18)
+
+test('stroke renders the T9 skeleton with stroke keycaps', {since: '3.48.0'}, () => {
+    const world = fresh({ mode: 'stroke' });
+    const caps = [...world.document.querySelectorAll('.t9-grid .t9-key[data-key]')]
+        .map(k => [k.dataset.key, k.querySelector('.t9-group').textContent]);
+    equal(JSON.stringify(caps), JSON.stringify([
+        ['1', '一'], ['2', '丨'], ['3', '丿'], ['4', '丶'], ['5', '乙'],
+        ['6', '＊'], ['7', '@#.'], ['8', '，'], ['9', '分词'],
+    ]), '1-5 strokes / 6 wildcard / 7 symbol group / 8 comma / 9 split');
+    // 功能列与底行沿用 T9 骨架：退格/重输/emoji + 123/mic(0)/中英/确认。
+    ['backspace', 't9clear', 't9emoji', 'symbols', 'enter'].forEach(role => {
+        assert(world.document.querySelector(`.t9-grid [data-role="${role}"]`),
+            `chrome key ${role} present`);
+    });
+    assert(world.$('spaceKey').classList.contains('t9-space'), 'mic space joins the grid');
+    equal(world.$('spaceKey').dataset.key, '0', 'space keeps data-key 0 for the literal-0 flick');
+    // 左列=常用字符（笔画无音节枚举），组合中也不变。
+    const side = () => [...world.document.querySelectorAll('#t9Strip .t9-side-cell')]
+        .map(c => c.textContent).join('');
+    const idle = side();
+    assert(idle.startsWith('，。？！'), 'side strip lists common punctuation');
+    world.engineState({ phase: 'READY', mode: 'stroke', revision: 1, composing: '一',
+        rawInput: '一', candidates: [], hasNextPage: false });
+    equal(side(), idle, 'composing does not swap the stroke side strip');
+});
+
+test('stroke taps feed stroke codes; 7 opens the symbol bar', {since: '3.48.0'}, () => {
+    const world = fresh({ mode: 'stroke' });
+    world.engineState({ phase: 'READY', mode: 'stroke', revision: 1, composing: '', rawInput: '',
+        candidates: [], hasNextPage: false });
+    const codes = { '1': 'h', '2': 's', '3': 'p', '4': 'n', '5': 'z', '6': '*', '8': ',', '9': "'" };
+    Object.keys(codes).forEach(digit => {
+        world.tap(world.key(digit));
+        equal(world.native.of('key').slice(-1)[0].args[0], codes[digit],
+            `tap ${digit} feeds ${codes[digit]}`);
+    });
+    // 7 键=@#. 符号组（同 T9 的 1 键）：不进引擎，候选条换成符号行。
+    const keysBefore = world.native.of('key').length;
+    world.tap(world.key('7'));
+    equal(world.native.of('key').length, keysBefore, '7 never feeds the engine');
+    const bar = () => [...world.document.querySelectorAll('#candidates .candidate')]
+        .map(b => b.textContent).join('');
+    equal(bar(), '@#.*+-_/=', 'symbol bar shows the western/technical set');
+    assert(world.$('setupButton').hidden, 'toolbar yields to the symbol bar');
+    // 点选符号=直上屏+关闭符号行+工具栏复原。
+    world.tap([...world.document.querySelectorAll('#candidates .candidate')][0]);
+    equal(world.native.of('commitText').slice(-1)[0].args[0], '@', 'pick commits the symbol literally');
+    equal(bar(), '', 'symbol bar closes after the pick');
+    assert(!world.$('setupButton').hidden, 'toolbar restores after the pick');
+});
+
+test('stroke flicks: up commits the literal digit, other directions dead', {since: '3.48.0'}, () => {
+    const world = fresh({ mode: 'stroke' });
+    world.engineState({ phase: 'READY', mode: 'stroke', revision: 1, composing: '', rawInput: '',
+        candidates: [], hasNextPage: false });
+    const five = world.key('5');
+    world.touchDown(five, 20, 20);
+    world.move(five, 20, -30);
+    world.touchUp(five);
+    world.clock.advance(2);
+    equal(world.native.of('commitText').slice(-1)[0].args[0], '5',
+        'up-flick commits the literal digit (bypasses the engine)');
+    // 下/左/右无语义：不得落回通用分支发 CN_ALTS 符号或大写字母。
+    for (const [dx, dy] of [[0, 40], [-40, 0], [40, 0]]) {
+        const before = world.native.of('key').length + world.native.of('commitText').length;
+        world.touchDown(five, 20, 20);
+        world.move(five, 20 + dx, 20 + dy);
+        world.touchUp(five);
+        world.clock.advance(2);
+        equal(world.native.of('key').length + world.native.of('commitText').length, before,
+            `flick (${dx},${dy}) sends nothing`);
+    }
+    // mic 上滑=字面 0（t9 惯例沿用）。
+    const space = world.$('spaceKey');
+    world.touchDown(space, 20, 20);
+    world.move(space, 20, -30);
+    world.touchUp(space);
+    world.clock.advance(2);
+    equal(world.native.of('commitText').slice(-1)[0].args[0], '0', 'mic up-flick commits literal 0');
+});
+
+test('stroke long-press popup: symbol/digit/symbol, middle preselected', {since: '3.48.0'}, () => {
+    const world = fresh({ mode: 'stroke' });
+    world.engineState({ phase: 'READY', mode: 'stroke', revision: 1, composing: '', rawInput: '',
+        candidates: [], hasNextPage: false });
+    // fake DOM 没有真实布局：把浮层卡片矩形钉到覆盖所有格假矩形的位置。
+    const pinCard = w => {
+        w.document.getElementById('keyPopup').getBoundingClientRect =
+            () => ({ left: 0, top: 0, right: 500, bottom: 400, width: 500, height: 400 });
+    };
+    pinCard(world);
+    const three = world.key('3');
+    world.touchDown(three);
+    world.clock.advance(360);
+    const items = [...world.document.querySelectorAll('.kp-item')];
+    equal(items.map(i => i.textContent).join(','), '（,3,）',
+        'popup offers left-symbol/digit/right-symbol');
+    equal([...world.document.querySelectorAll('#keyPopupInner .kp-row')].length, 0,
+        'stroke popup is a single row (no letter grid)');
+    assert(items[1].classList.contains('sel'), 'middle cell (digit) is preselected');
+    // 松手不拖=与点按同义：发部件编码，数字本身不进引擎（会变成候选
+    // 选择器）。
+    world.touchUp(three);
+    world.clock.advance(2);
+    equal(world.native.of('key').slice(-1)[0].args[0], 'p',
+        'release on the middle feeds the stroke code');
+    equal(world.native.of('key').filter(c => c.args[0] === '3').length, 0,
+        'the display digit never enters the engine');
+    // 相对跟手：手指左移一格 → 左符号 literal 直上屏。
+    const worldL = fresh({ mode: 'stroke' });
+    worldL.engineState({ phase: 'READY', mode: 'stroke', revision: 1, composing: '', rawInput: '',
+        candidates: [], hasNextPage: false });
+    pinCard(worldL);
+    const threeL = worldL.key('3');
+    worldL.touchDown(threeL, 20, 20);
+    worldL.clock.advance(360);
+    worldL.move(threeL, 20 - 34, 20);
+    const itemsL = [...worldL.document.querySelectorAll('.kp-item')];
+    assert(itemsL[0].classList.contains('sel'), 'highlight follows the finger to the left cell');
+    worldL.touchUp(threeL, 20 - 34, 20);
+    equal(worldL.native.of('commitText').slice(-1)[0].args[0], '（',
+        'left symbol lands literally');
+});
+
+test('stroke guards survive the long-press popup path (codex P1)', {since: '3.48.0'}, () => {
+    const world = fresh({ mode: 'stroke' });
+    world.engineState({ phase: 'READY', mode: 'stroke', revision: 1, composing: '一*',
+        rawInput: '一*', candidates: [], hasNextPage: false });
+    const pinCard = w => {
+        w.document.getElementById('keyPopup').getBoundingClientRect =
+            () => ({ left: 0, top: 0, right: 500, bottom: 400, width: 500, height: 400 });
+    };
+    pinCard(world);
+    // 已有 * 时长按 6 原位松手：中格=点按同义，仍被拦截。
+    const six = world.key('6');
+    world.touchDown(six, 20, 20);
+    world.clock.advance(360);
+    world.touchUp(six, 20, 20);
+    world.clock.advance(2);
+    equal(world.native.of('key').filter(c => c.args[0] === '*').length, 0,
+        'long-press middle cell cannot bypass the wildcard guard');
+    // 组合中长按 8 原位松手：中格走两步逗号，不直发 ','。
+    const worldC = fresh({ mode: 'stroke' });
+    worldC.engineState({ phase: 'READY', mode: 'stroke', revision: 1, composing: '一丨',
+        rawInput: '一丨',
+        candidates: [{ id: 's1', text: '十' }], hasNextPage: false });
+    pinCard(worldC);
+    const eight = worldC.key('8');
+    worldC.touchDown(eight, 20, 20);
+    worldC.clock.advance(360);
+    worldC.touchUp(eight, 20, 20);
+    worldC.clock.advance(2);
+    equal(worldC.native.of('key').filter(c => c.args[0] === ',').length, 0,
+        'long-press middle cell cannot bypass the comma two-step');
+    equal(worldC.native.of('chooseCandidate').slice(-1)[0].args[1], 's1',
+        'popup release confirms the head candidate instead');
+});
+
+test('stroke pending comma dies on clear/retype and wildcards serialize', {since: '3.48.0'}, () => {
+    const world = fresh({ mode: 'stroke' });
+    world.engineState({ phase: 'READY', mode: 'stroke', revision: 1, composing: '一丨',
+        rawInput: '一丨',
+        candidates: [{ id: 's1', text: '十' }], hasNextPage: false });
+    world.tap(world.key('8'));
+    world.clock.advance(2);
+    // 点 8 后立即重输：clearComposing 本地合成的 composing:false 不得把
+    // 挂起逗号补出去（codex P1）。
+    world.document.querySelector('[data-role="t9clear"]').click();
+    world.clock.advance(2);
+    equal(world.native.of('commitText').filter(c => c.args[0] === '，').length, 0,
+        'clearComposing voids the pending comma');
+    // 连点两个 6（回声未到）：在途标志挡住第二个 *。
+    const worldW = fresh({ mode: 'stroke' });
+    worldW.engineState({ phase: 'READY', mode: 'stroke', revision: 1, composing: '一',
+        rawInput: '一', candidates: [], hasNextPage: false });
+    worldW.tap(worldW.key('6'));
+    worldW.tap(worldW.key('6'));
+    equal(worldW.native.of('key').filter(c => c.args[0] === '*').length, 1,
+        'a second wildcard cannot race the pending echo');
+    // 回声到达后（raw 含 *）继续拦截、引擎没有第三个 *。
+    worldW.engineState({ phase: 'READY', mode: 'stroke', revision: 2, composing: '一*',
+        rawInput: '一*', candidates: [], hasNextPage: false });
+    worldW.tap(worldW.key('6'));
+    equal(worldW.native.of('key').filter(c => c.args[0] === '*').length, 1,
+        'the echoed wildcard keeps the guard active');
+});
+
+test('stroke sentence push-back keeps the expanded grid consistent across pages (codex P1)', {since: '3.48.0'}, () => {
+    const world = fresh({ mode: 'stroke' });
+    // 首页：句子「才丿」被压到末尾；翻页追加新候选时，已渲染前缀的
+    // 顺序必须稳定——签名只看前 3 项发现不了池中部重排。
+    world.engineState({ phase: 'READY', mode: 'stroke', revision: 1, composing: '一丨丿 丿',
+        rawInput: '一丨丿 丿',
+        candidates: [
+            { id: 's0', text: '才丿' }, { id: 's1', text: '才' },
+            { id: 's2', text: '十' }, { id: 's3', text: '丁' }, { id: 's4', text: '一' },
+        ], hasNextPage: true });
+    const openExpand = () => {
+        world.document.getElementById('composeExpand').click();
+        world.clock.advance(2);
+    };
+    openExpand();
+    const gridTexts = () => [...world.document.querySelectorAll('#expandGrid .expand-candidate')]
+        .map(c => c.textContent);
+    equal(gridTexts().join(''), '才十丁一才丿', 'page-1 grid pushes the sentence to the tail');
+    // 下一页（引擎序）：二、七 追加在句子之前 → 池中部插入。
+    world.engineState({ phase: 'READY', mode: 'stroke', revision: 2, composing: '一丨丿 丿',
+        rawInput: '一丨丿 丿',
+        candidates: [
+            { id: 's0', text: '才丿' }, { id: 's1', text: '才' },
+            { id: 's2', text: '十' }, { id: 's3', text: '丁' }, { id: 's4', text: '一' },
+            { id: 's5', text: '二' }, { id: 's6', text: '七' },
+        ], hasNextPage: false });
+    world.clock.advance(2);
+    equal(gridTexts().join(''), '才十丁一二七才丿',
+        'mid-pool insertion triggers a full repaint (no missing/duplicated cells)');
+});
+
+test('stroke blocks the second wildcard in one composition', {since: '3.48.0'}, () => {
+    const world = fresh({ mode: 'stroke' });
+    world.engineState({ phase: 'READY', mode: 'stroke', revision: 1, composing: '一*',
+        rawInput: '一*', candidates: [], hasNextPage: false });
+    world.tap(world.key('6'));
+    equal(world.native.of('key').filter(c => c.args[0] === '*').length, 0,
+        'the second * never reaches the engine (dict has single-wildcard rows only)');
+    assert(world.document.getElementById('toast').classList.contains('open'),
+        'a toast explains the block');
+    equal(world.document.getElementById('toast').textContent, '通配符只能用一个',
+        'toast names the rule');
+    // 引擎回显不含 *（退格/重输/选字后）→ 6 键恢复可用。
+    world.engineState({ phase: 'READY', mode: 'stroke', revision: 2, composing: '一',
+        rawInput: '一', candidates: [], hasNextPage: false });
+    world.tap(world.key('6'));
+    equal(world.native.of('key').filter(c => c.args[0] === '*').length, 1,
+        '* works again once the echo drops it');
+});
+
+test('stroke pushes sentence candidates back; space/enter confirm by id', {since: '3.48.0'}, () => {
+    const world = fresh({ mode: 'stroke' });
+    // probe 实测形态：hspp 的首格被 enable_sentence 造的句子（☯）占据。
+    world.engineState({ phase: 'READY', mode: 'stroke', revision: 1, composing: '一丨丿 丿',
+        rawInput: '一丨丿 丿',
+        candidates: [
+            { id: 's0', text: '才丿' }, { id: 's1', text: '才' },
+            { id: 's2', text: '十' }, { id: 's3', text: '丁' }, { id: 's4', text: '一' },
+        ], hasNextPage: false });
+    const bar = [...world.document.querySelectorAll('#candidates .candidate')]
+        .map(b => b.textContent).join('');
+    equal(bar, '才十丁一才丿', 'single chars lead; the multi-char sentence is pushed back');
+    // 空格确认=池头单字（按 id chooseCandidate）。
+    world.tap(world.$('spaceKey'));
+    equal(world.native.of('chooseCandidate').slice(-1)[0].args[1], 's1',
+        'space confirms the head single char by id');
+    // 确认键同一语义（组合中拦截 Native.enter，原始输入串是部件字形，
+    // 落编辑器就是乱码）。
+    world.tap(world.$('enterKey'));
+    equal(world.native.of('chooseCandidate').slice(-1)[0].args[1], 's1',
+        'enter confirms the head single char by id');
+    equal(world.native.of('enter').length, 0, 'raw enter never fires while composing');
+});
+
+test('stroke comma: idle feeds the engine, composing confirms head then lands ，', {since: '3.48.0'}, () => {
+    const world = fresh({ mode: 'stroke' });
+    world.engineState({ phase: 'READY', mode: 'stroke', revision: 1, composing: '一丨',
+        rawInput: '一丨',
+        candidates: [{ id: 's1', text: '十' }, { id: 's2', text: '丁' },
+            { id: 's3', text: '下' }], hasNextPage: false });
+    // 组合中 8 键：Android librime 的组合中标点路径不可靠（实测），
+    // 改两步——按 id 确认池头，回声收掉组合后直发全角 ，。
+    world.tap(world.key('8'));
+    equal(world.native.of('chooseCandidate').slice(-1)[0].args[1], 's1',
+        'composing comma confirms the head candidate by id first');
+    equal(world.native.of('key').filter(c => c.args[0] === ',').length, 0,
+        'no ASCII comma enters the engine mid-composition');
+    // 确认的回声收掉组合 → 挂起的全角 ，直发。
+    world.engineState({ phase: 'READY', mode: 'stroke', revision: 2, composing: '',
+        rawInput: '', candidates: [], hasNextPage: false });
+    const commits = world.native.of('commitText').map(c => c.args[0]);
+    equal(commits[commits.length - 1], '，',
+        'the full-width comma lands once the echo ends the composition');
+    // 确认失败兜底：回声仍在组合（chooseCandidate 被拒）且 raw 变了 →
+    // 挂起逗号作废，不迟到补刀。
+    world.engineState({ phase: 'READY', mode: 'stroke', revision: 2, composing: '一丨丿',
+        rawInput: '一丨丿', candidates: [{ id: 's4', text: '才' }], hasNextPage: false });
+    world.tap(world.key('8'));
+    const before = world.native.of('commitText').length;
+    world.engineState({ phase: 'READY', mode: 'stroke', revision: 3, composing: '一丨丿乙',
+        rawInput: '一丨丿乙', candidates: [], hasNextPage: false });
+    equal(world.native.of('commitText').length, before,
+        'stale pending comma is dropped when the composition moves on');
+    // 空闲 8 键：照常 ASCII ',' 走 punctuator。
+    world.engineState({ phase: 'READY', mode: 'stroke', revision: 4, composing: '',
+        rawInput: '', candidates: [], hasNextPage: false });
+    world.tap(world.key('8'));
+    equal(world.native.of('key').slice(-1)[0].args[0], ',',
+        'idle comma still feeds the engine punctuator');
+});
+
+test('stroke menu item requires an explicit ready=true from hello', {since: '3.48.0'}, () => {
+    // 旧 APK：engineDataReady 不含 stroke 字段——strictReady 把缺失当
+    // 不可用（宽松的 !== false 会给出可点却无效的入口）。
+    const oldApk = fresh({});
+    oldApk.context.window.Feelime.toggleModeMenu();
+    const stale = [...oldApk.$('modeMenu').children][4];
+    assert(stale.classList.contains('preparing'), 'missing field renders the preparing state');
+    oldApk.tap(stale);
+    equal(oldApk.native.of('selectMode').filter(c => c.args[0] === 'stroke').length, 0,
+        'preparing item is not clickable');
+    // 新 APK：hello 明确 stroke: true 才可选。
+    const ready = fresh({ engineDataReady: { pinyin: true, 'double-pinyin': true, t9: true,
+        stroke: true, japanese: true, french: true, russian: true } });
+    ready.context.window.Feelime.toggleModeMenu();
+    const item = [...ready.$('modeMenu').children][4];
+    equal(item.textContent, '笔笔画 Stroke', 'ready item leads with the shorthand');
+    ready.tap(item);
+    equal(ready.native.of('selectMode').filter(c => c.args[0] === 'stroke').length, 1,
+        'ready item selects stroke');
 });
 
 console.log(`\n== mock-bridge suite: ${passed} passed, ${failed} failed` +

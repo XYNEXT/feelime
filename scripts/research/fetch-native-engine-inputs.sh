@@ -23,6 +23,9 @@ fetch rime-prelude-082425ea0684bca36474415d4a0e8db9b016487e.tar.gz \
 fetch rime-essay-e9b1a374a6ea015fca5bdd04318924b4483ac35a.tar.gz \
   https://github.com/rime/rime-essay/archive/e9b1a374a6ea015fca5bdd04318924b4483ac35a.tar.gz \
   11559224d48709b0d77009a550804bfc2b763cfdf048c8d8fe224b3d36ba441c
+fetch rime-stroke-1e8fff9b9494ddec23b0cbc526bcfd8171a6fd48.tar.gz \
+  https://github.com/rime/rime-stroke/archive/1e8fff9b9494ddec23b0cbc526bcfd8171a6fd48.tar.gz \
+  1347a57ab4cf269be9b1c49ce50facfe60617207f2780604fe82914070da8a80
 fetch rime-luna-pinyin-56b934b099dfbeab842320f13aa8b461a6ab3e42.tar.gz \
   https://github.com/rime/rime-luna-pinyin/archive/56b934b099dfbeab842320f13aa8b461a6ab3e42.tar.gz \
   876c7ba559794f476abf7195a255aea29000cee281e6f5ec664928dce018bd90

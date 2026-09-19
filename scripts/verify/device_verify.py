@@ -437,7 +437,7 @@ def devtools_click_mode(title):
     path is covered by open_mode_menu. The chip label only updates after the
     async native roundtrip."""
     order = ["英文 Direct", "全拼 Pinyin", "双拼", "九宫格 T9",
-             "Français", "Русский", "日本語 Romaji"]
+             "笔画 Stroke", "Français", "Русский", "日本語 Romaji"]
     index = order.index(title)
     return devtools_eval(
         "(() => { const menu = document.getElementById('modeMenu');"
@@ -467,7 +467,7 @@ def devtools_switch_mode(title):
     """Switch mode through the real UI, driven deterministically via DevTools.
  Opens the lazily rendered menu via the exposed hook."""
     order = ["英文 Direct", "全拼 Pinyin", "双拼", "九宫格 T9",
-             "Français", "Русский", "日本語 Romaji"]
+             "笔画 Stroke", "Français", "Русский", "日本語 Romaji"]
     index = order.index(title)
     return devtools_eval(
         "(() => { const menu = document.getElementById('modeMenu');"
@@ -1278,7 +1278,7 @@ def case_english(kb):
     reset_shift()  # never leak caps into later cases
 
 
-MODE_ORDER = ["英文 Direct", "全拼 Pinyin", "双拼", "九宫格 T9", "Français", "Русский", "日本語 Romaji"]
+MODE_ORDER = ["英文 Direct", "全拼 Pinyin", "双拼", "九宫格 T9", "笔画 Stroke", "Français", "Русский", "日本語 Romaji"]
 
 
 def menu_open():
@@ -1446,7 +1446,7 @@ def reset_shift(kb=None):
         kb = key_geometry()
 
 
-ENGINE_WARMUP = {"全拼 Pinyin": 2.5, "双拼": 2.5, "Français": 2.5,
+ENGINE_WARMUP = {"全拼 Pinyin": 2.5, "双拼": 2.5, "笔画 Stroke": 2.5, "Français": 2.5,
                  "Русский": 2.5, "日本語 Romaji": 4.0, "英文 Direct": 0.6}
 
 
@@ -1589,6 +1589,7 @@ def switch_mode(kb, title):
         "全拼 Pinyin": {"拼", "PY"},
         "双拼": {"双", "DP"},
         "九宫格 T9": {"九", "T9"},
+        "笔画 Stroke": {"笔", "ST"},
         "Français": {"FR"},
         "Русский": {"РУ"},
         "日本語 Romaji": {"日", "JP"},

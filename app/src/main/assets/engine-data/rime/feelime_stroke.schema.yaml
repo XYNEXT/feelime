@@ -1,0 +1,75 @@
+# Rime schema: feelime_stroke — 五笔画（issue #18）
+# 基于上游 rime-stroke stroke.schema.yaml 定制：
+# - alphabet 加 *（单通配，码表由 generate-stroke-dict.py 派生 * 行）
+# - enable_completion: true（笔画输入体验 = 打前几笔出候选选字；上游
+#   未开，completion 候选带剩余码 comment）
+# - preedit/键面用 CJK 基本区 一丨丿丶乙（与 luna reverse_lookup 先例
+#   一致），* 不在 xlit 表内、原样回显（键盘 6 键键面用全角 ＊ 显示）
+# - 砍 reverse_lookup（键盘无 ` 键）；词典权重直写（无八股运行时导入）
+# - 组件集对齐仓库裁剪版 librime（luna_pinyin 同款 processors/
+#   segmentors；标点用仓库内裁剪配置）
+__build_info:
+  rime_version: 1.17.0
+schema:
+  schema_id: feelime_stroke
+  name: 五笔画
+  version: "1.0"
+  author:
+    - feelime（基于 rime-stroke：四季的風, 雪齋, Kunki Chou, 宋天）
+  description: |
+    五笔画：一(h) 丨(s) 丿(p) 丶(n) 乙(z)，* 通配一笔，' 分词。
+
+switches:
+  - name: ascii_mode
+    reset: 0
+    states: [ 中文, 西文 ]
+
+engine:
+  processors:
+    - ascii_composer
+    - recognizer
+    - key_binder
+    - speller
+    - punctuator
+    - selector
+    - navigator
+    - express_editor
+  segmentors:
+    - ascii_segmentor
+    - abc_segmentor
+    - punct_segmentor
+    - fallback_segmentor
+  translators:
+    - punct_translator
+    - table_translator
+
+speller:
+  alphabet: "hspnz*"
+  delimiter: " '"
+
+menu:
+  page_size: 5
+
+translator:
+  dictionary: stroke
+  enable_completion: true
+  # sentence 是两条关键路径的兜底（host probe 实测）：' 分词查询
+  # （h'z → 一乙 句子+分段词）与无前缀匹配的长码（hspp → 分段候选）。
+  # 句子候选带 ☯ comment，键盘侧压后排。sentence_over_completion
+  # 显式 false（librime 默认即 false，写明留档）。
+  enable_sentence: true
+  sentence_over_completion: false
+  enable_user_dict: false
+  preedit_format:
+    - "xlit/hspnz/一丨丿丶乙/"
+  comment_format:
+    - "xform/~//"
+
+# 标点内联（对齐仓库裁剪版惯例：部署目录没有 default.yaml，
+# import_preset 会静默落空——设备实测 ',' 无人处理落进 express_editor
+# 出乱字）。键盘侧只有 8 键会发 ','（ASCII，走 punctuator 出全角），
+# 最小映射即可；luna 的巨型符号表不搬。
+punctuator:
+  half_shape:
+    ",": {commit: "，"}
+    ".": {commit: "。"}

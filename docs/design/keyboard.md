@@ -614,6 +614,7 @@ tile 点按 no-op（typeof 守卫），绝不画假状态。二级内容（快�
 | --- | --- | --- |
 | 英文 Direct | DirectTextEngine | 逐键立即上屏，无组合 |
 | 全拼 / 双拼（自然码） | librime（RimeTextEngine） | §9.3 |
+| 笔画五键 | librime（RimeTextEngine） | §9.3a |
 | 法语 / 俄语 | Hunspell（HunspellTextEngine） | §9.2 |
 | 日语 | Mozc（MozcTextEngine） | §9.4 |
 
@@ -657,6 +658,46 @@ tile 点按 no-op（typeof 守卫），绝不画假状态。二级内容（快�
   手势仲裁、音节候选条与 setComposition 组合重写、BridgeContract 对 T9
   模式放行数字——详见 docs/design/t9.md。
 
+### 9.3a 笔画五键（issue #18）
+
+- **键面**复用 T9 五列网格骨架（`renderStroke`，与 `renderT9` 共用
+  `t9GridSide`/`t9GridChrome`/`t9Place`）：1-5=一丨丿丶乙（点按发
+  `h/s/p/n/z`）、6=＊单通配、7=@#. 符号组（同 T9 的 1 键：点按展开符号
+  行、无长按）、8=，、9=分词 `'`。`data-key` 恒为数字（手势/浮层/套件按
+  数字索引）；1-9 上滑=字面数字（commitText 旁路），其余方向无语义（不
+  落通用分支发 CN_ALTS/大写）；长按=三格浮层（左符号·数字·右符号，中格
+  预选=点按同义：显示数字、发部件编码）；空格/确认键组合中按 id 确认池头
+  候选；左列常用字符恒定（无音节枚举）。
+- **词典**（`scripts/generate-stroke-dict.py` 生成，`--check` 门禁；接入
+  `build-cmake-native-engines.sh`——生成→编译→四件与仓库资产逐字节 cmp）：
+  上游 rime-stroke 17 万单字裁剪到 GB2312（11048 精确行，多码字全保留）；
+  权重用 rime-essay 单字频次经 opencc TSCharacters 繁→简聚合同字取 max
+  （essay 以繁体统计，直查会让两千简体常用字零频）；每条码（≤20 笔）派生
+  单通配变体（第 i 笔→`*`，按 (字，码) 去重，权重 ÷1000）共 116489 行。
+- **schema**（`feelime_stroke`）：`alphabet: "hspnz*"`、delimiter " '"、
+  `enable_completion: true`（打前几笔出候选）+ `enable_sentence: true`
+  （probe 实测：`'` 分词查询与无前缀长码兜底都靠 MakeSentence）；preedit
+  由 xlit 回显部件字形（rawInput 即显示形，`*` 原样）；标点**内联**
+  half_shape（部署目录没有 default.yaml，`import_preset` 静默落空——
+  设备实测 ',' 无人处理出乱字）。
+- **句子候选压后**：词典单字（max_phrase_length=1）下多字候选必是造句
+  （☯，comment 不在桥协议里，按字长识别），键盘侧压到单字之后——否则
+  `h'z` 的「一乙」顶掉首字候选。
+- **组合中 8 键逗号两步流**：Android 构建的 librime 组合中标点路径行为
+  异常（实测：stroke 提交通配派生字、拼音整体吞键；host gcc 构建正常、
+  真机/模拟器 Android 构建复现，机制未明），键盘侧改为——按 id 确认池头
+  候选，组合结束回声到达后 `commitText` 直发全角 ，；重输/切模式立即作
+  废，raw 变化或 3s 无回声收尾也作废（迟到的逗号比缺逗号更糟）。点按与
+  长按中格走同一入口 `strokeActivate`（通配/逗号守卫不被弹层绕过）；6 键
+  第二个 * 拦截含「在途」标志（连点不等回声也只进一个 *）。空闲 8 键仍
+  发 ASCII ',' 走 punctuator；7 键符号行仅空闲可开（组合中让位候选）。
+- **strictReady**：stroke 菜单项要求 hello 的 `engineDataReady.stroke ===
+  true` 才可点（旧 APK 不带该字段，宽松的 `!== false` 会给出可点却无效
+  的入口）。
+- 已知边界：completion 排序契约含「剩余码长度」维度，通配行不保证严格按
+  字频排在精确行后（首格为精确行的实测样本稳定）；completion 的剩余码
+  comment 不展示（v1）。
+
 ### 9.4 日语（Mozc）
 
 罗马字→假名（`konnichiha`→こんにちは；`nn`→ん）；空格触发汉字转换
@@ -688,6 +729,10 @@ tile 点按 no-op（typeof 守卫），绝不画假状态。二级内容（快�
 
 - 中文模式标点键发 **ASCII** 字符进引擎 punctuator 转全角（，
   。配对弯引号）；全角直发绕过 punctuator 会被 librime 丢弃——禁止。
+- 已知异常（存量，非 stroke 引入）：Android 构建的 librime 里**组合中**
+  标点路径不可靠——拼音 `ni`+`,` 整体吞键、stroke 会提交通配派生字
+  （host gcc 构建与空闲路径均正常，真机复现）；笔画 8 键因此走两步流
+  （§9.3a），qwerty 标点槽的同类场景待修（独立 issue）。
 - 数字与 CN_ALTS 表指定符号保持半角；CN_ALTS 是第二行/第三行的副字表
   （全拼/双拼共用，表值即最终提交字形）。
 

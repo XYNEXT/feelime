@@ -1457,7 +1457,7 @@ class FeelimeService : InputMethodService(), AsrEngine.Listener {
             .put(
                 "engineDataReady",
                 JSONObject().apply {
-                    listOf("pinyin", "double-pinyin", "t9", "japanese", "french", "russian").forEach { mode ->
+                    listOf("pinyin", "double-pinyin", "t9", "stroke", "japanese", "french", "russian").forEach { mode ->
                         put(mode, engineDataReady(mode))
                     }
                 },
