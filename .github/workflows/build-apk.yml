@@ -19,6 +19,8 @@ jobs:
 
       - name: Initialize Assets and Models
         run: |
+          # 核心修复：手动创建脚本需要的软链接目标目录
+          mkdir -p app/src/modelAssets/full
           chmod +x ./scripts/setup-assets.sh
           ./scripts/setup-assets.sh
 
